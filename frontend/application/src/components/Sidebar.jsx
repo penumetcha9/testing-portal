@@ -72,7 +72,7 @@ export default function Sidebar() {
         }`;
 
     return (
-        <aside className="w-64 bg-white border-r border-gray-200 min-h-screen flex flex-col">
+        <aside className="w-64 bg-white border-r border-gray-200 h-screen flex flex-col overflow-hidden">
 
             {/* Header */}
             <div className="p-6 border-b border-gray-200">
@@ -88,7 +88,7 @@ export default function Sidebar() {
             </div>
 
             {/* Main Navigation */}
-            <nav className="flex-1 overflow-y-auto p-4">
+            <nav className="flex-1 p-4">
                 <div className="space-y-1">
                     {navItems.map((item) => (
                         <NavLink

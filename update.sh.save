@@ -1,0 +1,14 @@
+#!/bin/bash
+
+cd /var/www/your-project
+git pull origin main
+
+cd backend
+npm install
+
+cd ../frontend/application
+npm install
+npm run build
+
+pm2 restart all
+

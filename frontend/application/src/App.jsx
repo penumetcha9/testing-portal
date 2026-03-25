@@ -28,13 +28,10 @@ export default function App() {
   const [session, setSession] = useState(undefined);
 
   useEffect(() => {
-    // Get session on first load
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session ?? null);
     });
 
-    // ✅ This listener fires on both login AND logout
-    // When user clicks logout → session becomes null → redirects to /login
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session ?? null);
     });
@@ -56,9 +53,9 @@ export default function App() {
           path="/*"
           element={
             <ProtectedRoute session={session}>
-              <div className="flex min-h-screen bg-gray-50">
+              <div className="flex h-screen overflow-hidden bg-gray-50">
                 <Sidebar />
-                <div className="flex-1 flex flex-col">
+                <div className="flex-1 flex flex-col overflow-y-auto">
                   <Routes>
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/versions" element={<VersionManagement />} />

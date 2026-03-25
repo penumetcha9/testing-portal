@@ -160,6 +160,10 @@ const emptyFeatureForm = {
     moduleId: "", name: "", code: "", user_story: "", description: "", assign_to: "",
 };
 
+const emptyEditFeatureForm = {
+    id: "", moduleId: "", name: "", code: "", user_story: "", description: "", assign_to: "",
+};
+
 export default function FeaturesLibrary() {
     const [modules, setModules] = useState([]);
     const [users, setUsers] = useState([]);
@@ -175,6 +179,15 @@ export default function FeaturesLibrary() {
     const [deleteModal, setDeleteModal] = useState({ open: false, tc: null, featureId: null, moduleId: null });
     const [addFeatureModal, setAddFeatureModal] = useState(false);
     const [featureForm, setFeatureForm] = useState(emptyFeatureForm);
+
+    // ✅ NEW: Edit Feature modal state
+    const [editFeatureModal, setEditFeatureModal] = useState(false);
+    const [editFeatureForm, setEditFeatureForm] = useState(emptyEditFeatureForm);
+
+    // ✅ NEW: Delete Feature modal state
+    const [deleteFeatureModal, setDeleteFeatureModal] = useState(false);
+    const [deleteFeatureTarget, setDeleteFeatureTarget] = useState(null);
+
     const [form, setForm] = useState(emptyForm);
 
     const fetchModulesWithFeatures = async () => {
@@ -285,7 +298,28 @@ export default function FeaturesLibrary() {
         e.stopPropagation(); setDeleteModal({ open: true, tc, featureId, moduleId });
     };
 
-    // ✅ Single definition of generateUUID
+    // ✅ NEW: Open Edit Feature Modal
+    const openEditFeatureModal = (e, feat, moduleId) => {
+        e.stopPropagation();
+        setEditFeatureForm({
+            id: feat.id,
+            moduleId: moduleId,
+            name: feat.feature_name || feat.name || "",
+            code: feat.feature_code || feat.code || "",
+            user_story: feat.user_story || "",
+            description: feat.description || "",
+            assign_to: feat.assign_to || "",
+        });
+        setEditFeatureModal(true);
+    };
+
+    // ✅ NEW: Open Delete Feature Modal
+    const openDeleteFeatureModal = (e, feat) => {
+        e.stopPropagation();
+        setDeleteFeatureTarget(feat);
+        setDeleteFeatureModal(true);
+    };
+
     const generateUUID = () => {
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
             const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -296,7 +330,6 @@ export default function FeaturesLibrary() {
     const handleAddTestCase = async () => {
         if (!form.name || !form.priority) { alert("Test Case Name and Priority are required"); return; }
         try {
-            // ✅ FIXED: Get real logged-in user UUID instead of hardcoded "System"
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) { alert("You must be logged in to add a test case."); return; }
 
@@ -313,7 +346,7 @@ export default function FeaturesLibrary() {
                 test_type: null,
                 priority: form.priority,
                 status: form.status,
-                created_by: user.id,           // ✅ FIXED: real UUID, not "System"
+                created_by: user.id,
                 assigned_to: form.assignee || null,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString()
@@ -367,6 +400,64 @@ export default function FeaturesLibrary() {
             alert("Feature added successfully! ✅");
             setAddFeatureModal(false); setFeatureForm(emptyFeatureForm); fetchModulesWithFeatures();
         } catch (err) { alert(`Error: ${err.message}`); }
+    };
+
+    // ✅ NEW: Handle Edit Feature
+    const handleEditFeature = async () => {
+        if (!editFeatureForm.name || !editFeatureForm.code) {
+            alert("Feature Name and Feature Code are required");
+            return;
+        }
+        try {
+            const updateData = {
+                feature_name: editFeatureForm.name,
+                feature_code: editFeatureForm.code,
+                description: editFeatureForm.description,
+                user_story: editFeatureForm.user_story || null,
+                assign_to: editFeatureForm.assign_to || null,
+                module_id: editFeatureForm.moduleId,
+            };
+
+            const { error } = await supabase
+                .from("features")
+                .update(updateData)
+                .eq("id", editFeatureForm.id);
+
+            if (error) throw error;
+            alert("Feature updated successfully! ✅");
+            setEditFeatureModal(false);
+            setEditFeatureForm(emptyEditFeatureForm);
+            fetchModulesWithFeatures();
+        } catch (err) {
+            alert(`Error: ${err.message}`);
+        }
+    };
+
+    // ✅ NEW: Handle Delete Feature
+    const handleDeleteFeature = async () => {
+        if (!deleteFeatureTarget) return;
+        try {
+            // First delete all test cases associated with this feature
+            const { error: tcError } = await supabase
+                .from("test_cases")
+                .delete()
+                .eq("feature_id", deleteFeatureTarget.id);
+            if (tcError) throw tcError;
+
+            // Then delete the feature itself
+            const { error } = await supabase
+                .from("features")
+                .delete()
+                .eq("id", deleteFeatureTarget.id);
+            if (error) throw error;
+
+            alert("Feature deleted successfully! ✅");
+            setDeleteFeatureModal(false);
+            setDeleteFeatureTarget(null);
+            fetchModulesWithFeatures();
+        } catch (err) {
+            alert(`Error: ${err.message}`);
+        }
     };
 
     const totalFeatures = modules.reduce((a, m) => a + m.featuresCount, 0);
@@ -562,12 +653,21 @@ export default function FeaturesLibrary() {
                                                                     <i className="fa-solid fa-plus"></i>
                                                                     <span>Add Test Case</span>
                                                                 </button>
+                                                                {/* ✅ UPDATED: Edit Feature button now functional */}
                                                                 <button
                                                                     className="px-3 py-2 bg-gray-100 border border-gray-200 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-200 transition-colors"
-                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    onClick={(e) => openEditFeatureModal(e, feat, mod.id)}
                                                                     title="Edit Feature"
                                                                 >
                                                                     <i className="fa-solid fa-edit"></i>
+                                                                </button>
+                                                                {/* ✅ NEW: Delete Feature button */}
+                                                                <button
+                                                                    className="px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors"
+                                                                    onClick={(e) => openDeleteFeatureModal(e, feat)}
+                                                                    title="Delete Feature"
+                                                                >
+                                                                    <i className="fa-solid fa-trash"></i>
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -684,6 +784,108 @@ export default function FeaturesLibrary() {
                         <div className="p-6 border-t border-gray-200 sticky bottom-0 bg-white flex items-center justify-end gap-3">
                             <button onClick={() => setAddFeatureModal(false)} className="px-6 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors">Cancel</button>
                             <button onClick={handleAddFeature} className="px-6 py-2.5 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity">Add Feature</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ✅ NEW: Edit Feature Modal */}
+            {editFeatureModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setEditFeatureModal(false)}>
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                        <div className="p-6 border-b border-gray-200 sticky top-0 bg-white z-10 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-blue-500 bg-opacity-10 rounded-lg flex items-center justify-center">
+                                    <i className="fa-solid fa-pen-to-square text-blue-600"></i>
+                                </div>
+                                <h3 className="text-xl font-bold text-gray-900">Edit Feature</h3>
+                            </div>
+                            <button onClick={() => setEditFeatureModal(false)} className="text-gray-500 hover:text-gray-700"><i className="fa-solid fa-times text-xl"></i></button>
+                        </div>
+                        <div className="p-6 space-y-6">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-900 mb-2">Module <span className="text-red-500">*</span></label>
+                                <SingleDropdown
+                                    options={moduleOptions}
+                                    selected={editFeatureForm.moduleId}
+                                    onChange={(v) => setEditFeatureForm({ ...editFeatureForm, moduleId: v })}
+                                    placeholder="Choose a Module"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-900 mb-2">Feature Name <span className="text-red-500">*</span></label>
+                                <input type="text" placeholder="e.g., Two-Factor Authentication"
+                                    value={editFeatureForm.name} onChange={(e) => setEditFeatureForm({ ...editFeatureForm, name: e.target.value })}
+                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-700" />
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-900 mb-2">Feature Code <span className="text-red-500">*</span></label>
+                                    <input type="text" placeholder="e.g., FEAT-004"
+                                        value={editFeatureForm.code} onChange={(e) => setEditFeatureForm({ ...editFeatureForm, code: e.target.value })}
+                                        className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-700" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-900 mb-2">User Story</label>
+                                    <input type="text" placeholder="e.g., US-015"
+                                        value={editFeatureForm.user_story} onChange={(e) => setEditFeatureForm({ ...editFeatureForm, user_story: e.target.value })}
+                                        className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-700" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-900 mb-2">Description</label>
+                                <textarea rows="4" placeholder="Brief description of the feature..."
+                                    value={editFeatureForm.description} onChange={(e) => setEditFeatureForm({ ...editFeatureForm, description: e.target.value })}
+                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-700 resize-none" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-900 mb-2">Assign To</label>
+                                <SingleDropdown
+                                    options={userOptions}
+                                    selected={editFeatureForm.assign_to}
+                                    onChange={(v) => setEditFeatureForm({ ...editFeatureForm, assign_to: v })}
+                                    placeholder="Select Assignee"
+                                />
+                            </div>
+                        </div>
+                        <div className="p-6 border-t border-gray-200 sticky bottom-0 bg-white flex items-center justify-end gap-3">
+                            <button onClick={() => setEditFeatureModal(false)} className="px-6 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors">Cancel</button>
+                            <button onClick={handleEditFeature} className="px-6 py-2.5 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity">Save Changes</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ✅ NEW: Delete Feature Confirmation Modal */}
+            {deleteFeatureModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setDeleteFeatureModal(false)}>
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+                        <div className="p-6">
+                            <div className="flex items-center gap-4 mb-4">
+                                <div className="w-12 h-12 bg-red-500 bg-opacity-10 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <i className="fa-solid fa-triangle-exclamation text-red-600 text-xl"></i>
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-gray-900">Delete Feature</h3>
+                                    <p className="text-sm text-gray-500 mt-1">This action cannot be undone.</p>
+                                </div>
+                            </div>
+                            <div className="bg-gray-100 rounded-lg p-4 mb-4">
+                                <p className="text-sm font-medium text-gray-900 mb-1">{deleteFeatureTarget?.feature_name || deleteFeatureTarget?.name}</p>
+                                <p className="text-sm text-gray-500">{deleteFeatureTarget?.feature_code || deleteFeatureTarget?.code}</p>
+                            </div>
+                            {deleteFeatureTarget?.testCasesCount > 0 && (
+                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                                    <p className="text-sm text-amber-800">
+                                        <i className="fa-solid fa-warning mr-2"></i>
+                                        This feature has <strong>{deleteFeatureTarget.testCasesCount} test case(s)</strong> that will also be deleted.
+                                    </p>
+                                </div>
+                            )}
+                            <div className="flex items-center justify-end gap-3">
+                                <button onClick={() => setDeleteFeatureModal(false)} className="px-6 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors">Cancel</button>
+                                <button onClick={handleDeleteFeature} className="px-6 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:opacity-90 transition-opacity">Delete Feature</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -810,7 +1012,7 @@ export default function FeaturesLibrary() {
                 </div>
             )}
 
-            {/* Delete Confirmation Modal */}
+            {/* Delete Test Case Confirmation Modal */}
             {deleteModal.open && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setDeleteModal({ open: false })}>
                     <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
