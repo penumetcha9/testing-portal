@@ -4,6 +4,7 @@ import supabase from "../services/supabaseClient";
 const CustomSelect = ({ value, onChange, options, placeholder = 'Select…' }) => {
     const [open, setOpen] = useState(false);
     const [hovered, setHovered] = useState(null);
+    const [flipUp, setFlipUp] = useState(false);
     const ref = useRef(null);
 
     useEffect(() => {
@@ -12,30 +13,55 @@ const CustomSelect = ({ value, onChange, options, placeholder = 'Select…' }) =
         return () => document.removeEventListener('mousedown', handler);
     }, []);
 
+    const handleToggle = () => {
+        if (!open && ref.current) {
+            const rect = ref.current.getBoundingClientRect();
+            // Find the nearest scrollable ancestor
+            let scrollParent = ref.current.parentElement;
+            while (scrollParent && scrollParent !== document.body) {
+                const { overflow, overflowY } = window.getComputedStyle(scrollParent);
+                if (/auto|scroll/.test(overflow + overflowY)) break;
+                scrollParent = scrollParent.parentElement;
+            }
+            const containerBottom = scrollParent
+                ? scrollParent.getBoundingClientRect().bottom
+                : window.innerHeight;
+            const spaceBelow = containerBottom - rect.bottom;
+            const dropdownHeight = Math.min(options.length * 42 + 16, 280);
+            setFlipUp(spaceBelow < dropdownHeight + 8);
+        }
+        setOpen(p => !p);
+    };
+
     const selected = options.find(o => (typeof o === 'string' ? o : o.value) === value);
     const label = selected ? (typeof selected === 'string' ? selected : selected.label) : placeholder;
+    const dropdownPos = flipUp ? { bottom: 'calc(100% + 6px)', top: 'auto' } : { top: 'calc(100% + 6px)', bottom: 'auto' };
+    const animName = flipUp ? 'dropdownUp' : 'dropdownIn';
 
     return (
         <div ref={ref} style={{ position: 'relative', userSelect: 'none' }}>
-            <button type="button" onClick={() => setOpen(p => !p)} style={{
+            <style>{`
+                @keyframes dropdownIn { from { opacity:0; transform:translateY(-6px) scale(0.98);} to { opacity:1; transform:translateY(0) scale(1);}}
+                @keyframes dropdownUp { from { opacity:0; transform:translateY(6px) scale(0.98);} to { opacity:1; transform:translateY(0) scale(1);}}
+            `}</style>
+            <button type="button" onClick={handleToggle} style={{
                 width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '10px 14px',
-                background: open ? 'linear-gradient(135deg,#f0f4ff 0%,#fafbff 100%)' : 'linear-gradient(135deg,#fafbff 0%,#f4f6fb 100%)',
-                border: open ? '1.5px solid #6366f1' : '1.5px solid #e2e6f0',
+                background: open ? '#f0fdf4' : 'linear-gradient(135deg,#fafbff 0%,#f4f6fb 100%)',
+                border: open ? '1.5px solid #22c55e' : '1.5px solid #e2e6f0',
                 borderRadius: '10px', fontSize: '13.5px', color: value ? '#1e293b' : '#94a3b8',
                 fontWeight: value ? 500 : 400, cursor: 'pointer', transition: 'all 0.18s ease',
-                boxShadow: open ? '0 0 0 3px rgba(99,102,241,0.12), 0 2px 8px rgba(99,102,241,0.08)' : '0 1px 3px rgba(0,0,0,0.06)',
+                boxShadow: open ? '0 0 0 3px rgba(34,197,94,0.12)' : '0 1px 3px rgba(0,0,0,0.06)',
                 outline: 'none', letterSpacing: '0.01em',
             }}>
                 <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-                <span style={{ marginLeft: 8, display: 'flex', alignItems: 'center', transition: 'transform 0.22s cubic-bezier(.4,0,.2,1)', transform: open ? 'rotate(180deg)' : 'rotate(0deg)', color: open ? '#6366f1' : '#94a3b8', flexShrink: 0 }}>
+                <span style={{ marginLeft: 8, display: 'flex', alignItems: 'center', transition: 'transform 0.22s cubic-bezier(.4,0,.2,1)', transform: open ? 'rotate(180deg)' : 'rotate(0deg)', color: open ? '#22c55e' : '#94a3b8', flexShrink: 0 }}>
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </span>
             </button>
             {open && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 9999, background: '#ffffff', border: '1.5px solid #e8eaf6', borderRadius: '12px', boxShadow: '0 8px 32px rgba(99,102,241,0.13), 0 2px 8px rgba(0,0,0,0.08)', overflow: 'hidden', animation: 'dropdownIn 0.18s cubic-bezier(.4,0,.2,1)' }}>
-                    <style>{`@keyframes dropdownIn { from { opacity: 0; transform: translateY(-6px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }`}</style>
-                    <div style={{ padding: '6px' }}>
+                <div style={{ position: 'absolute', ...dropdownPos, left: 0, right: 0, zIndex: 9999, background: '#ffffff', border: '1.5px solid #dcfce7', borderRadius: '12px', boxShadow: '0 8px 32px rgba(34,197,94,0.10), 0 2px 8px rgba(0,0,0,0.08)', overflow: 'hidden', animation: `${animName} 0.18s cubic-bezier(.4,0,.2,1)` }}>
+                    <div style={{ padding: '6px', maxHeight: '260px', overflowY: 'auto' }}>
                         {options.map((opt, i) => {
                             const val = typeof opt === 'string' ? opt : opt.value;
                             const lbl = typeof opt === 'string' ? opt : opt.label;
@@ -43,9 +69,9 @@ const CustomSelect = ({ value, onChange, options, placeholder = 'Select…' }) =
                             const isHovered = hovered === i;
                             return (
                                 <div key={val} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)} onClick={() => { onChange(val); setOpen(false); }}
-                                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '13.5px', fontWeight: isSelected ? 600 : 400, color: isSelected ? '#4f46e5' : isHovered ? '#1e293b' : '#374151', background: isSelected ? 'linear-gradient(135deg,#eef2ff 0%,#f0f4ff 100%)' : isHovered ? '#f8fafc' : 'transparent', transition: 'all 0.12s ease', letterSpacing: '0.01em' }}>
+                                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '13.5px', fontWeight: isSelected ? 600 : 400, color: isSelected ? '#15803d' : isHovered ? '#1e293b' : '#374151', background: isSelected ? '#dcfce7' : isHovered ? '#f0fdf4' : 'transparent', transition: 'all 0.12s ease', letterSpacing: '0.01em' }}>
                                     <span>{lbl}</span>
-                                    {isSelected && (<svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, marginLeft: 8 }}><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#4f46e5" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>)}
+                                    {isSelected && (<svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, marginLeft: 8 }}><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#16a34a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>)}
                                 </div>
                             );
                         })}
@@ -59,6 +85,7 @@ const CustomSelect = ({ value, onChange, options, placeholder = 'Select…' }) =
 const MultiSelect = ({ values = [], onChange, options, placeholder = 'Select…', searchPlaceholder = 'Search...' }) => {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState('');
+    const [flipUp, setFlipUp] = useState(false);
     const ref = useRef(null);
 
     useEffect(() => {
@@ -66,6 +93,24 @@ const MultiSelect = ({ values = [], onChange, options, placeholder = 'Select…'
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, []);
+
+    const handleToggle = () => {
+        if (!open && ref.current) {
+            const rect = ref.current.getBoundingClientRect();
+            let scrollParent = ref.current.parentElement;
+            while (scrollParent && scrollParent !== document.body) {
+                const { overflow, overflowY } = window.getComputedStyle(scrollParent);
+                if (/auto|scroll/.test(overflow + overflowY)) break;
+                scrollParent = scrollParent.parentElement;
+            }
+            const containerBottom = scrollParent
+                ? scrollParent.getBoundingClientRect().bottom
+                : window.innerHeight;
+            const spaceBelow = containerBottom - rect.bottom;
+            setFlipUp(spaceBelow < 260);
+        }
+        setOpen(p => !p);
+    };
 
     const filtered = options.filter(o => {
         const lbl = typeof o === 'string' ? o : o.label;
@@ -79,19 +124,21 @@ const MultiSelect = ({ values = [], onChange, options, placeholder = 'Select…'
 
     const avatarColors = ['bg-purple-500', 'bg-blue-500', 'bg-green-500', 'bg-orange-500', 'bg-pink-500', 'bg-teal-500', 'bg-indigo-500', 'bg-red-500'];
     const getAvatarColor = (name) => avatarColors[name.charCodeAt(0) % avatarColors.length];
+    const dropdownPos = flipUp ? { bottom: 'calc(100% + 6px)', top: 'auto' } : { top: 'calc(100% + 6px)', bottom: 'auto' };
+    const animName = flipUp ? 'dropdownUp' : 'dropdownIn';
 
     return (
         <div ref={ref} style={{ position: 'relative', userSelect: 'none' }}>
             {values.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mb-2">
                     {values.map(v => (
-                        <span key={v} className="inline-flex items-center gap-1.5 pl-1 pr-2 py-1 bg-primary bg-opacity-10 text-primary text-xs font-semibold rounded-full">
+                        <span key={v} className="inline-flex items-center gap-1.5 pl-1 pr-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded-full">
                             <span className={`w-4 h-4 ${getAvatarColor(v)} rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0`} style={{ fontSize: 9 }}>
                                 {v.charAt(0).toUpperCase()}
                             </span>
                             {v}
                             <button type="button" onClick={e => { e.stopPropagation(); toggle(v); }}
-                                className="ml-0.5 text-primary hover:text-red-500 transition-colors leading-none">
+                                className="ml-0.5 text-green-700 hover:text-red-500 transition-colors leading-none">
                                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                                     <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                                 </svg>
@@ -100,26 +147,28 @@ const MultiSelect = ({ values = [], onChange, options, placeholder = 'Select…'
                     ))}
                 </div>
             )}
-            <button type="button" onClick={() => setOpen(p => !p)} style={{
+            <button type="button" onClick={handleToggle} style={{
                 width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '10px 14px',
-                background: open ? 'linear-gradient(135deg,#f0f4ff 0%,#fafbff 100%)' : 'linear-gradient(135deg,#fafbff 0%,#f4f6fb 100%)',
-                border: open ? '1.5px solid #6366f1' : '1.5px solid #e2e6f0',
+                background: open ? '#f0fdf4' : 'linear-gradient(135deg,#fafbff 0%,#f4f6fb 100%)',
+                border: open ? '1.5px solid #22c55e' : '1.5px solid #e2e6f0',
                 borderRadius: '10px', fontSize: '13.5px', color: '#94a3b8',
                 cursor: 'pointer', transition: 'all 0.18s ease',
-                boxShadow: open ? '0 0 0 3px rgba(99,102,241,0.12)' : '0 1px 3px rgba(0,0,0,0.06)',
+                boxShadow: open ? '0 0 0 3px rgba(34,197,94,0.12)' : '0 1px 3px rgba(0,0,0,0.06)',
                 outline: 'none',
             }}>
-                <span>{values.length > 0 ? `${values.length} selected` : placeholder}</span>
-                <span style={{ display: 'flex', alignItems: 'center', transition: 'transform 0.22s', transform: open ? 'rotate(180deg)' : 'rotate(0deg)', color: open ? '#6366f1' : '#94a3b8' }}>
+                <span style={{ color: values.length > 0 ? '#15803d' : '#94a3b8', fontWeight: values.length > 0 ? 500 : 400 }}>
+                    {values.length > 0 ? `${values.length} selected` : placeholder}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', transition: 'transform 0.22s', transform: open ? 'rotate(180deg)' : 'rotate(0deg)', color: open ? '#22c55e' : '#94a3b8' }}>
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </span>
             </button>
             {open && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 9999, background: '#ffffff', border: '1.5px solid #e8eaf6', borderRadius: '12px', boxShadow: '0 8px 32px rgba(99,102,241,0.13)', overflow: 'hidden', animation: 'dropdownIn 0.18s cubic-bezier(.4,0,.2,1)' }}>
+                <div style={{ position: 'absolute', ...dropdownPos, left: 0, right: 0, zIndex: 9999, background: '#ffffff', border: '1.5px solid #dcfce7', borderRadius: '12px', boxShadow: '0 8px 32px rgba(34,197,94,0.10), 0 2px 8px rgba(0,0,0,0.08)', overflow: 'hidden', animation: `${animName} 0.18s cubic-bezier(.4,0,.2,1)` }}>
                     <div style={{ padding: '8px 8px 4px' }}>
                         <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder={searchPlaceholder} autoFocus
-                            style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #e2e6f0', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} />
+                            style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #dcfce7', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} />
                     </div>
                     <div style={{ maxHeight: '200px', overflowY: 'auto', padding: '4px 6px 6px' }}>
                         {filtered.length === 0 && (
@@ -131,16 +180,16 @@ const MultiSelect = ({ values = [], onChange, options, placeholder = 'Select…'
                             const isSelected = values.includes(val);
                             return (
                                 <div key={val} onClick={() => toggle(val)}
-                                    style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', borderRadius: '8px', cursor: 'pointer', background: isSelected ? 'linear-gradient(135deg,#eef2ff,#f0f4ff)' : 'transparent', transition: 'all 0.1s' }}
-                                    onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#f8fafc'; }}
-                                    onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}>
+                                    style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', borderRadius: '8px', cursor: 'pointer', background: isSelected ? '#dcfce7' : 'transparent', transition: 'all 0.1s' }}
+                                    onMouseEnter={e => { e.currentTarget.style.background = isSelected ? '#bbf7d0' : '#f0fdf4'; }}
+                                    onMouseLeave={e => { e.currentTarget.style.background = isSelected ? '#dcfce7' : 'transparent'; }}>
                                     <span className={`w-6 h-6 ${getAvatarColor(val)} rounded-full flex items-center justify-center text-white font-bold flex-shrink-0`} style={{ fontSize: 11 }}>
                                         {val.charAt(0).toUpperCase()}
                                     </span>
-                                    <span style={{ flex: 1, fontSize: '13.5px', fontWeight: isSelected ? 600 : 400, color: isSelected ? '#4f46e5' : '#374151' }}>{lbl}</span>
+                                    <span style={{ flex: 1, fontSize: '13.5px', fontWeight: isSelected ? 600 : 400, color: isSelected ? '#15803d' : '#374151' }}>{lbl}</span>
                                     {isSelected && (
                                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
-                                            <path d="M2.5 7l3.5 3.5 5.5-6" stroke="#4f46e5" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                            <path d="M2.5 7l3.5 3.5 5.5-6" stroke="#16a34a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                                         </svg>
                                     )}
                                 </div>
@@ -148,7 +197,7 @@ const MultiSelect = ({ values = [], onChange, options, placeholder = 'Select…'
                         })}
                     </div>
                     {values.length > 0 && (
-                        <div style={{ padding: '6px 8px 8px', borderTop: '1px solid #f1f5f9' }}>
+                        <div style={{ padding: '6px 8px 8px', borderTop: '1px solid #dcfce7' }}>
                             <button type="button" onClick={() => onChange([])}
                                 style={{ width: '100%', padding: '6px', fontSize: '12px', color: '#ef4444', background: '#fef2f2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}>
                                 Clear all
@@ -298,100 +347,547 @@ const CommentsTab = ({ storyId, storyUUID }) => {
     );
 };
 
+// ── Typography tokens from NexTech RMS design system ─────────────────────────
+const T = {
+    // sizes
+    body: { fontSize: 13, fontWeight: 400, lineHeight: 1.5 },   // 13px 400 — body text
+    bodyMed: { fontSize: 13, fontWeight: 500, lineHeight: 1.5 },   // 13px 500 — nav, table rows
+    label: { fontSize: 12, fontWeight: 400, lineHeight: 1.5 },   // 12px 400 — labels, badges
+    micro: { fontSize: 11, fontWeight: 500, letterSpacing: '0.06em', lineHeight: 1.5 }, // 11px 500 uppercase micro
+    subhead: { fontSize: 15, fontWeight: 500, lineHeight: 1.2 },   // 15px 500 — card titles
+    section: { fontSize: 18, fontWeight: 600, lineHeight: 1.2 },   // 18px 600 — section headings
+};
+const font = 'Inter, system-ui, -apple-system, sans-serif';
+
 const AttachmentsTab = ({ storyId, storyUUID }) => {
     const [attachments, setAttachments] = useState([]);
-    const [links, setLinks] = useState([]);
+    const [figmaLinks, setFigmaLinks] = useState([]);
+    const [webLinks, setWebLinks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [linksLoading, setLinksLoading] = useState(true);
     const [error, setError] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [uploadedBy, setUploadedBy] = useState('');
     const fileInputRef = useRef(null);
-    const [showLinkForm, setShowLinkForm] = useState(false);
-    const [linkSaving, setLinkSaving] = useState(false);
-    const [newLink, setNewLink] = useState({ figma_link: '', web_link: '', added_by: '' });
-    const [linkErrors, setLinkErrors] = useState({ figma: '', web: '' });
 
-    useEffect(() => { if (!storyUUID) { setLoading(false); setLinksLoading(false); return; } fetchAttachments(); fetchLinks(); }, [storyUUID]);
+    // Figma link form state
+    const [showFigmaForm, setShowFigmaForm] = useState(false);
+    const [figmaSaving, setFigmaSaving] = useState(false);
+    const [newFigma, setNewFigma] = useState({ url: '', title: '', added_by: '' });
+    const [figmaError, setFigmaError] = useState('');
 
-    const fetchAttachments = async () => { setLoading(true); try { const { data, error } = await supabase.from('attachments').select('*').eq('story_id', storyUUID).order('uploaded_at', { ascending: false }); if (error) throw error; setAttachments(data || []); } catch (err) { setError(err.message); } finally { setLoading(false); } };
-    const fetchLinks = async () => { setLinksLoading(true); try { const { data, error } = await supabase.from('story_links').select('*').eq('story_id', storyUUID).order('created_at', { ascending: false }); if (error) throw error; setLinks(data || []); } catch (err) { console.error('Links fetch error:', err.message); } finally { setLinksLoading(false); } };
+    // Web link form state
+    const [showWebForm, setShowWebForm] = useState(false);
+    const [webSaving, setWebSaving] = useState(false);
+    const [newWeb, setNewWeb] = useState({ url: '', title: '', added_by: '' });
+    const [webError, setWebError] = useState('');
 
-    const isValidFigmaLink = (url) => { if (!url) return true; return /^https?:\/\/(www\.)?(figma\.com)\/.+/i.test(url.trim()); };
-    const isValidWebLink = (url) => { if (!url) return true; try { const u = new URL(url.trim()); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; } };
+    useEffect(() => {
+        if (!storyUUID) { setLoading(false); setLinksLoading(false); return; }
+        fetchAttachments();
+        fetchLinks();
+    }, [storyUUID]);
 
-    const handleSaveLink = async () => {
-        const errors = { figma: '', web: '' };
-        if (newLink.figma_link && !isValidFigmaLink(newLink.figma_link)) errors.figma = 'Please enter a valid Figma link';
-        if (newLink.web_link && !isValidWebLink(newLink.web_link)) errors.web = 'Please enter a valid URL';
-        if (!newLink.figma_link.trim() && !newLink.web_link.trim()) { errors.figma = 'Please provide at least one link'; errors.web = 'Please provide at least one link'; }
-        setLinkErrors(errors); if (errors.figma || errors.web) return;
-        setLinkSaving(true);
-        try { const { error } = await supabase.from('story_links').insert([{ story_id: storyUUID, figma_link: newLink.figma_link.trim() || null, web_link: newLink.web_link.trim() || null, added_by: newLink.added_by.trim() || 'Anonymous' }]); if (error) throw error; setNewLink({ figma_link: '', web_link: '', added_by: '' }); setLinkErrors({ figma: '', web: '' }); setShowLinkForm(false); await fetchLinks(); } catch (err) { alert(`Error: ${err.message}`); } finally { setLinkSaving(false); }
+    const fetchAttachments = async () => {
+        setLoading(true);
+        try {
+            const { data, error } = await supabase.from('attachments').select('*').eq('story_id', storyUUID).order('uploaded_at', { ascending: false });
+            if (error) throw error;
+            setAttachments(data || []);
+        } catch (err) { setError(err.message); } finally { setLoading(false); }
     };
 
-    const handleDeleteLink = async (link) => { if (!window.confirm('Delete this link?')) return; try { const { error } = await supabase.from('story_links').delete().eq('id', link.id); if (error) throw error; setLinks(p => p.filter(l => l.id !== link.id)); } catch (err) { alert(`Delete error: ${err.message}`); } };
-    const handleFileUpload = async (e) => { const files = Array.from(e.target.files); if (!files.length) return; setUploading(true); try { for (const file of files) { const filePath = `${storyUUID}/${Date.now()}_${file.name}`; const { error: uploadError } = await supabase.storage.from('story-attachments').upload(filePath, file); if (uploadError) throw uploadError; const { data: { publicUrl } } = supabase.storage.from('story-attachments').getPublicUrl(filePath); const { error: dbError } = await supabase.from('attachments').insert([{ story_id: storyUUID, file_name: file.name, file_url: publicUrl || filePath, file_size: file.size, file_type: file.type, uploaded_by: uploadedBy.trim() || 'Anonymous' }]); if (dbError) throw dbError; } await fetchAttachments(); if (fileInputRef.current) fileInputRef.current.value = ''; } catch (err) { alert(`Upload error: ${err.message}`); } finally { setUploading(false); } };
-    const handleDelete = async (attachment) => { if (!window.confirm(`Delete "${attachment.file_name}"?`)) return; try { const { error } = await supabase.from('attachments').delete().eq('id', attachment.id); if (error) throw error; setAttachments(p => p.filter(a => a.id !== attachment.id)); } catch (err) { alert(`Delete error: ${err.message}`); } };
+    const fetchLinks = async () => {
+        setLinksLoading(true);
+        try {
+            const { data, error } = await supabase.from('story_links').select('*').eq('story_id', storyUUID).order('created_at', { ascending: false });
+            if (error) throw error;
+            const all = data || [];
+            setFigmaLinks(all.filter(l => l.figma_link));
+            setWebLinks(all.filter(l => l.web_link && !l.figma_link));
+        } catch (err) { console.error('Links fetch error:', err.message); } finally { setLinksLoading(false); }
+    };
+
+    const isValidFigmaLink = (url) => /^https?:\/\/(www\.)?figma\.com\/.+/i.test(url.trim());
+    const isValidWebLink = (url) => { try { const u = new URL(url.trim()); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; } };
+
+    const handleSaveFigma = async () => {
+        if (!newFigma.url.trim()) { setFigmaError('Figma URL is required'); return; }
+        if (!isValidFigmaLink(newFigma.url)) { setFigmaError('Please enter a valid Figma URL (figma.com/...)'); return; }
+        setFigmaSaving(true);
+        try {
+            const { error } = await supabase.from('story_links').insert([{
+                story_id: storyUUID,
+                figma_link: newFigma.url.trim(),
+                web_link: null,
+                added_by: newFigma.added_by.trim() || 'Anonymous',
+                title: newFigma.title.trim() || null,
+            }]);
+            if (error) throw error;
+            setNewFigma({ url: '', title: '', added_by: '' });
+            setFigmaError('');
+            setShowFigmaForm(false);
+            await fetchLinks();
+        } catch (err) { alert(`Error: ${err.message}`); } finally { setFigmaSaving(false); }
+    };
+
+    const handleSaveWeb = async () => {
+        if (!newWeb.url.trim()) { setWebError('Web URL is required'); return; }
+        if (!isValidWebLink(newWeb.url)) { setWebError('Please enter a valid URL (https://...)'); return; }
+        setWebSaving(true);
+        try {
+            const { error } = await supabase.from('story_links').insert([{
+                story_id: storyUUID,
+                figma_link: null,
+                web_link: newWeb.url.trim(),
+                added_by: newWeb.added_by.trim() || 'Anonymous',
+                title: newWeb.title.trim() || null,
+            }]);
+            if (error) throw error;
+            setNewWeb({ url: '', title: '', added_by: '' });
+            setWebError('');
+            setShowWebForm(false);
+            await fetchLinks();
+        } catch (err) { alert(`Error: ${err.message}`); } finally { setWebSaving(false); }
+    };
+
+    const handleDeleteLink = async (link) => {
+        if (!window.confirm('Delete this link?')) return;
+        try {
+            const { error } = await supabase.from('story_links').delete().eq('id', link.id);
+            if (error) throw error;
+            await fetchLinks();
+        } catch (err) { alert(`Delete error: ${err.message}`); }
+    };
+
+    const handleFileUpload = async (e) => {
+        const files = Array.from(e.target.files);
+        if (!files.length) return;
+        setUploading(true);
+        try {
+            for (const file of files) {
+                const filePath = `${storyUUID}/${Date.now()}_${file.name}`;
+                const { error: uploadError } = await supabase.storage.from('story-attachments').upload(filePath, file);
+                if (uploadError) throw uploadError;
+                const { data: { publicUrl } } = supabase.storage.from('story-attachments').getPublicUrl(filePath);
+                const { error: dbError } = await supabase.from('attachments').insert([{
+                    story_id: storyUUID, file_name: file.name, file_url: publicUrl || filePath,
+                    file_size: file.size, file_type: file.type, uploaded_by: uploadedBy.trim() || 'Anonymous'
+                }]);
+                if (dbError) throw dbError;
+            }
+            await fetchAttachments();
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        } catch (err) { alert(`Upload error: ${err.message}`); } finally { setUploading(false); }
+    };
+
+    const handleDeleteFile = async (attachment) => {
+        if (!window.confirm(`Delete "${attachment.file_name}"?`)) return;
+        try {
+            const { error } = await supabase.from('attachments').delete().eq('id', attachment.id);
+            if (error) throw error;
+            setAttachments(p => p.filter(a => a.id !== attachment.id));
+        } catch (err) { alert(`Delete error: ${err.message}`); }
+    };
 
     const formatSize = (bytes) => { if (!bytes) return '—'; if (bytes < 1024) return `${bytes} B`; if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`; return `${(bytes / 1048576).toFixed(1)} MB`; };
     const fileIcon = (type) => { if (!type) return 'fa-file'; if (type.startsWith('image/')) return 'fa-file-image'; if (type === 'application/pdf') return 'fa-file-pdf'; if (type.includes('word')) return 'fa-file-word'; if (type.includes('sheet') || type.includes('excel')) return 'fa-file-excel'; if (type.includes('zip') || type.includes('rar')) return 'fa-file-zipper'; return 'fa-file'; };
     const fileIconColor = (type) => { if (!type) return 'text-gray-400'; if (type.startsWith('image/')) return 'text-green-500'; if (type === 'application/pdf') return 'text-red-500'; if (type.includes('word')) return 'text-blue-500'; if (type.includes('sheet') || type.includes('excel')) return 'text-emerald-500'; return 'text-gray-400'; };
 
-    if (loading && linksLoading) return <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div></div>;
-    if (error) return <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"><i className="fa-solid fa-circle-exclamation"></i>{error}</div>;
+    if (error) return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, color: '#DC2626', fontFamily: font, ...T.body }}>
+            <i className="fa-solid fa-circle-exclamation"></i>
+            <span>{error}</span>
+        </div>
+    );
 
-    const inputCls = "w-full px-3 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary";
+    // ── Shared input style ─────────────────────────────────────────────────────
+    const inp = (extra = {}) => ({
+        width: '100%', padding: '10px 14px', background: '#FFFFFF',
+        border: '1px solid #E5E7EB', borderRadius: 8,
+        fontFamily: font, ...T.body, color: '#111827',
+        outline: 'none', boxSizing: 'border-box', lineHeight: 1.5,
+        ...extra,
+    });
+
+    const inpFocus = (ref) => {
+        if (ref) { ref.style.borderColor = '#6366F1'; ref.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)'; }
+    };
+    const inpBlur = (ref) => {
+        if (ref) { ref.style.borderColor = '#E5E7EB'; ref.style.boxShadow = 'none'; }
+    };
+
+    // ── Micro label (11px 500 uppercase +0.06em) ───────────────────────────────
+    const MicroLabel = ({ children, color = '#6B7280' }) => (
+        <span style={{ display: 'block', fontFamily: font, ...T.micro, textTransform: 'uppercase', color, marginBottom: 6 }}>
+            {children}
+        </span>
+    );
+
+    // ── Section heading (15px 500) ─────────────────────────────────────────────
+    const SectionHeading = ({ icon, iconBg, iconColor, title, count, countBg, countColor }) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+            <div style={{ width: 36, height: 36, background: iconBg, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <i className={icon} style={{ color: iconColor, fontSize: 15 }}></i>
+            </div>
+            <span style={{ fontFamily: font, ...T.subhead, color: '#111827' }}>{title}</span>
+            {count > 0 && (
+                <span style={{ padding: '2px 10px', borderRadius: 99, background: countBg, color: countColor, fontFamily: font, ...T.label, fontWeight: 600 }}>
+                    {count}
+                </span>
+            )}
+        </div>
+    );
+
+    // ── Empty state ────────────────────────────────────────────────────────────
+    const EmptyState = ({ icon, message }) => (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 0', gap: 10, border: '2px dashed #E5E7EB', borderRadius: 12 }}>
+            <div style={{ width: 40, height: 40, background: '#F3F4F6', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <i className={icon} style={{ color: '#9CA3AF', fontSize: 16 }}></i>
+            </div>
+            <span style={{ fontFamily: font, ...T.body, color: '#6B7280' }}>{message}</span>
+        </div>
+    );
+
+    // ── Link card row ──────────────────────────────────────────────────────────
+    const LinkRow = ({ href, icon, iconBg, iconColor, urlColor, metaColor, url, title, meta, onDelete, hoverBorder }) => {
+        const [hov, setHov] = useState(false);
+        return (
+            <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: hov ? '#F9FAFB' : '#FFFFFF', border: `1px solid ${hov ? hoverBorder : '#E5E7EB'}`, borderRadius: 10, transition: 'all 0.15s' }}>
+                <div style={{ width: 36, height: 36, background: iconBg, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <i className={icon} style={{ color: iconColor, fontSize: 15 }}></i>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    {title && (
+                        <span style={{ display: 'block', fontFamily: font, ...T.bodyMed, color: '#111827', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {title}
+                        </span>
+                    )}
+                    <a href={href} target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'block', fontFamily: font, ...T.label, color: urlColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }}
+                        onMouseEnter={e => e.target.style.textDecoration = 'underline'}
+                        onMouseLeave={e => e.target.style.textDecoration = 'none'}>
+                        {url}
+                    </a>
+                    <span style={{ fontFamily: font, ...T.label, color: metaColor }}>{meta}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 4, opacity: hov ? 1 : 0, transition: 'opacity 0.15s' }}>
+                    <a href={href} target="_blank" rel="noopener noreferrer"
+                        style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: '#9CA3AF', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'none' }}
+                        title="Open link">
+                        <i className="fa-solid fa-arrow-up-right-from-square" style={{ fontSize: 11 }}></i>
+                    </a>
+                    <button onClick={onDelete}
+                        style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: '#9CA3AF', background: 'none', border: 'none', cursor: 'pointer' }}
+                        title="Delete">
+                        <i className="fa-solid fa-trash" style={{ fontSize: 11 }}></i>
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
+    // ── Add link form panel ────────────────────────────────────────────────────
+    const AddLinkForm = ({ bg, borderColor, accentColor, urlLabel, urlPlaceholder, urlIcon, urlValue, onUrlChange, urlError, titleValue, onTitleChange, nameValue, onNameChange, onSave, onCancel, saving, saveLabel }) => (
+        <div style={{ background: bg, border: `1px solid ${borderColor}`, borderRadius: 12, padding: '20px 20px 16px', marginBottom: 16 }}>
+
+            {/* URL field */}
+            <div style={{ marginBottom: 14 }}>
+                <MicroLabel color={accentColor}>{urlLabel} <span style={{ color: '#EF4444' }}>*</span></MicroLabel>
+                <div style={{ position: 'relative' }}>
+                    <i className={urlIcon} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: accentColor, fontSize: 13, opacity: 0.7 }}></i>
+                    <input
+                        type="url"
+                        value={urlValue}
+                        onChange={onUrlChange}
+                        placeholder={urlPlaceholder}
+                        style={{ ...inp({ paddingLeft: 36, borderColor: urlError ? '#EF4444' : '#E5E7EB' }) }}
+                        onFocus={e => inpFocus(e.target)}
+                        onBlur={e => inpBlur(e.target)}
+                    />
+                </div>
+                {urlError && (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 5, fontFamily: font, ...T.label, color: '#EF4444' }}>
+                        <i className="fa-solid fa-circle-exclamation" style={{ fontSize: 11 }}></i>
+                        {urlError}
+                    </span>
+                )}
+            </div>
+
+            {/* Title field */}
+            <div style={{ marginBottom: 14 }}>
+                <MicroLabel color={accentColor}>Link title</MicroLabel>
+                <input
+                    type="text"
+                    value={titleValue}
+                    onChange={onTitleChange}
+                    placeholder="e.g. Homepage wireframe, Jira ticket…"
+                    style={inp()}
+                    onFocus={e => inpFocus(e.target)}
+                    onBlur={e => inpBlur(e.target)}
+                />
+            </div>
+
+            {/* Added by field */}
+            <div style={{ marginBottom: 18 }}>
+                <MicroLabel color={accentColor}>Added by</MicroLabel>
+                <input
+                    type="text"
+                    value={nameValue}
+                    onChange={onNameChange}
+                    placeholder="Your name (optional)"
+                    style={inp()}
+                    onFocus={e => inpFocus(e.target)}
+                    onBlur={e => inpBlur(e.target)}
+                />
+            </div>
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                    onClick={onSave}
+                    disabled={saving}
+                    style={{ padding: '9px 20px', background: accentColor, color: '#FFFFFF', border: 'none', borderRadius: 8, fontFamily: font, ...T.bodyMed, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {saving
+                        ? <><i className="fa-solid fa-spinner fa-spin" style={{ fontSize: 12 }}></i> Saving…</>
+                        : <><i className="fa-solid fa-floppy-disk" style={{ fontSize: 12 }}></i> {saveLabel}</>
+                    }
+                </button>
+                <button
+                    onClick={onCancel}
+                    style={{ padding: '9px 18px', background: '#FFFFFF', color: '#374151', border: '1px solid #E5E7EB', borderRadius: 8, fontFamily: font, ...T.bodyMed, cursor: 'pointer' }}>
+                    Cancel
+                </button>
+            </div>
+        </div>
+    );
+
+    // ── Add button ─────────────────────────────────────────────────────────────
+    const AddButton = ({ onClick, active, accentColor, label }) => (
+        <button
+            onClick={onClick}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: active ? '#F3F4F6' : accentColor, color: active ? '#374151' : '#FFFFFF', border: active ? '1px solid #E5E7EB' : 'none', borderRadius: 8, fontFamily: font, ...T.bodyMed, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 }}>
+            <i className={`fa-solid ${active ? 'fa-times' : 'fa-plus'}`} style={{ fontSize: 12 }}></i>
+            {active ? 'Cancel' : label}
+        </button>
+    );
 
     return (
-        <div className="space-y-8">
-            <div>
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3"><div className="w-8 h-8 bg-purple-500 bg-opacity-10 rounded-lg flex items-center justify-center"><i className="fa-solid fa-link text-purple-500"></i></div><h4 className="text-sm font-bold text-foreground">Design & Web Links</h4>{links.length > 0 && <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full">{links.length}</span>}</div>
-                    <button onClick={() => setShowLinkForm(p => !p)} className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors"><i className={`fa-solid ${showLinkForm ? 'fa-times' : 'fa-plus'}`}></i>{showLinkForm ? 'Cancel' : 'Add Link'}</button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24, fontFamily: font }}>
+
+            {/* ── CATEGORY 1: Figma Design Links ── */}
+            <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 14, padding: '20px 20px 16px' }}>
+
+                {/* Section header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showFigmaForm ? 16 : figmaLinks.length > 0 ? 16 : 12 }}>
+                    <SectionHeading
+                        icon="fa-brands fa-figma" iconBg="rgba(139,92,246,0.10)" iconColor="#7C3AED"
+                        title="Figma Design Links" count={figmaLinks.length}
+                        countBg="rgba(139,92,246,0.10)" countColor="#6D28D9"
+                    />
+                    <AddButton onClick={() => { setShowFigmaForm(p => !p); setFigmaError(''); }} active={showFigmaForm} accentColor="#7C3AED" label="Add Figma Link" />
                 </div>
-                {showLinkForm && (
-                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-5 space-y-4 mb-4" style={{ animation: 'dropdownIn 0.18s cubic-bezier(.4,0,.2,1)' }}>
-                        <h4 className="text-sm font-semibold text-purple-700 flex items-center gap-2"><i className="fa-solid fa-link"></i> Add Design / Web Link</h4>
-                        <div className="grid grid-cols-1 gap-4">
-                            <div>
-                                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center gap-2 block">Figma Design Link</label>
-                                <div className="relative"><input type="url" value={newLink.figma_link} onChange={e => { setNewLink(p => ({ ...p, figma_link: e.target.value })); setLinkErrors(p => ({ ...p, figma: '' })); }} placeholder="https://www.figma.com/file/…" className={`${inputCls} pl-10 ${linkErrors.figma ? 'border-red-400 focus:ring-red-400' : ''}`} /><i className="fa-brands fa-figma absolute left-3 top-1/2 -translate-y-1/2 text-purple-400 text-sm"></i></div>
-                                {linkErrors.figma && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><i className="fa-solid fa-circle-exclamation text-xs"></i> {linkErrors.figma}</p>}
-                            </div>
-                            <div>
-                                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center gap-2 block"><i className="fa-solid fa-globe text-blue-500"></i> Web Link</label>
-                                <div className="relative"><input type="url" value={newLink.web_link} onChange={e => { setNewLink(p => ({ ...p, web_link: e.target.value })); setLinkErrors(p => ({ ...p, web: '' })); }} placeholder="https://example.com/any-link" className={`${inputCls} pl-10 ${linkErrors.web ? 'border-red-400 focus:ring-red-400' : ''}`} /><i className="fa-solid fa-globe absolute left-3 top-1/2 -translate-y-1/2 text-blue-400 text-sm"></i></div>
-                                {linkErrors.web && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><i className="fa-solid fa-circle-exclamation text-xs"></i> {linkErrors.web}</p>}
-                            </div>
-                            <div><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Added By</label><input type="text" value={newLink.added_by} onChange={e => setNewLink(p => ({ ...p, added_by: e.target.value }))} placeholder="Your name (optional)" className={inputCls} /></div>
-                        </div>
-                        <div className="flex items-center gap-3 pt-1"><button onClick={handleSaveLink} disabled={linkSaving} className="px-5 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 disabled:opacity-50 transition-colors">{linkSaving ? 'Saving…' : 'Save Link'}</button><button onClick={() => { setShowLinkForm(false); setLinkErrors({ figma: '', web: '' }); }} className="px-5 py-2 bg-card border border-border text-foreground rounded-lg text-sm font-medium hover:bg-muted transition-colors">Cancel</button></div>
+
+                {/* Add form */}
+                {showFigmaForm && (
+                    <AddLinkForm
+                        bg="rgba(139,92,246,0.04)" borderColor="rgba(139,92,246,0.20)" accentColor="#7C3AED"
+                        urlLabel="Figma URL" urlPlaceholder="https://www.figma.com/file/..."
+                        urlIcon="fa-brands fa-figma"
+                        urlValue={newFigma.url}
+                        onUrlChange={e => { setNewFigma(p => ({ ...p, url: e.target.value })); setFigmaError(''); }}
+                        urlError={figmaError}
+                        titleValue={newFigma.title}
+                        onTitleChange={e => setNewFigma(p => ({ ...p, title: e.target.value }))}
+                        nameValue={newFigma.added_by}
+                        onNameChange={e => setNewFigma(p => ({ ...p, added_by: e.target.value }))}
+                        onSave={handleSaveFigma}
+                        onCancel={() => { setShowFigmaForm(false); setFigmaError(''); setNewFigma({ url: '', title: '', added_by: '' }); }}
+                        saving={figmaSaving}
+                        saveLabel="Save Figma Link"
+                    />
+                )}
+
+                {/* List */}
+                {linksLoading ? (
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
+                        <div style={{ width: 20, height: 20, border: '2px solid #7C3AED', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }}></div>
+                    </div>
+                ) : figmaLinks.length === 0 && !showFigmaForm ? (
+                    <EmptyState icon="fa-brands fa-figma" message="No Figma design links added yet" />
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {figmaLinks.map(link => (
+                            <LinkRow
+                                key={link.id}
+                                href={link.figma_link} url={link.figma_link}
+                                icon="fa-brands fa-figma" iconBg="rgba(139,92,246,0.10)" iconColor="#7C3AED"
+                                urlColor="#6D28D9" hoverBorder="#C4B5FD"
+                                title={link.title || ''}
+                                meta={`Added by ${link.added_by || 'Anonymous'} · ${new Date(link.created_at).toLocaleDateString()}`}
+                                metaColor="#9CA3AF"
+                                onDelete={() => handleDeleteLink(link)}
+                            />
+                        ))}
                     </div>
                 )}
-                {linksLoading ? <div className="flex items-center justify-center py-8"><div className="w-6 h-6 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div></div> : links.length === 0 && !showLinkForm ? (
-                    <div className="flex flex-col items-center justify-center py-10 gap-2 border-2 border-dashed border-border rounded-xl"><div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center"><i className="fa-solid fa-link text-lg text-muted-foreground"></i></div><p className="text-sm text-muted-foreground">No design or web links added yet</p></div>
-                ) : links.length > 0 && (
-                    <div className="space-y-2">{links.map(link => (<div key={link.id} className="flex items-start gap-3 p-4 bg-card border border-border rounded-lg hover:border-purple-200 transition-colors group"><div className="flex-1 min-w-0 space-y-2">{link.figma_link && <div className="flex items-center gap-2"><span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-semibold rounded-md"><i className="fa-brands fa-figma text-xs"></i> Figma</span><a href={link.figma_link} target="_blank" rel="noopener noreferrer" className="text-sm text-purple-600 hover:text-purple-800 hover:underline truncate max-w-md">{link.figma_link}</a></div>}{link.web_link && <div className="flex items-center gap-2"><span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-md"><i className="fa-solid fa-globe text-xs"></i> Web</span><a href={link.web_link} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:text-blue-800 hover:underline truncate max-w-md">{link.web_link}</a></div>}<p className="text-xs text-muted-foreground">Added by {link.added_by || 'Anonymous'} · {new Date(link.created_at).toLocaleDateString()}</p></div><button onClick={() => handleDeleteLink(link)} className="p-2 hover:bg-red-50 rounded-lg text-muted-foreground hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"><i className="fa-solid fa-trash text-sm"></i></button></div>))}</div>
-                )}
             </div>
 
-            <div className="border-t border-border"></div>
+            {/* ── CATEGORY 2: Web Links ── */}
+            <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 14, padding: '20px 20px 16px' }}>
 
-            <div>
-                <div className="flex items-center gap-3 mb-4"><div className="w-8 h-8 bg-blue-500 bg-opacity-10 rounded-lg flex items-center justify-center"><i className="fa-solid fa-paperclip text-blue-500"></i></div><h4 className="text-sm font-bold text-foreground">File Attachments</h4>{attachments.length > 0 && <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">{attachments.length}</span>}</div>
-                <div className="border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary transition-colors" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const files = Array.from(e.dataTransfer.files); if (files.length) { const dt = new DataTransfer(); files.forEach(f => dt.items.add(f)); fileInputRef.current.files = dt.files; handleFileUpload({ target: { files: dt.files } }); } }}>
-                    <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mx-auto mb-3"><i className="fa-solid fa-cloud-arrow-up text-xl text-muted-foreground"></i></div>
-                    <p className="text-sm font-medium text-foreground mb-1">Drop files here or click to upload</p>
-                    <p className="text-xs text-muted-foreground mb-4">Supports any file type</p>
-                    <input type="text" value={uploadedBy} onChange={e => setUploadedBy(e.target.value)} placeholder="Your name (optional)" className="w-48 px-3 py-1.5 bg-input border border-border rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary mb-3 mx-auto block" />
-                    <input ref={fileInputRef} type="file" multiple onChange={handleFileUpload} className="hidden" id="file-upload" />
-                    <label htmlFor="file-upload" className={`inline-flex items-center gap-2 px-5 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium cursor-pointer hover:opacity-90 transition-opacity ${uploading ? 'opacity-50 pointer-events-none' : ''}`}><i className="fa-solid fa-paperclip"></i>{uploading ? 'Uploading…' : 'Choose Files'}</label>
+                {/* Section header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showWebForm ? 16 : webLinks.length > 0 ? 16 : 12 }}>
+                    <SectionHeading
+                        icon="fa-solid fa-globe" iconBg="rgba(59,130,246,0.10)" iconColor="#2563EB"
+                        title="Web Links" count={webLinks.length}
+                        countBg="rgba(59,130,246,0.10)" countColor="#1D4ED8"
+                    />
+                    <AddButton onClick={() => { setShowWebForm(p => !p); setWebError(''); }} active={showWebForm} accentColor="#2563EB" label="Add Web Link" />
                 </div>
-                {attachments.length === 0 ? <div className="flex flex-col items-center justify-center py-8 gap-2"><p className="text-sm text-muted-foreground">No file attachments yet for {storyId}</p></div> : (
-                    <div className="space-y-2 mt-4"><p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{attachments.length} file{attachments.length !== 1 ? 's' : ''}</p>{attachments.map(att => (<div key={att.id} className="flex items-center gap-3 p-3 bg-card border border-border rounded-lg hover:border-primary transition-colors group"><div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center flex-shrink-0"><i className={`fa-solid ${fileIcon(att.file_type)} text-lg ${fileIconColor(att.file_type)}`}></i></div><div className="flex-1 min-w-0"><p className="text-sm font-medium text-foreground truncate">{att.file_name}</p><p className="text-xs text-muted-foreground">{formatSize(att.file_size)} · Uploaded by {att.uploaded_by || '—'} · {new Date(att.uploaded_at).toLocaleDateString()}</p></div><div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><a href={att.file_url} target="_blank" rel="noopener noreferrer" className="p-2 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors"><i className="fa-solid fa-download text-sm"></i></a><button onClick={() => handleDelete(att)} className="p-2 hover:bg-red-50 rounded-lg text-muted-foreground hover:text-red-500 transition-colors"><i className="fa-solid fa-trash text-sm"></i></button></div></div>))}</div>
+
+                {/* Add form */}
+                {showWebForm && (
+                    <AddLinkForm
+                        bg="rgba(59,130,246,0.04)" borderColor="rgba(59,130,246,0.20)" accentColor="#2563EB"
+                        urlLabel="Web URL" urlPlaceholder="https://example.com/..."
+                        urlIcon="fa-solid fa-globe"
+                        urlValue={newWeb.url}
+                        onUrlChange={e => { setNewWeb(p => ({ ...p, url: e.target.value })); setWebError(''); }}
+                        urlError={webError}
+                        titleValue={newWeb.title}
+                        onTitleChange={e => setNewWeb(p => ({ ...p, title: e.target.value }))}
+                        nameValue={newWeb.added_by}
+                        onNameChange={e => setNewWeb(p => ({ ...p, added_by: e.target.value }))}
+                        onSave={handleSaveWeb}
+                        onCancel={() => { setShowWebForm(false); setWebError(''); setNewWeb({ url: '', title: '', added_by: '' }); }}
+                        saving={webSaving}
+                        saveLabel="Save Web Link"
+                    />
+                )}
+
+                {/* List */}
+                {linksLoading ? (
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
+                        <div style={{ width: 20, height: 20, border: '2px solid #2563EB', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }}></div>
+                    </div>
+                ) : webLinks.length === 0 && !showWebForm ? (
+                    <EmptyState icon="fa-solid fa-globe" message="No web links added yet" />
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {webLinks.map(link => (
+                            <LinkRow
+                                key={link.id}
+                                href={link.web_link} url={link.web_link}
+                                icon="fa-solid fa-globe" iconBg="rgba(59,130,246,0.10)" iconColor="#2563EB"
+                                urlColor="#1D4ED8" hoverBorder="#93C5FD"
+                                title={link.title || ''}
+                                meta={`Added by ${link.added_by || 'Anonymous'} · ${new Date(link.created_at).toLocaleDateString()}`}
+                                metaColor="#9CA3AF"
+                                onDelete={() => handleDeleteLink(link)}
+                            />
+                        ))}
+                    </div>
                 )}
             </div>
+
+            {/* ── CATEGORY 3: File Attachments ── */}
+            <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 14, padding: '20px 20px 16px' }}>
+
+                {/* Section header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                    <div style={{ width: 36, height: 36, background: 'rgba(16,185,129,0.10)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <i className="fa-solid fa-paperclip" style={{ color: '#059669', fontSize: 15 }}></i>
+                    </div>
+                    <span style={{ fontFamily: font, ...T.subhead, color: '#111827' }}>File Attachments</span>
+                    {attachments.length > 0 && (
+                        <span style={{ padding: '2px 10px', borderRadius: 99, background: 'rgba(16,185,129,0.10)', color: '#065F46', fontFamily: font, ...T.label, fontWeight: 600 }}>
+                            {attachments.length}
+                        </span>
+                    )}
+                </div>
+
+                {/* Drop zone */}
+                <div
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => {
+                        e.preventDefault();
+                        const files = Array.from(e.dataTransfer.files);
+                        if (files.length) { const dt = new DataTransfer(); files.forEach(f => dt.items.add(f)); fileInputRef.current.files = dt.files; handleFileUpload({ target: { files: dt.files } }); }
+                    }}
+                    style={{ border: '2px dashed #D1FAE5', borderRadius: 12, padding: '28px 20px', textAlign: 'center', marginBottom: 16, transition: 'border-color 0.15s', cursor: 'pointer' }}>
+                    <div style={{ width: 40, height: 40, background: '#F0FDF4', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+                        <i className="fa-solid fa-cloud-arrow-up" style={{ color: '#059669', fontSize: 18 }}></i>
+                    </div>
+                    <p style={{ fontFamily: font, ...T.bodyMed, color: '#111827', marginBottom: 4 }}>Drop files here or click to upload</p>
+                    <p style={{ fontFamily: font, ...T.label, color: '#6B7280', marginBottom: 14 }}>Supports any file type</p>
+                    <input
+                        type="text" value={uploadedBy} onChange={e => setUploadedBy(e.target.value)}
+                        placeholder="Your name (optional)"
+                        style={{ ...inp({ width: 'auto', padding: '7px 14px', marginBottom: 12, display: 'inline-block', textAlign: 'center' }) }}
+                    />
+                    <div>
+                        <input ref={fileInputRef} type="file" multiple onChange={handleFileUpload} style={{ display: 'none' }} id="file-upload" />
+                        <label htmlFor="file-upload" style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 20px',
+                            background: uploading ? '#9CA3AF' : '#059669', color: '#FFFFFF',
+                            borderRadius: 8, fontFamily: font, ...T.bodyMed,
+                            cursor: uploading ? 'not-allowed' : 'pointer', transition: 'background 0.15s',
+                        }}>
+                            <i className="fa-solid fa-paperclip" style={{ fontSize: 12 }}></i>
+                            {uploading ? 'Uploading…' : 'Choose Files'}
+                        </label>
+                    </div>
+                </div>
+
+                {/* File list */}
+                {loading ? (
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
+                        <div style={{ width: 20, height: 20, border: '2px solid #059669', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }}></div>
+                    </div>
+                ) : attachments.length === 0 ? (
+                    <EmptyState icon="fa-solid fa-file" message={`No file attachments yet for ${storyId}`} />
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <span style={{ fontFamily: font, ...T.micro, textTransform: 'uppercase', color: '#6B7280', letterSpacing: '0.06em', marginBottom: 4 }}>
+                            {attachments.length} file{attachments.length !== 1 ? 's' : ''}
+                        </span>
+                        {attachments.map(att => {
+                            const [hov, setHov] = useState(false);
+                            return (
+                                <div key={att.id}
+                                    onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: hov ? '#F9FAFB' : '#FFFFFF', border: `1px solid ${hov ? '#6EE7B7' : '#E5E7EB'}`, borderRadius: 10, transition: 'all 0.15s' }}>
+                                    <div style={{ width: 36, height: 36, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                        <i className={`fa-solid ${fileIcon(att.file_type)}`} style={{ fontSize: 16, color: fileIconColor(att.file_type).replace('text-', '') === 'green-500' ? '#22C55E' : fileIconColor(att.file_type).replace('text-', '') === 'red-500' ? '#EF4444' : fileIconColor(att.file_type).replace('text-', '') === 'blue-500' ? '#3B82F6' : '#9CA3AF' }}></i>
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <p style={{ fontFamily: font, ...T.bodyMed, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>{att.file_name}</p>
+                                        <span style={{ fontFamily: font, ...T.label, color: '#9CA3AF' }}>
+                                            {formatSize(att.file_size)} · Uploaded by {att.uploaded_by || '—'} · {new Date(att.uploaded_at).toLocaleDateString()}
+                                        </span>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 4, opacity: hov ? 1 : 0, transition: 'opacity 0.15s' }}>
+                                        <a href={att.file_url} target="_blank" rel="noopener noreferrer"
+                                            style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: '#9CA3AF', textDecoration: 'none' }}
+                                            title="Download">
+                                            <i className="fa-solid fa-download" style={{ fontSize: 11 }}></i>
+                                        </a>
+                                        <button onClick={() => handleDeleteFile(att)}
+                                            style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: '#9CA3AF', background: 'none', border: 'none', cursor: 'pointer' }}
+                                            title="Delete">
+                                            <i className="fa-solid fa-trash" style={{ fontSize: 11 }}></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
     );
 };
@@ -1003,10 +1499,24 @@ const UserStoryMapping = () => {
                             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground"><i className="fa-solid fa-clock"></i><span>Last saved: {lastSaved}</span></div>
                                 <div className="flex items-center gap-3">
-                                    <button onClick={handleBackToList} className="px-6 py-2.5 bg-card border border-border text-foreground rounded-lg text-sm font-medium hover:bg-muted transition-colors"><i className="fa-solid fa-arrow-left mr-2"></i>Back to List</button>
-                                    <button onClick={handleDuplicate} className="px-6 py-2.5 bg-card border border-border text-foreground rounded-lg text-sm font-medium hover:bg-muted transition-colors"><i className="fa-solid fa-copy mr-2"></i>Duplicate</button>
-                                    <button onClick={handleSaveDraft} disabled={saveLoading} className="px-6 py-2.5 bg-card border border-border text-foreground rounded-lg text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50"><i className="fa-solid fa-floppy-disk mr-2"></i>{saveLoading ? 'Saving...' : 'Save Draft'}</button>
-                                    <button onClick={handleSaveAndSubmit} disabled={saveLoading} className="px-6 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"><i className="fa-solid fa-check mr-2"></i>{saveLoading ? 'Submitting...' : 'Save & Submit'}</button>
+
+                                    <button
+                                        onClick={handleSaveDraft}
+                                        disabled={saveLoading}
+                                        className="px-6 py-2.5 bg-card border border-border text-foreground rounded-lg text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50"
+                                    >
+                                        <i className="fa-solid fa-floppy-disk mr-2"></i>
+                                        {saveLoading ? 'Saving...' : 'Save Draft'}
+                                    </button>
+
+                                    <button
+                                        onClick={handleSaveAndSubmit}
+                                        disabled={saveLoading}
+                                        className="px-6 py-2.5 bg-card border border-border text-foreground rounded-lg text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50"
+                                    >
+                                        <i className="fa-solid fa-check mr-2"></i>
+                                        {saveLoading ? 'Submitting...' : 'Save & Submit'}
+                                    </button>
                                 </div>
                             </div>
                         </div>

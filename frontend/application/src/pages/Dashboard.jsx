@@ -63,13 +63,12 @@ export default function Dashboard() {
     const [stats, setStats] = useState({ total: 0, passed: 0, failed: 0, pending: 0, passRate: 0, executions: 0 });
 
     // Sections
-    const [versions, setVersions] = useState([]);       // grouped from test_cases by version_id
+    const [versions, setVersions] = useState([]);
     const [modules, setModules] = useState([]);
     const [failedIssues, setFailedIssues] = useState([]);
     const [teamMembers, setTeamMembers] = useState([]);
     const [recentExecutions, setRecentExecutions] = useState([]);
     const [trends, setTrends] = useState({ labels: [], passed: [], failed: [], pending: [] });
-    const [deadlinePeriod, setDeadlinePeriod] = useState("This Week");
     const [teamPeriod, setTeamPeriod] = useState("Last 7 days");
 
     const addToast = useCallback((message, type = "success") => {
@@ -99,24 +98,27 @@ export default function Dashboard() {
 
     useEffect(() => { fetchAll(); }, [fetchAll]);
 
-    // ── 1. Stats Cards ────────────────────────────────────────────────────────
+    // ── 1. Stats Cards — server-side counting, no full table download ─────────
     async function fetchStats() {
-        const { data, error } = await supabase
-            .from("test_cases")
-            .select("status");
-        if (error) return;
+        const [
+            { count: total },
+            { count: passed },
+            { count: failed },
+            { count: execCount },
+        ] = await Promise.all([
+            supabase.from("test_cases").select("*", { count: "exact", head: true }),
+            supabase.from("test_cases").select("*", { count: "exact", head: true }).eq("status", "Passed"),
+            supabase.from("test_cases").select("*", { count: "exact", head: true }).eq("status", "Failed"),
+            supabase.from("test_executions").select("*", { count: "exact", head: true }),
+        ]);
 
-        const total = data.length;
-        const passed = data.filter(t => t.status === "Passed").length;
-        const failed = data.filter(t => t.status === "Failed").length;
-        const pending = data.filter(t => !["Passed", "Failed"].includes(t.status)).length;
-        const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+        const t = total || 0;
+        const p = passed || 0;
+        const f = failed || 0;
+        const pending = t - p - f;
+        const passRate = t > 0 ? Math.round((p / t) * 100) : 0;
 
-        const { count: execCount } = await supabase
-            .from("test_executions")
-            .select("id", { count: "exact", head: true });
-
-        setStats({ total, passed, failed, pending, passRate, executions: execCount || 0 });
+        setStats({ total: t, passed: p, failed: f, pending, passRate, executions: execCount || 0 });
     }
 
     // ── 2. Active Versions (grouped by version_id on test_cases) ─────────────
@@ -136,7 +138,6 @@ export default function Dashboard() {
             else map[vid].pending++;
         });
 
-        // Try to resolve version names (if you add a versions table later this is easy to swap)
         const versionsArr = Object.values(map)
             .sort((a, b) => b.total - a.total)
             .slice(0, 3)
@@ -154,35 +155,26 @@ export default function Dashboard() {
         setVersions(versionsArr);
     }
 
-    // ── 3. Module Coverage ────────────────────────────────────────────────────
+    // ── 3. Module Coverage — one query with embedded join, no second round-trip
     async function fetchModules() {
         const { data, error } = await supabase
             .from("modules")
-            .select("id, module_name, status")
+            .select("id, module_name, test_cases(status)")
             .order("module_name");
+
         if (error || !data) return;
 
-        // Join with test_cases counts per module
-        const { data: tcs } = await supabase
-            .from("test_cases")
-            .select("module_id, status");
-
-        const tcMap = {};
-        (tcs || []).forEach(tc => {
-            if (!tcMap[tc.module_id]) tcMap[tc.module_id] = { total: 0, passed: 0 };
-            tcMap[tc.module_id].total++;
-            if (tc.status === "Passed") tcMap[tc.module_id].passed++;
-        });
-
         const shaped = data.map(m => {
-            const counts = tcMap[m.id] || { total: 0, passed: 0 };
-            const pct = counts.total > 0 ? Math.round((counts.passed / counts.total) * 100) : 0;
+            const tcs = m.test_cases || [];
+            const total = tcs.length;
+            const passed = tcs.filter(t => t.status === "Passed").length;
+            const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
             return {
                 id: m.id,
                 name: m.module_name,
                 pct,
-                total: counts.total,
-                passed: counts.passed,
+                total,
+                passed,
                 color: pct >= 80 ? "bg-green-500" : pct >= 50 ? "bg-accent" : "bg-destructive",
             };
         }).sort((a, b) => b.pct - a.pct);
@@ -220,7 +212,7 @@ export default function Dashboard() {
         })));
     }
 
-    // ── 5. Team Performance (from profiles + test_executions) ────────────────
+    // ── 5. Team Performance ───────────────────────────────────────────────────
     async function fetchTeamPerformance() {
         const { data: profilesData } = await supabase
             .from("profiles")
@@ -256,7 +248,7 @@ export default function Dashboard() {
         setTeamMembers(shaped);
     }
 
-    // ── 6. Recent Activity (from test_executions) ─────────────────────────────
+    // ── 6. Recent Activity ────────────────────────────────────────────────────
     async function fetchRecentExecutions() {
         const { data, error } = await supabase
             .from("test_executions")
@@ -275,7 +267,7 @@ export default function Dashboard() {
         })));
     }
 
-    // ── 7. Testing Trends (last 7 days from test_executions) ─────────────────
+    // ── 7. Testing Trends (last 7 days) ──────────────────────────────────────
     async function fetchTrends() {
         const days = 7;
         const since = new Date();
@@ -289,7 +281,6 @@ export default function Dashboard() {
 
         if (error || !data) return;
 
-        // Build day buckets
         const labels = [];
         const buckets = {};
         for (let i = days - 1; i >= 0; i--) {
@@ -391,7 +382,7 @@ export default function Dashboard() {
                                             </div>
                                         </div>
                                     </div>
-                                )) : versions.length > 0 ? versions.map((v, i) => (
+                                )) : versions.length > 0 ? versions.map((v) => (
                                     <div key={v.version_id}
                                         className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 border border-border rounded-lg hover:border-primary transition-colors cursor-pointer"
                                         onClick={() => navigate("/versions")}>
@@ -433,7 +424,6 @@ export default function Dashboard() {
                                 <p className="text-sm text-muted-foreground">Overall test results</p>
                             </div>
                             <div className="p-6">
-                                {/* Pass live counts as props if StatusChart supports it, else render inline */}
                                 {!loading && stats.total > 0 ? (
                                     <div className="space-y-4">
                                         {[

@@ -97,8 +97,8 @@ const ConfirmDialog = memo(({ message, onConfirm, onCancel }) => (
 ));
 ConfirmDialog.displayName = "ConfirmDialog";
 
-const ChevronIcon = memo(({ open }) => (
-    <span style={{ marginLeft: 8, display: "flex", alignItems: "center", transition: "transform 0.22s cubic-bezier(.4,0,.2,1)", transform: open ? "rotate(180deg)" : "rotate(0deg)", color: open ? "#6366f1" : "#94a3b8", flexShrink: 0 }}>
+const ChevronIcon = memo(({ open, green = false }) => (
+    <span style={{ marginLeft: 8, display: "flex", alignItems: "center", transition: "transform 0.22s cubic-bezier(.4,0,.2,1)", transform: open ? "rotate(180deg)" : "rotate(0deg)", color: open ? (green ? "#22c55e" : "#6366f1") : "#94a3b8", flexShrink: 0 }}>
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -106,18 +106,39 @@ const ChevronIcon = memo(({ open }) => (
 ));
 ChevronIcon.displayName = "ChevronIcon";
 
-const DropdownList = memo(({ children }) => (
-    <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 9999, background: "#fff", border: "1.5px solid #e8eaf6", borderRadius: "12px", boxShadow: "0 8px 32px rgba(99,102,241,0.13),0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden" }}>
+// Finds the nearest scrollable ancestor to measure space for flip detection
+function getScrollParent(el) {
+    let parent = el.parentElement;
+    while (parent && parent !== document.body) {
+        const { overflow, overflowY } = window.getComputedStyle(parent);
+        if (/auto|scroll/.test(overflow + overflowY)) return parent;
+        parent = parent.parentElement;
+    }
+    return null;
+}
+
+const DropdownList = memo(({ children, flipUp }) => (
+    <div style={{
+        position: "absolute",
+        ...(flipUp ? { bottom: "calc(100% + 6px)", top: "auto" } : { top: "calc(100% + 6px)", bottom: "auto" }),
+        left: 0, right: 0, zIndex: 9999,
+        background: "#fff",
+        border: "1.5px solid #dcfce7",
+        borderRadius: "12px",
+        boxShadow: "0 8px 32px rgba(34,197,94,0.10), 0 2px 8px rgba(0,0,0,0.08)",
+        overflow: "hidden",
+    }}>
         <div style={{ padding: "6px", maxHeight: "300px", overflowY: "auto" }}>{children}</div>
     </div>
 ));
 DropdownList.displayName = "DropdownList";
 
 const MultiItem = memo(({ opt, isSel, onSelect }) => (
-    <div onClick={() => onSelect(opt.id)} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "13.5px", fontWeight: isSel ? 600 : 400, color: isSel ? "#4f46e5" : "#374151", background: isSel ? "linear-gradient(135deg,#eef2ff 0%,#f0f4ff 100%)" : "transparent", transition: "background 0.12s ease" }}
-        onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = "#f8fafc"; }}
-        onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = "transparent"; }}>
-        <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", border: isSel ? "none" : "1.5px solid #cbd5e1", background: isSel ? "linear-gradient(135deg,#6366f1 0%,#4f46e5 100%)" : "#fff" }}>
+    <div onClick={() => onSelect(opt.id)}
+        style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "13.5px", fontWeight: isSel ? 600 : 400, color: isSel ? "#15803d" : "#374151", background: isSel ? "#dcfce7" : "transparent", transition: "background 0.12s ease" }}
+        onMouseEnter={e => { e.currentTarget.style.background = isSel ? "#bbf7d0" : "#f0fdf4"; }}
+        onMouseLeave={e => { e.currentTarget.style.background = isSel ? "#dcfce7" : "transparent"; }}>
+        <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", border: isSel ? "none" : "1.5px solid #cbd5e1", background: isSel ? "#16a34a" : "#fff" }}>
             {isSel && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}
         </div>
         <span style={{ flex: 1 }}>{opt.name}</span>
@@ -126,17 +147,19 @@ const MultiItem = memo(({ opt, isSel, onSelect }) => (
 MultiItem.displayName = "MultiItem";
 
 const SingleItem = memo(({ opt, isSel, onChange }) => (
-    <div onClick={() => onChange(opt.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "13.5px", fontWeight: isSel ? 600 : 400, color: isSel ? "#4f46e5" : "#374151", background: isSel ? "linear-gradient(135deg,#eef2ff 0%,#f0f4ff 100%)" : "transparent", transition: "background 0.12s ease" }}
-        onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = "#f8fafc"; }}
-        onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = "transparent"; }}>
+    <div onClick={() => onChange(opt.id)}
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "13.5px", fontWeight: isSel ? 600 : 400, color: isSel ? "#15803d" : "#374151", background: isSel ? "#dcfce7" : "transparent", transition: "background 0.12s ease" }}
+        onMouseEnter={e => { e.currentTarget.style.background = isSel ? "#bbf7d0" : "#f0fdf4"; }}
+        onMouseLeave={e => { e.currentTarget.style.background = isSel ? "#dcfce7" : "transparent"; }}>
         <span>{opt.name}</span>
-        {isSel && <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, marginLeft: 8 }}><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#4f46e5" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+        {isSel && <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, marginLeft: 8 }}><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#16a34a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
     </div>
 ));
 SingleItem.displayName = "SingleItem";
 
 const CustomDropdown = memo(({ options, selected, onChange, placeholder = "Select options..." }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [flipUp, setFlipUp] = useState(false);
     const ref = useRef(null);
 
     useEffect(() => {
@@ -144,6 +167,17 @@ const CustomDropdown = memo(({ options, selected, onChange, placeholder = "Selec
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
     }, []);
+
+    const handleToggle = () => {
+        if (!isOpen && ref.current) {
+            const rect = ref.current.getBoundingClientRect();
+            const scrollParent = getScrollParent(ref.current);
+            const containerBottom = scrollParent ? scrollParent.getBoundingClientRect().bottom : window.innerHeight;
+            const spaceBelow = containerBottom - rect.bottom;
+            setFlipUp(spaceBelow < 260);
+        }
+        setIsOpen(p => !p);
+    };
 
     const handleSelect = useCallback((id) => {
         onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]);
@@ -155,23 +189,23 @@ const CustomDropdown = memo(({ options, selected, onChange, placeholder = "Selec
 
     const btnStyle = useMemo(() => ({
         ...DD_BTN_BASE,
-        background: isOpen ? "linear-gradient(135deg,#f0f4ff 0%,#fafbff 100%)" : "linear-gradient(135deg,#fafbff 0%,#f4f6fb 100%)",
-        border: isOpen ? "1.5px solid #6366f1" : "1.5px solid #e2e6f0",
-        color: selected.length > 0 ? "#1e293b" : "#94a3b8",
+        background: isOpen ? "#f0fdf4" : "linear-gradient(135deg,#fafbff 0%,#f4f6fb 100%)",
+        border: isOpen ? "1.5px solid #22c55e" : "1.5px solid #e2e6f0",
+        color: selected.length > 0 ? "#15803d" : "#94a3b8",
         fontWeight: selected.length > 0 ? 500 : 400,
-        boxShadow: isOpen ? "0 0 0 3px rgba(99,102,241,0.12),0 2px 8px rgba(99,102,241,0.08)" : "0 1px 3px rgba(0,0,0,0.06)",
+        boxShadow: isOpen ? "0 0 0 3px rgba(34,197,94,0.12)" : "0 1px 3px rgba(0,0,0,0.06)",
     }), [isOpen, selected.length]);
 
     return (
         <div className="relative" ref={ref}>
-            <button type="button" onClick={() => setIsOpen(p => !p)} style={btnStyle}>
+            <button type="button" onClick={handleToggle} style={btnStyle}>
                 <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {selectedLabels || placeholder}
                 </span>
-                <ChevronIcon open={isOpen} />
+                <ChevronIcon open={isOpen} green />
             </button>
             {isOpen && (
-                <DropdownList>
+                <DropdownList flipUp={flipUp}>
                     {options.map((opt) => (
                         <MultiItem key={opt.id} opt={opt} isSel={selected.includes(opt.id)} onSelect={handleSelect} />
                     ))}
@@ -184,6 +218,7 @@ CustomDropdown.displayName = "CustomDropdown";
 
 const SingleDropdown = memo(({ options, selected, onChange, placeholder = "Select..." }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [flipUp, setFlipUp] = useState(false);
     const ref = useRef(null);
 
     useEffect(() => {
@@ -192,29 +227,41 @@ const SingleDropdown = memo(({ options, selected, onChange, placeholder = "Selec
         return () => document.removeEventListener("mousedown", handler);
     }, []);
 
+    const handleToggle = () => {
+        if (!isOpen && ref.current) {
+            const rect = ref.current.getBoundingClientRect();
+            const scrollParent = getScrollParent(ref.current);
+            const containerBottom = scrollParent ? scrollParent.getBoundingClientRect().bottom : window.innerHeight;
+            const spaceBelow = containerBottom - rect.bottom;
+            const dropdownHeight = Math.min(options.length * 42 + 16, 300);
+            setFlipUp(spaceBelow < dropdownHeight + 8);
+        }
+        setIsOpen(p => !p);
+    };
+
     const selectedLabel = useMemo(() => options.find(o => o.id === selected)?.name ?? null, [options, selected]);
 
     const btnStyle = useMemo(() => ({
         ...DD_BTN_BASE,
-        background: isOpen ? "linear-gradient(135deg,#f0f4ff 0%,#fafbff 100%)" : "linear-gradient(135deg,#fafbff 0%,#f4f6fb 100%)",
-        border: isOpen ? "1.5px solid #6366f1" : "1.5px solid #e2e6f0",
-        color: selected ? "#1e293b" : "#94a3b8",
+        background: isOpen ? "#f0fdf4" : "linear-gradient(135deg,#fafbff 0%,#f4f6fb 100%)",
+        border: isOpen ? "1.5px solid #22c55e" : "1.5px solid #e2e6f0",
+        color: selected ? "#15803d" : "#94a3b8",
         fontWeight: selected ? 500 : 400,
-        boxShadow: isOpen ? "0 0 0 3px rgba(99,102,241,0.12),0 2px 8px rgba(99,102,241,0.08)" : "0 1px 3px rgba(0,0,0,0.06)",
+        boxShadow: isOpen ? "0 0 0 3px rgba(34,197,94,0.12)" : "0 1px 3px rgba(0,0,0,0.06)",
     }), [isOpen, selected]);
 
     const handleChange = useCallback((id) => { onChange(id); setIsOpen(false); }, [onChange]);
 
     return (
         <div ref={ref} style={{ position: "relative", userSelect: "none" }}>
-            <button type="button" onClick={() => setIsOpen(p => !p)} style={btnStyle}>
+            <button type="button" onClick={handleToggle} style={btnStyle}>
                 <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {selectedLabel || placeholder}
                 </span>
-                <ChevronIcon open={isOpen} />
+                <ChevronIcon open={isOpen} green />
             </button>
             {isOpen && (
-                <DropdownList>
+                <DropdownList flipUp={flipUp}>
                     {options.map((opt) => (
                         <SingleItem key={opt.id} opt={opt} isSel={opt.id === selected} onChange={handleChange} />
                     ))}
