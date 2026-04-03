@@ -526,7 +526,7 @@ export default function LoginPage() {
                                 {success && <Alert type="success" msg={success} />}
                                 <form onSubmit={handleForgotPassword}>
                                     <TextInput
-                                        label="Email address" type="email" placeholder="you@company.com"
+                                        label="Enter Your Email address" type="email" placeholder="you@company.com"
                                         value={email} onChange={e => setEmail(e.target.value)}
                                         required autoComplete="email"
                                     />
