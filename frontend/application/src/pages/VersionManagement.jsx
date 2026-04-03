@@ -97,8 +97,8 @@ const ConfirmDialog = memo(({ message, onConfirm, onCancel }) => (
 ));
 ConfirmDialog.displayName = "ConfirmDialog";
 
-const ChevronIcon = memo(({ open, green = false }) => (
-    <span style={{ marginLeft: 8, display: "flex", alignItems: "center", transition: "transform 0.22s cubic-bezier(.4,0,.2,1)", transform: open ? "rotate(180deg)" : "rotate(0deg)", color: open ? (green ? "#22c55e" : "#6366f1") : "#94a3b8", flexShrink: 0 }}>
+const ChevronIcon = memo(({ open }) => (
+    <span style={{ marginLeft: 8, display: "flex", alignItems: "center", transition: "transform 0.22s cubic-bezier(.4,0,.2,1)", transform: open ? "rotate(180deg)" : "rotate(0deg)", color: open ? "#6366f1" : "#94a3b8", flexShrink: 0 }}>
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -106,39 +106,18 @@ const ChevronIcon = memo(({ open, green = false }) => (
 ));
 ChevronIcon.displayName = "ChevronIcon";
 
-// Finds the nearest scrollable ancestor to measure space for flip detection
-function getScrollParent(el) {
-    let parent = el.parentElement;
-    while (parent && parent !== document.body) {
-        const { overflow, overflowY } = window.getComputedStyle(parent);
-        if (/auto|scroll/.test(overflow + overflowY)) return parent;
-        parent = parent.parentElement;
-    }
-    return null;
-}
-
-const DropdownList = memo(({ children, flipUp }) => (
-    <div style={{
-        position: "absolute",
-        ...(flipUp ? { bottom: "calc(100% + 6px)", top: "auto" } : { top: "calc(100% + 6px)", bottom: "auto" }),
-        left: 0, right: 0, zIndex: 9999,
-        background: "#fff",
-        border: "1.5px solid #dcfce7",
-        borderRadius: "12px",
-        boxShadow: "0 8px 32px rgba(34,197,94,0.10), 0 2px 8px rgba(0,0,0,0.08)",
-        overflow: "hidden",
-    }}>
+const DropdownList = memo(({ children }) => (
+    <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 9999, background: "#fff", border: "1.5px solid #e8eaf6", borderRadius: "12px", boxShadow: "0 8px 32px rgba(99,102,241,0.13),0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden" }}>
         <div style={{ padding: "6px", maxHeight: "300px", overflowY: "auto" }}>{children}</div>
     </div>
 ));
 DropdownList.displayName = "DropdownList";
 
 const MultiItem = memo(({ opt, isSel, onSelect }) => (
-    <div onClick={() => onSelect(opt.id)}
-        style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "13.5px", fontWeight: isSel ? 600 : 400, color: isSel ? "#15803d" : "#374151", background: isSel ? "#dcfce7" : "transparent", transition: "background 0.12s ease" }}
-        onMouseEnter={e => { e.currentTarget.style.background = isSel ? "#bbf7d0" : "#f0fdf4"; }}
-        onMouseLeave={e => { e.currentTarget.style.background = isSel ? "#dcfce7" : "transparent"; }}>
-        <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", border: isSel ? "none" : "1.5px solid #cbd5e1", background: isSel ? "#16a34a" : "#fff" }}>
+    <div onClick={() => onSelect(opt.id)} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "13.5px", fontWeight: isSel ? 600 : 400, color: isSel ? "#4f46e5" : "#374151", background: isSel ? "linear-gradient(135deg,#eef2ff 0%,#f0f4ff 100%)" : "transparent", transition: "background 0.12s ease" }}
+        onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = "#f8fafc"; }}
+        onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = "transparent"; }}>
+        <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", border: isSel ? "none" : "1.5px solid #cbd5e1", background: isSel ? "linear-gradient(135deg,#6366f1 0%,#4f46e5 100%)" : "#fff" }}>
             {isSel && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}
         </div>
         <span style={{ flex: 1 }}>{opt.name}</span>
@@ -147,19 +126,17 @@ const MultiItem = memo(({ opt, isSel, onSelect }) => (
 MultiItem.displayName = "MultiItem";
 
 const SingleItem = memo(({ opt, isSel, onChange }) => (
-    <div onClick={() => onChange(opt.id)}
-        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "13.5px", fontWeight: isSel ? 600 : 400, color: isSel ? "#15803d" : "#374151", background: isSel ? "#dcfce7" : "transparent", transition: "background 0.12s ease" }}
-        onMouseEnter={e => { e.currentTarget.style.background = isSel ? "#bbf7d0" : "#f0fdf4"; }}
-        onMouseLeave={e => { e.currentTarget.style.background = isSel ? "#dcfce7" : "transparent"; }}>
+    <div onClick={() => onChange(opt.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "13.5px", fontWeight: isSel ? 600 : 400, color: isSel ? "#4f46e5" : "#374151", background: isSel ? "linear-gradient(135deg,#eef2ff 0%,#f0f4ff 100%)" : "transparent", transition: "background 0.12s ease" }}
+        onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = "#f8fafc"; }}
+        onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = "transparent"; }}>
         <span>{opt.name}</span>
-        {isSel && <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, marginLeft: 8 }}><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#16a34a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+        {isSel && <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, marginLeft: 8 }}><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#4f46e5" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
     </div>
 ));
 SingleItem.displayName = "SingleItem";
 
 const CustomDropdown = memo(({ options, selected, onChange, placeholder = "Select options..." }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const [flipUp, setFlipUp] = useState(false);
     const ref = useRef(null);
 
     useEffect(() => {
@@ -167,17 +144,6 @@ const CustomDropdown = memo(({ options, selected, onChange, placeholder = "Selec
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
     }, []);
-
-    const handleToggle = () => {
-        if (!isOpen && ref.current) {
-            const rect = ref.current.getBoundingClientRect();
-            const scrollParent = getScrollParent(ref.current);
-            const containerBottom = scrollParent ? scrollParent.getBoundingClientRect().bottom : window.innerHeight;
-            const spaceBelow = containerBottom - rect.bottom;
-            setFlipUp(spaceBelow < 260);
-        }
-        setIsOpen(p => !p);
-    };
 
     const handleSelect = useCallback((id) => {
         onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]);
@@ -189,23 +155,23 @@ const CustomDropdown = memo(({ options, selected, onChange, placeholder = "Selec
 
     const btnStyle = useMemo(() => ({
         ...DD_BTN_BASE,
-        background: isOpen ? "#f0fdf4" : "linear-gradient(135deg,#fafbff 0%,#f4f6fb 100%)",
-        border: isOpen ? "1.5px solid #22c55e" : "1.5px solid #e2e6f0",
-        color: selected.length > 0 ? "#15803d" : "#94a3b8",
+        background: isOpen ? "linear-gradient(135deg,#f0f4ff 0%,#fafbff 100%)" : "linear-gradient(135deg,#fafbff 0%,#f4f6fb 100%)",
+        border: isOpen ? "1.5px solid #6366f1" : "1.5px solid #e2e6f0",
+        color: selected.length > 0 ? "#1e293b" : "#94a3b8",
         fontWeight: selected.length > 0 ? 500 : 400,
-        boxShadow: isOpen ? "0 0 0 3px rgba(34,197,94,0.12)" : "0 1px 3px rgba(0,0,0,0.06)",
+        boxShadow: isOpen ? "0 0 0 3px rgba(99,102,241,0.12),0 2px 8px rgba(99,102,241,0.08)" : "0 1px 3px rgba(0,0,0,0.06)",
     }), [isOpen, selected.length]);
 
     return (
         <div className="relative" ref={ref}>
-            <button type="button" onClick={handleToggle} style={btnStyle}>
+            <button type="button" onClick={() => setIsOpen(p => !p)} style={btnStyle}>
                 <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {selectedLabels || placeholder}
                 </span>
-                <ChevronIcon open={isOpen} green />
+                <ChevronIcon open={isOpen} />
             </button>
             {isOpen && (
-                <DropdownList flipUp={flipUp}>
+                <DropdownList>
                     {options.map((opt) => (
                         <MultiItem key={opt.id} opt={opt} isSel={selected.includes(opt.id)} onSelect={handleSelect} />
                     ))}
@@ -218,7 +184,6 @@ CustomDropdown.displayName = "CustomDropdown";
 
 const SingleDropdown = memo(({ options, selected, onChange, placeholder = "Select..." }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const [flipUp, setFlipUp] = useState(false);
     const ref = useRef(null);
 
     useEffect(() => {
@@ -227,41 +192,29 @@ const SingleDropdown = memo(({ options, selected, onChange, placeholder = "Selec
         return () => document.removeEventListener("mousedown", handler);
     }, []);
 
-    const handleToggle = () => {
-        if (!isOpen && ref.current) {
-            const rect = ref.current.getBoundingClientRect();
-            const scrollParent = getScrollParent(ref.current);
-            const containerBottom = scrollParent ? scrollParent.getBoundingClientRect().bottom : window.innerHeight;
-            const spaceBelow = containerBottom - rect.bottom;
-            const dropdownHeight = Math.min(options.length * 42 + 16, 300);
-            setFlipUp(spaceBelow < dropdownHeight + 8);
-        }
-        setIsOpen(p => !p);
-    };
-
     const selectedLabel = useMemo(() => options.find(o => o.id === selected)?.name ?? null, [options, selected]);
 
     const btnStyle = useMemo(() => ({
         ...DD_BTN_BASE,
-        background: isOpen ? "#f0fdf4" : "linear-gradient(135deg,#fafbff 0%,#f4f6fb 100%)",
-        border: isOpen ? "1.5px solid #22c55e" : "1.5px solid #e2e6f0",
-        color: selected ? "#15803d" : "#94a3b8",
+        background: isOpen ? "linear-gradient(135deg,#f0f4ff 0%,#fafbff 100%)" : "linear-gradient(135deg,#fafbff 0%,#f4f6fb 100%)",
+        border: isOpen ? "1.5px solid #6366f1" : "1.5px solid #e2e6f0",
+        color: selected ? "#1e293b" : "#94a3b8",
         fontWeight: selected ? 500 : 400,
-        boxShadow: isOpen ? "0 0 0 3px rgba(34,197,94,0.12)" : "0 1px 3px rgba(0,0,0,0.06)",
+        boxShadow: isOpen ? "0 0 0 3px rgba(99,102,241,0.12),0 2px 8px rgba(99,102,241,0.08)" : "0 1px 3px rgba(0,0,0,0.06)",
     }), [isOpen, selected]);
 
     const handleChange = useCallback((id) => { onChange(id); setIsOpen(false); }, [onChange]);
 
     return (
         <div ref={ref} style={{ position: "relative", userSelect: "none" }}>
-            <button type="button" onClick={handleToggle} style={btnStyle}>
+            <button type="button" onClick={() => setIsOpen(p => !p)} style={btnStyle}>
                 <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {selectedLabel || placeholder}
                 </span>
-                <ChevronIcon open={isOpen} green />
+                <ChevronIcon open={isOpen} />
             </button>
             {isOpen && (
-                <DropdownList flipUp={flipUp}>
+                <DropdownList>
                     {options.map((opt) => (
                         <SingleItem key={opt.id} opt={opt} isSel={opt.id === selected} onChange={handleChange} />
                     ))}
@@ -633,6 +586,14 @@ export default function VersionManagement() {
     }, [formData, resetForm, fetchVersions, showToast]);
 
     const handleViewDetails = useCallback((v) => { setSelectedVersion(v); setShowDetailsModal(true); }, []);
+
+    // Keep selectedVersion in sync whenever versions array refreshes
+    useEffect(() => {
+        if (selectedVersion) {
+            const fresh = versions.find(v => v.id === selectedVersion.id);
+            if (fresh) setSelectedVersion(fresh);
+        }
+    }, [versions]);
     const handleAssignTests = useCallback((v) => { setSelectedVersion(v); setShowAssignModal(true); }, []);
     const handleAssignModules = useCallback((v) => { setSelectedVersion(v); setShowModulesModal(true); }, []);
 
@@ -928,66 +889,137 @@ export default function VersionManagement() {
             {/* View Details Modal */}
             {showDetailsModal && selectedVersion && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setShowDetailsModal(false)}>
-                    <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                    <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+
+                        {/* Header */}
                         <div className="p-6 border-b flex items-center justify-between sticky top-0 bg-white z-10">
-                            <h3 className="text-xl font-bold">Version Details</h3>
-                            <button onClick={() => setShowDetailsModal(false)} className="text-gray-400 hover:text-gray-700 text-xl">
-                                <i className="fa-solid fa-times" />
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <span className="text-green-700 text-xl">⑂</span>
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold text-gray-900">{selectedVersion.version_number}</h3>
+                                    <p className="text-xs text-gray-500 mt-0.5">Build {selectedVersion.build_number} · {selectedVersion.version_type}</p>
+                                </div>
+                                <span className={`px-3 py-1 text-xs font-semibold rounded-full ml-2 ${STATUS_CONFIG[selectedVersion.status].className}`}>
+                                    {STATUS_CONFIG[selectedVersion.status].label}
+                                </span>
+                            </div>
+                            <button onClick={() => setShowDetailsModal(false)} className="text-gray-400 hover:text-gray-700 p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                                <i className="fa-solid fa-times text-lg" />
                             </button>
                         </div>
-                        <div className="p-6 space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div><p className="text-sm text-gray-500">Version Number</p><p className="text-lg font-bold">{selectedVersion.version_number}</p></div>
-                                <div><p className="text-sm text-gray-500">Build Number</p><p className="text-lg font-bold">{selectedVersion.build_number}</p></div>
-                                <div><p className="text-sm text-gray-500">Type</p><p className="text-lg font-bold capitalize">{selectedVersion.version_type}</p></div>
-                                <div>
-                                    <p className="text-sm text-gray-500">Status</p>
-                                    <span className={`text-sm font-bold inline-block px-3 py-1 rounded-full ${STATUS_CONFIG[selectedVersion.status].className}`}>
-                                        {STATUS_CONFIG[selectedVersion.status].label}
-                                    </span>
+
+                        <div className="p-6 space-y-5">
+
+                            {/* Key Info Grid */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                {[
+                                    { label: "Release Date", value: new Date(selectedVersion.release_date).toLocaleDateString(), icon: "fa-calendar", color: "text-blue-600", bg: "bg-blue-50" },
+                                    { label: "Created", value: new Date(selectedVersion.created_date).toLocaleDateString(), icon: "fa-clock", color: "text-purple-600", bg: "bg-purple-50" },
+                                    { label: "Type", value: selectedVersion.version_type, icon: "fa-tag", color: "text-orange-600", bg: "bg-orange-50" },
+                                    { label: "Status", value: STATUS_CONFIG[selectedVersion.status].label, icon: "fa-circle-dot", color: "text-green-600", bg: "bg-green-50" },
+                                ].map(item => (
+                                    <div key={item.label} className={`p-3 rounded-xl ${item.bg} flex flex-col gap-1`}>
+                                        <div className="flex items-center gap-1.5">
+                                            <i className={`fa-solid ${item.icon} ${item.color} text-xs`} />
+                                            <p className="text-xs text-gray-500 font-medium">{item.label}</p>
+                                        </div>
+                                        <p className={`text-sm font-bold ${item.color} capitalize`}>{item.value || "—"}</p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Test Results */}
+                            <div className="bg-gray-50 rounded-xl p-4">
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Test Results</p>
+                                <div className="grid grid-cols-4 gap-3 mb-4">
+                                    {[
+                                        { label: "Total", value: selectedVersion.total_tests, color: "text-gray-900", bg: "bg-white" },
+                                        { label: "Passed", value: selectedVersion.passed_tests, color: "text-green-600", bg: "bg-green-50" },
+                                        { label: "Failed", value: selectedVersion.failed_tests, color: "text-red-500", bg: "bg-red-50" },
+                                        { label: "Pending", value: selectedVersion.pending_tests, color: "text-yellow-500", bg: "bg-yellow-50" },
+                                    ].map(s => (
+                                        <div key={s.label} className={`${s.bg} rounded-lg p-3 text-center border border-gray-100`}>
+                                            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+                                            <p className="text-xs text-gray-500 mt-1">{s.label}</p>
+                                        </div>
+                                    ))}
                                 </div>
-                            </div>
-                            <div className="border-t pt-4">
-                                <p className="text-sm text-gray-500 mb-2">Description</p>
-                                <p className="text-gray-700">{selectedVersion.description || "No description provided"}</p>
-                            </div>
-                            {/* Linked Modules in Details */}
-                            {selectedVersion.linkedModules?.length > 0 && (
-                                <div className="border-t pt-4">
-                                    <p className="text-sm text-gray-500 mb-2">Linked Modules ({selectedVersion.linkedModules.length})</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {selectedVersion.linkedModules.map(m => (
-                                            <span key={m.id} className="px-3 py-1 bg-green-50 border border-green-200 text-green-700 text-sm rounded-full font-medium">
-                                                {m.module_name}
-                                            </span>
-                                        ))}
+                                <div>
+                                    <div className="flex justify-between mb-1.5">
+                                        <span className="text-xs font-medium text-gray-600">Completion</span>
+                                        <span className="text-xs font-bold text-gray-900">{selectedVersion.completion_percentage}%</span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                        <div className={`h-2.5 rounded-full ${PROGRESS_COLOR[selectedVersion.status]} transition-all`} style={{ width: `${selectedVersion.completion_percentage}%` }} />
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* Linked Modules */}
+                            <div className="border border-gray-100 rounded-xl p-4">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-7 h-7 bg-green-50 rounded-lg flex items-center justify-center">
+                                            <i className="fa-solid fa-puzzle-piece text-green-600 text-xs" />
+                                        </div>
+                                        <p className="text-sm font-semibold text-gray-800">Linked Modules</p>
+                                        <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full">
+                                            {selectedVersion.linkedModules?.length ?? 0}
+                                        </span>
+                                    </div>
+                                    {selectedVersion.status !== "archived" && (
+                                        <button
+                                            onClick={() => { setShowDetailsModal(false); handleAssignModules(selectedVersion); }}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 border border-green-300 text-green-700 rounded-lg text-xs font-medium hover:bg-green-50 transition-colors">
+                                            <i className="fa-solid fa-plus text-xs" /> Manage
+                                        </button>
+                                    )}
+                                </div>
+                                {!selectedVersion.linkedModules?.length ? (
+                                    <div className="flex flex-col items-center justify-center py-6 gap-2 border-2 border-dashed border-gray-200 rounded-lg">
+                                        <i className="fa-solid fa-puzzle-piece text-gray-300 text-2xl" />
+                                        <p className="text-sm text-gray-400">No modules linked yet</p>
+                                        {selectedVersion.status !== "archived" && (
+                                            <button
+                                                onClick={() => { setShowDetailsModal(false); handleAssignModules(selectedVersion); }}
+                                                className="mt-1 px-4 py-1.5 bg-green-700 text-white rounded-lg text-xs font-medium hover:opacity-90 transition-opacity">
+                                                Assign Modules
+                                            </button>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-wrap gap-2">
+                                        {selectedVersion.linkedModules.map(m => (
+                                            <div key={m.id} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg font-medium">
+                                                <i className="fa-solid fa-puzzle-piece text-green-400 text-xs" />
+                                                {m.module_name}
+                                                {m.module_code && <span className="text-green-400 text-xs font-normal">· {m.module_code}</span>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Description */}
+                            {selectedVersion.description && (
+                                <div className="border border-gray-100 rounded-xl p-4">
+                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Description</p>
+                                    <p className="text-sm text-gray-700 leading-relaxed">{selectedVersion.description}</p>
+                                </div>
                             )}
-                            <div className="grid grid-cols-2 gap-4 border-t pt-4">
-                                <div><p className="text-sm text-gray-500">Release Date</p><p className="text-lg font-bold">{new Date(selectedVersion.release_date).toLocaleDateString()}</p></div>
-                                <div><p className="text-sm text-gray-500">Created Date</p><p className="text-lg font-bold">{new Date(selectedVersion.created_date).toLocaleDateString()}</p></div>
-                            </div>
-                            <div className="grid grid-cols-4 gap-4 border-t pt-4">
-                                <div><p className="text-xs text-gray-500 mb-1">Total Tests</p><p className="text-2xl font-bold">{selectedVersion.total_tests}</p></div>
-                                <div><p className="text-xs text-green-600 mb-1">Passed</p><p className="text-2xl font-bold text-green-600">{selectedVersion.passed_tests}</p></div>
-                                <div><p className="text-xs text-red-600 mb-1">Failed</p><p className="text-2xl font-bold text-red-600">{selectedVersion.failed_tests}</p></div>
-                                <div><p className="text-xs text-yellow-600 mb-1">Pending</p><p className="text-2xl font-bold text-yellow-600">{selectedVersion.pending_tests}</p></div>
-                            </div>
-                            <div className="border-t pt-4">
-                                <div className="flex justify-between mb-2">
-                                    <span className="text-sm font-medium">Completion Progress</span>
-                                    <span className="text-sm font-bold">{selectedVersion.completion_percentage}%</span>
-                                </div>
-                                <div className="w-full bg-gray-100 rounded-full h-4">
-                                    <div className={`h-4 rounded-full ${PROGRESS_COLOR[selectedVersion.status]}`} style={{ width: `${selectedVersion.completion_percentage}%` }} />
-                                </div>
-                            </div>
-                            <div className="flex gap-4 pt-4 border-t">
+
+                            {/* Footer actions */}
+                            <div className="flex gap-3 pt-2 border-t">
                                 <button onClick={() => { setShowDetailsModal(false); handleEditVersion(selectedVersion); }}
-                                    className="flex-1 px-6 py-3 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity">Edit</button>
+                                    className="flex-1 px-6 py-2.5 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+                                    <i className="fa-solid fa-pen-to-square text-sm" /> Edit Version
+                                </button>
                                 <button onClick={() => setShowDetailsModal(false)}
-                                    className="flex-1 px-6 py-3 border rounded-lg font-medium hover:bg-gray-50 transition-colors">Close</button>
+                                    className="flex-1 px-6 py-2.5 border rounded-lg font-medium hover:bg-gray-50 transition-colors">
+                                    Close
+                                </button>
                             </div>
                         </div>
                     </div>

@@ -111,20 +111,9 @@ const Badge = ({ label, bg, color }) => (
     }}>{label}</span>
 );
 
-// ─── CustomDropdown (design-system styled, flip-up aware) ────────────────────
-function getScrollParent(el) {
-    let parent = el.parentElement;
-    while (parent && parent !== document.body) {
-        const { overflow, overflowY } = window.getComputedStyle(parent);
-        if (/auto|scroll/.test(overflow + overflowY)) return parent;
-        parent = parent.parentElement;
-    }
-    return null;
-}
-
+// ─── CustomDropdown (design-system styled) ─────────────────────────────────────
 const CustomDropdown = ({ options, selected, onChange, placeholder = "Select option..." }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const [flipUp, setFlipUp] = useState(false);
     const dropdownRef = useRef(null);
 
     useEffect(() => {
@@ -135,39 +124,27 @@ const CustomDropdown = ({ options, selected, onChange, placeholder = "Select opt
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const handleToggle = () => {
-        if (!isOpen && dropdownRef.current) {
-            const rect = dropdownRef.current.getBoundingClientRect();
-            const scrollParent = getScrollParent(dropdownRef.current);
-            const containerBottom = scrollParent ? scrollParent.getBoundingClientRect().bottom : window.innerHeight;
-            const spaceBelow = containerBottom - rect.bottom;
-            const dropdownHeight = Math.min(options.length * 42 + 16, 300);
-            setFlipUp(spaceBelow < dropdownHeight + 8);
-        }
-        setIsOpen(p => !p);
-    };
-
     const selectedLabel = options.find(opt => opt.id === selected)?.name || placeholder;
 
     return (
         <div style={{ position: "relative", userSelect: "none" }} ref={dropdownRef}>
             <button
                 type="button"
-                onClick={handleToggle}
+                onClick={() => setIsOpen(!isOpen)}
                 style={{
                     width: "100%",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
                     padding: "10px 14px",
-                    background: isOpen ? "#f0fdf4" : DS.white,
-                    border: isOpen ? `1.5px solid #22c55e` : `1px solid ${DS.border}`,
+                    background: DS.white,
+                    border: isOpen ? `1.5px solid ${DS.green}` : `1px solid ${DS.border}`,
                     borderRadius: DS.btnRadius,
                     fontSize: "13px",
                     color: selected ? DS.textPrimary : DS.textHint,
                     fontWeight: selected ? 500 : 400,
                     cursor: "pointer",
-                    boxShadow: isOpen ? `0 0 0 3px rgba(34,197,94,0.12)` : "none",
+                    boxShadow: isOpen ? `0 0 0 3px rgba(27,94,59,0.10)` : "none",
                     outline: "none",
                     transition: "all 0.18s ease",
                     fontFamily: "Inter, system-ui, -apple-system, sans-serif",
@@ -180,7 +157,7 @@ const CustomDropdown = ({ options, selected, onChange, placeholder = "Select opt
                     marginLeft: 8, display: "flex", alignItems: "center",
                     transition: "transform 0.22s cubic-bezier(.4,0,.2,1)",
                     transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
-                    color: isOpen ? "#22c55e" : DS.textHint, flexShrink: 0,
+                    color: isOpen ? DS.green : DS.textHint, flexShrink: 0,
                 }}>
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                         <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -190,20 +167,15 @@ const CustomDropdown = ({ options, selected, onChange, placeholder = "Select opt
 
             {isOpen && (
                 <div style={{
-                    position: "absolute",
-                    ...(flipUp ? { bottom: "calc(100% + 6px)", top: "auto" } : { top: "calc(100% + 6px)", bottom: "auto" }),
-                    left: 0, right: 0,
+                    position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0,
                     zIndex: 9999, background: DS.white,
-                    border: `1.5px solid #dcfce7`,
+                    border: `1px solid ${DS.border}`,
                     borderRadius: DS.cardRadius,
-                    boxShadow: "0 8px 24px rgba(34,197,94,0.10), 0 2px 8px rgba(0,0,0,0.08)",
+                    boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
                     padding: 6, maxHeight: 300, overflowY: "auto",
-                    animation: `${flipUp ? "ddUp" : "ddIn"} 0.18s cubic-bezier(.4,0,.2,1)`,
+                    animation: "ddIn 0.18s cubic-bezier(.4,0,.2,1)",
                 }}>
-                    <style>{`
-                        @keyframes ddIn { from{opacity:0;transform:translateY(-6px) scale(0.98)} to{opacity:1;transform:translateY(0) scale(1)} }
-                        @keyframes ddUp { from{opacity:0;transform:translateY(6px) scale(0.98)} to{opacity:1;transform:translateY(0) scale(1)} }
-                    `}</style>
+                    <style>{`@keyframes ddIn { from{opacity:0;transform:translateY(-6px) scale(0.98)} to{opacity:1;transform:translateY(0) scale(1)} }`}</style>
                     {options.map((option) => {
                         const isSel = selected === option.id;
                         return (
@@ -214,19 +186,19 @@ const CustomDropdown = ({ options, selected, onChange, placeholder = "Select opt
                                     padding: "9px 12px", borderRadius: "8px",
                                     fontSize: "13px", cursor: "pointer",
                                     fontWeight: isSel ? 600 : 400,
-                                    color: isSel ? "#15803d" : DS.textSecondary,
-                                    background: isSel ? "#dcfce7" : "transparent",
+                                    color: isSel ? DS.green : DS.textSecondary,
+                                    background: isSel ? DS.greenTint : "transparent",
                                     display: "flex", alignItems: "center", justifyContent: "space-between",
                                     transition: "all 0.12s ease",
                                     fontFamily: "Inter, system-ui, -apple-system, sans-serif",
                                 }}
-                                onMouseEnter={e => { e.currentTarget.style.background = isSel ? "#bbf7d0" : "#f0fdf4"; }}
-                                onMouseLeave={e => { e.currentTarget.style.background = isSel ? "#dcfce7" : "transparent"; }}
+                                onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = DS.pageBg; }}
+                                onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = "transparent"; }}
                             >
                                 <span>{option.name}</span>
                                 {isSel && (
                                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, marginLeft: 8 }}>
-                                        <path d="M2.5 7l3.5 3.5 5.5-6" stroke="#16a34a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                        <path d="M2.5 7l3.5 3.5 5.5-6" stroke={DS.green} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                                     </svg>
                                 )}
                             </div>
@@ -300,8 +272,7 @@ const generateModuleCode = (existingCodes = []) => {
 };
 
 // ─── Module Card ───────────────────────────────────────────────────────────────
-// Rectangle card: text/label top-left, icon top-right, number below label
-function ModuleCard({ mod, onEdit, onDelete }) {
+function ModuleCard({ mod, onEdit, onDelete, onViewDetails }) {
     const c = colorMap[mod.color || "blue"];
     const isArchived = mod.status === "Archived";
     const icons = {
@@ -328,32 +299,58 @@ function ModuleCard({ mod, onEdit, onDelete }) {
         >
             <div style={{ padding: "24px" }}>
 
-                {/* Top row: name+code left, icon right */}
+                {/* Top row: icon + name/versions left, compact action buttons right */}
                 <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                        <h3 style={{ fontWeight: 700, color: DS.textPrimary, fontSize: "15px", margin: "0 0 2px", lineHeight: 1.3 }}>{mod.module_name}</h3>
-                        <p style={{ fontSize: "12px", color: DS.textMuted, margin: 0 }}>{mod.module_code}</p>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginLeft: 12 }}>
-                        {/* Module icon */}
-                        <div style={{ width: 40, height: 40, background: c.tint, borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <i className={`fa-solid ${icon}`} style={{ color: c.hex, fontSize: "17px" }}></i>
+                    {/* Icon + name block */}
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flex: 1, minWidth: 0 }}>
+                        <div style={{ width: 44, height: 44, background: c.tint, borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <i className={`fa-solid ${icon}`} style={{ color: c.hex, fontSize: "18px" }}></i>
                         </div>
-                        {/* Edit button */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            {/* Name + linked version pills on the same line */}
+                            <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, marginBottom: 2 }}>
+                                <h3 style={{ fontWeight: 700, color: DS.textPrimary, fontSize: "15px", margin: 0, lineHeight: 1.3, whiteSpace: "nowrap" }}>{mod.module_name}</h3>
+                                {mod.linkedVersions && mod.linkedVersions.slice(0, 2).map(v => (
+                                    <span key={v.id} style={{
+                                        padding: "1px 8px", background: DS.infoTint,
+                                        border: `1px solid rgba(59,130,246,0.25)`, color: DS.info,
+                                        fontSize: "11px", borderRadius: "20px", fontWeight: 600,
+                                        whiteSpace: "nowrap", lineHeight: 1.6,
+                                    }}>{v.version_number}</span>
+                                ))}
+                                {mod.linkedVersions && mod.linkedVersions.length > 2 && (
+                                    <span style={{ padding: "1px 7px", background: DS.pageBg, color: DS.textMuted, fontSize: "11px", borderRadius: "20px", fontWeight: 500, lineHeight: 1.6 }}>
+                                        +{mod.linkedVersions.length - 2}
+                                    </span>
+                                )}
+                            </div>
+                            <p style={{ fontSize: "12px", color: DS.textMuted, margin: 0 }}>{mod.module_code}</p>
+                        </div>
+                    </div>
+
+                    {/* Compact Edit + Delete icon buttons */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, marginLeft: 10 }}>
                         <button
                             onClick={() => onEdit(mod)}
                             title="Edit"
-                            style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: DS.infoTint, border: "none", borderRadius: "7px", cursor: "pointer", color: DS.info, fontSize: "13px", transition: "background 0.15s", flexShrink: 0 }}
+                            style={{
+                                width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center",
+                                background: DS.infoTint, border: "none", borderRadius: "7px",
+                                color: DS.info, cursor: "pointer", fontSize: "12px", transition: "background 0.15s",
+                            }}
                             onMouseEnter={e => e.currentTarget.style.background = "rgba(59,130,246,0.20)"}
                             onMouseLeave={e => e.currentTarget.style.background = DS.infoTint}
                         >
                             <i className="fa-solid fa-pen-to-square"></i>
                         </button>
-                        {/* Delete button */}
                         <button
                             onClick={() => onDelete(mod.id, mod.module_name)}
                             title="Delete"
-                            style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: DS.criticalTint, border: "none", borderRadius: "7px", cursor: "pointer", color: DS.critical, fontSize: "13px", transition: "background 0.15s", flexShrink: 0 }}
+                            style={{
+                                width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center",
+                                background: DS.criticalTint, border: "none", borderRadius: "7px",
+                                color: DS.critical, cursor: "pointer", fontSize: "12px", transition: "background 0.15s",
+                            }}
                             onMouseEnter={e => e.currentTarget.style.background = "rgba(229,62,62,0.20)"}
                             onMouseLeave={e => e.currentTarget.style.background = DS.criticalTint}
                         >
@@ -365,27 +362,13 @@ function ModuleCard({ mod, onEdit, onDelete }) {
                 {/* Description */}
                 <p style={{ fontSize: "13px", color: DS.textMuted, marginBottom: 16, lineHeight: 1.5 }}>{mod.description}</p>
 
-                {/* Status + Priority badges + Linked Versions all on one row */}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16, alignItems: "center" }}>
+                {/* Status + Priority badges */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
                     <Badge label={mod.status} bg={sb.bg} color={sb.color} />
                     <Badge label={`${mod.priority} Priority`} bg={pb.bg} color={pb.color} />
-                    {mod.linkedVersions && mod.linkedVersions.length > 0 && (
-                        <>
-                            {mod.linkedVersions.slice(0, 3).map(v => (
-                                <span key={v.id} style={{ padding: "2px 10px", background: DS.infoTint, border: `1px solid rgba(59,130,246,0.25)`, color: DS.info, fontSize: "12px", borderRadius: "20px", fontWeight: 500 }}>
-                                    {v.version_number}
-                                </span>
-                            ))}
-                            {mod.linkedVersions.length > 3 && (
-                                <span style={{ padding: "2px 10px", background: DS.pageBg, color: DS.textMuted, fontSize: "12px", borderRadius: "20px", fontWeight: 500 }}>
-                                    +{mod.linkedVersions.length - 3} more
-                                </span>
-                            )}
-                        </>
-                    )}
                 </div>
 
-                {/* Stats row — label top-left, number below (rectangle sub-cards) */}
+                {/* Stats row */}
                 <div style={{
                     display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
                     gap: 12, marginBottom: 16,
@@ -420,6 +403,7 @@ function ModuleCard({ mod, onEdit, onDelete }) {
                     }}
                     onMouseEnter={e => { if (!isArchived) e.currentTarget.style.background = DS.greenHover; }}
                     onMouseLeave={e => { if (!isArchived) e.currentTarget.style.background = DS.green; }}
+                    onClick={onViewDetails}
                 >
                     <i className="fa-solid fa-eye"></i>View Details
                 </button>
@@ -433,12 +417,15 @@ const modalOverlay = {
     position: "fixed", inset: 0, background: "rgba(0,0,0,0.50)",
     zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
 };
+
+// ── Single unified modal box size for ALL modals ──
 const modalBox = {
     background: DS.white, borderRadius: DS.cardRadius,
     boxShadow: "0 20px 48px rgba(0,0,0,0.18)",
-    width: "100%", maxWidth: 640, maxHeight: "90vh", overflowY: "auto",
+    width: "100%", maxWidth: 680, maxHeight: "90vh", overflowY: "auto",
     fontFamily: "Inter, system-ui, -apple-system, sans-serif",
 };
+
 const modalHeader = {
     padding: "20px 24px", borderBottom: `1px solid ${DS.border}`,
     position: "sticky", top: 0, background: DS.white, zIndex: 10,
@@ -665,7 +652,7 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
     );
 }
 
-// ─── Stat Card — rectangle, label top-left, icon top-right, number below ───────
+// ─── Stat Card ─────────────────────────────────────────────────────────────────
 const statIconMap = {
     blue: { hex: DS.info, tint: DS.infoTint },
     green: { hex: DS.green, tint: DS.greenTint },
@@ -673,7 +660,7 @@ const statIconMap = {
     gray: { hex: DS.textMuted, tint: "rgba(107,114,128,0.10)" },
 };
 
-function StatCard({ label, value, icon, color, badge, badgeBg, badgeColor }) {
+function StatCard({ label, value, icon, color }) {
     const ic = statIconMap[color] || statIconMap.blue;
     return (
         <div style={{
@@ -686,14 +673,12 @@ function StatCard({ label, value, icon, color, badge, badgeBg, badgeColor }) {
             minHeight: "110px",
             fontFamily: "Inter, system-ui, -apple-system, sans-serif",
         }}>
-            {/* Top row: label left, icon right */}
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
                 <p style={{ fontSize: "13px", color: DS.textMuted, fontWeight: 400, margin: 0, lineHeight: 1.5 }}>{label}</p>
                 <div style={{ width: 40, height: 40, borderRadius: "10px", background: ic.tint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginLeft: 12 }}>
                     <i className={`fa-solid ${icon}`} style={{ color: ic.hex, fontSize: "16px" }}></i>
                 </div>
             </div>
-            {/* Number below label */}
             <h3 style={{ fontSize: "32px", fontWeight: 700, color: DS.textPrimary, margin: 0, lineHeight: 1.0 }}>{value}</h3>
         </div>
     );
@@ -705,6 +690,9 @@ export default function ModulesLibrary() {
     const [users, setUsers] = useState([]);
     const [showModal, setShowModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
+    const [viewingModule, setViewingModule] = useState(null);
+    const [moduleFeatures, setModuleFeatures] = useState([]);
+    const [featuresLoading, setFeaturesLoading] = useState(false);
     const [editingModule, setEditingModule] = useState(null);
     const [loading, setLoading] = useState(true);
     const [usersLoading, setUsersLoading] = useState(true);
@@ -749,6 +737,20 @@ export default function ModulesLibrary() {
         finally { setLoading(false); }
     };
 
+    const fetchModuleFeatures = async (moduleId) => {
+        setFeaturesLoading(true);
+        try {
+            const { data, error } = await supabase
+                .from("features")
+                .select("id, feature_name, feature_code, status, priority, total_test_cases")
+                .eq("module_id", moduleId)
+                .order("feature_code", { ascending: true });
+            if (error) throw error;
+            setModuleFeatures(data || []);
+        } catch (err) { console.error(err); setModuleFeatures([]); }
+        finally { setFeaturesLoading(false); }
+    };
+
     const handleDeleteModule = async (moduleId, moduleName) => {
         if (!window.confirm(`Are you sure you want to delete "${moduleName}"?`)) return;
         try {
@@ -773,10 +775,10 @@ export default function ModulesLibrary() {
     const existingModuleCodes = modules.map(m => m.module_code);
 
     const statsConfig = [
-        { label: "Total Modules", value: modules.length, icon: "fa-puzzle-piece", color: "blue", badge: "Total" },
-        { label: "Active Modules", value: modules.filter(m => m.status === "Active").length, icon: "fa-check-circle", color: "green", badge: "Active" },
-        { label: "In Progress", value: modules.filter(m => m.status === "Inactive").length, icon: "fa-hourglass-end", color: "amber", badge: "In Progress" },
-        { label: "Archived Modules", value: modules.filter(m => m.status === "Archived").length, icon: "fa-archive", color: "gray", badge: "Archived" },
+        { label: "Total Modules", value: modules.length, icon: "fa-puzzle-piece", color: "blue" },
+        { label: "Active Modules", value: modules.filter(m => m.status === "Active").length, icon: "fa-check-circle", color: "green" },
+        { label: "In Progress", value: modules.filter(m => m.status === "Inactive").length, icon: "fa-hourglass-end", color: "amber" },
+        { label: "Archived Modules", value: modules.filter(m => m.status === "Archived").length, icon: "fa-archive", color: "gray" },
     ];
 
     return (
@@ -824,7 +826,7 @@ export default function ModulesLibrary() {
             <main style={{ flex: 1, overflowY: "auto" }}>
                 <div style={{ padding: "32px" }}>
 
-                    {/* Stat Cards — rectangle, label top-left, icon top-right, number below */}
+                    {/* Stat Cards */}
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
                         {statsConfig.map(s => <StatCard key={s.label} {...s} />)}
                     </div>
@@ -887,7 +889,7 @@ export default function ModulesLibrary() {
                     {!loading && filteredModules.length > 0 && (
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24, marginBottom: 24 }}>
                             {filteredModules.map(mod => (
-                                <ModuleCard key={mod.id} mod={mod} onEdit={handleEditModule} onDelete={handleDeleteModule} />
+                                <ModuleCard key={mod.id} mod={mod} onEdit={handleEditModule} onDelete={handleDeleteModule} onViewDetails={() => { setViewingModule(mod); fetchModuleFeatures(mod.id); }} />
                             ))}
                         </div>
                     )}
@@ -906,6 +908,160 @@ export default function ModulesLibrary() {
             {showEditModal && editingModule && (
                 <EditModuleModal module={editingModule} onClose={() => { setShowEditModal(false); setEditingModule(null); }} onSuccess={fetchModules} users={users} />
             )}
+
+            {/* ─── View Details Modal ─── */}
+            {viewingModule && (() => {
+                const c = colorMap[viewingModule.color || "blue"];
+                const pb = priorityBadge[viewingModule.priority] || priorityBadge.Low;
+                const sb = statusBadge[viewingModule.status] || statusBadge.Active;
+                const icons = {
+                    "User Management": "fa-user-circle", "Reporting & Analytics": "fa-chart-line",
+                    "Notifications": "fa-bell", "Security & Compliance": "fa-shield-halved",
+                    "Data Management": "fa-database", "UI/UX Components": "fa-palette",
+                    "API & Integrations": "fa-plug", "Mobile Application": "fa-mobile-screen",
+                };
+                const icon = icons[viewingModule.module_name] || "fa-cube";
+                const featurePriorityBadge = { High: { bg: DS.criticalTint, color: DS.critical }, Medium: { bg: DS.warningTint, color: DS.warning }, Low: { bg: "rgba(107,114,128,0.10)", color: DS.textMuted } };
+                const featureStatusBadge = { Active: { bg: DS.passedTint, color: DS.passed }, Inactive: { bg: DS.warningTint, color: DS.warning }, Archived: { bg: "rgba(107,114,128,0.10)", color: DS.textMuted }, Draft: { bg: DS.infoTint, color: DS.info } };
+                return (
+                    <div style={modalOverlay} onClick={() => setViewingModule(null)}>
+                        {/* Uses same modalBox — no override */}
+                        <div style={modalBox} onClick={e => e.stopPropagation()}>
+
+                            {/* Header */}
+                            <div style={modalHeader}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                                    <div style={{ width: 44, height: 44, background: c.tint, borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                        <i className={`fa-solid ${icon}`} style={{ color: c.hex, fontSize: "20px" }}></i>
+                                    </div>
+                                    <div>
+                                        <h3 style={{ fontSize: "18px", fontWeight: 700, color: DS.textPrimary, margin: 0, lineHeight: 1.2 }}>{viewingModule.module_name}</h3>
+                                        <p style={{ fontSize: "12px", color: DS.textMuted, margin: "2px 0 0" }}>Code: {viewingModule.module_code}</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setViewingModule(null)} style={{ background: "none", border: "none", color: DS.textMuted, cursor: "pointer", fontSize: "18px" }}>
+                                    <i className="fa-solid fa-times"></i>
+                                </button>
+                            </div>
+
+                            <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: 20 }}>
+
+                                {/* Meta row */}
+                                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+                                    {[
+                                        { label: "Status", value: viewingModule.status, bg: sb.bg, color: sb.color },
+                                        { label: "Priority", value: `${viewingModule.priority} Priority`, bg: pb.bg, color: pb.color },
+                                        { label: "Owner", value: viewingModule.module_owner || "—", bg: DS.infoTint, color: DS.info },
+                                    ].map(item => (
+                                        <div key={item.label} style={{ padding: "12px 16px", background: item.bg, borderRadius: "10px" }}>
+                                            <p style={{ fontSize: "11px", fontWeight: 500, color: DS.textMuted, margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>{item.label}</p>
+                                            <p style={{ fontSize: "13px", fontWeight: 700, color: item.color, margin: 0 }}>{item.value}</p>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Description */}
+                                {viewingModule.description && (
+                                    <div style={{ padding: "14px 16px", background: DS.pageBg, borderRadius: "10px", border: `1px solid ${DS.border}` }}>
+                                        <p style={{ fontSize: "11px", fontWeight: 500, color: DS.textMuted, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Description</p>
+                                        <p style={{ fontSize: "13px", color: DS.textSecondary, margin: 0, lineHeight: 1.6 }}>{viewingModule.description}</p>
+                                    </div>
+                                )}
+
+                                {/* Linked Versions */}
+                                {viewingModule.linkedVersions && viewingModule.linkedVersions.length > 0 && (
+                                    <div>
+                                        <p style={{ fontSize: "11px", fontWeight: 600, color: DS.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
+                                            Linked Versions <span style={{ marginLeft: 6, padding: "1px 8px", background: DS.infoTint, color: DS.info, borderRadius: 20, fontWeight: 700 }}>{viewingModule.linkedVersions.length}</span>
+                                        </p>
+                                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                                            {viewingModule.linkedVersions.map(v => (
+                                                <span key={v.id} style={{ padding: "3px 12px", background: DS.infoTint, border: `1px solid rgba(59,130,246,0.25)`, color: DS.info, fontSize: "12px", borderRadius: "20px", fontWeight: 500 }}>
+                                                    {v.version_number}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Features Section */}
+                                <div style={{ border: `1px solid ${DS.border}`, borderRadius: "12px", overflow: "hidden" }}>
+                                    <div style={{ padding: "14px 18px", background: DS.pageBg, borderBottom: `1px solid ${DS.border}`, display: "flex", alignItems: "center", gap: 10 }}>
+                                        <div style={{ width: 32, height: 32, background: DS.securityTint, borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                            <i className="fa-solid fa-list-check" style={{ color: DS.security, fontSize: "14px" }}></i>
+                                        </div>
+                                        <p style={{ fontSize: "14px", fontWeight: 600, color: DS.textPrimary, margin: 0 }}>Connected Features</p>
+                                        {!featuresLoading && (
+                                            <span style={{ padding: "2px 10px", background: DS.securityTint, color: DS.security, fontSize: "12px", borderRadius: 20, fontWeight: 700 }}>
+                                                {moduleFeatures.length}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {featuresLoading ? (
+                                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "32px 0", gap: 10 }}>
+                                            <div style={{ width: 18, height: 18, border: `2px solid ${DS.security}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }}></div>
+                                            <span style={{ fontSize: "13px", color: DS.textMuted }}>Loading features…</span>
+                                        </div>
+                                    ) : moduleFeatures.length === 0 ? (
+                                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "36px 0", gap: 10 }}>
+                                            <div style={{ width: 44, height: 44, background: DS.pageBg, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                                <i className="fa-solid fa-list-check" style={{ color: DS.textHint, fontSize: "18px" }}></i>
+                                            </div>
+                                            <p style={{ fontSize: "13px", color: DS.textMuted, margin: 0 }}>No features connected to this module</p>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            {moduleFeatures.map((f, idx) => {
+                                                const fp = featurePriorityBadge[f.priority] || featurePriorityBadge.Low;
+                                                const fs = featureStatusBadge[f.status] || featureStatusBadge.Active;
+                                                return (
+                                                    <div key={f.id} style={{
+                                                        display: "flex", alignItems: "center", gap: 14, padding: "13px 18px",
+                                                        borderBottom: idx < moduleFeatures.length - 1 ? `1px solid ${DS.border}` : "none",
+                                                        background: DS.white, transition: "background 0.12s",
+                                                    }}
+                                                        onMouseEnter={e => e.currentTarget.style.background = DS.pageBg}
+                                                        onMouseLeave={e => e.currentTarget.style.background = DS.white}
+                                                    >
+                                                        <div style={{ width: 32, height: 32, background: DS.securityTint, borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                                            <i className="fa-solid fa-list-check" style={{ color: DS.security, fontSize: "13px" }}></i>
+                                                        </div>
+                                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                                            <p style={{ fontSize: "13px", fontWeight: 600, color: DS.textPrimary, margin: "0 0 2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.feature_name}</p>
+                                                            <p style={{ fontSize: "12px", color: DS.textMuted, margin: 0 }}>{f.feature_code} · {f.total_test_cases ?? 0} test cases</p>
+                                                        </div>
+                                                        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                                                            {f.priority && (
+                                                                <span style={{ padding: "2px 10px", background: fp.bg, color: fp.color, fontSize: "11px", borderRadius: "6px", fontWeight: 500 }}>{f.priority}</span>
+                                                            )}
+                                                            {f.status && (
+                                                                <span style={{ padding: "2px 10px", background: fs.bg, color: fs.color, fontSize: "11px", borderRadius: "6px", fontWeight: 500 }}>{f.status}</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+
+                            </div>
+
+                            {/* Footer */}
+                            <div style={modalFooter}>
+                                <button onClick={() => setViewingModule(null)} style={btnCancel}>Close</button>
+                                <button onClick={() => { setViewingModule(null); handleEditModule(viewingModule); }} style={btnPrimary}>
+                                    <i className="fa-solid fa-pen-to-square" style={{ marginRight: 6 }}></i> Edit Module
+                                </button>
+                            </div>
+
+                            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                        </div>
+                    </div>
+                );
+            })()}
+
         </div>
     );
 }

@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import supabase from "../services/supabaseClient";
 
 const CustomSelect = ({ value, onChange, options, placeholder = 'Select…' }) => {
@@ -16,7 +17,6 @@ const CustomSelect = ({ value, onChange, options, placeholder = 'Select…' }) =
     const handleToggle = () => {
         if (!open && ref.current) {
             const rect = ref.current.getBoundingClientRect();
-            // Find the nearest scrollable ancestor
             let scrollParent = ref.current.parentElement;
             while (scrollParent && scrollParent !== document.body) {
                 const { overflow, overflowY } = window.getComputedStyle(scrollParent);
@@ -347,15 +347,13 @@ const CommentsTab = ({ storyId, storyUUID }) => {
     );
 };
 
-// ── Typography tokens from NexTech RMS design system ─────────────────────────
 const T = {
-    // sizes
-    body: { fontSize: 13, fontWeight: 400, lineHeight: 1.5 },   // 13px 400 — body text
-    bodyMed: { fontSize: 13, fontWeight: 500, lineHeight: 1.5 },   // 13px 500 — nav, table rows
-    label: { fontSize: 12, fontWeight: 400, lineHeight: 1.5 },   // 12px 400 — labels, badges
-    micro: { fontSize: 11, fontWeight: 500, letterSpacing: '0.06em', lineHeight: 1.5 }, // 11px 500 uppercase micro
-    subhead: { fontSize: 15, fontWeight: 500, lineHeight: 1.2 },   // 15px 500 — card titles
-    section: { fontSize: 18, fontWeight: 600, lineHeight: 1.2 },   // 18px 600 — section headings
+    body: { fontSize: 13, fontWeight: 400, lineHeight: 1.5 },
+    bodyMed: { fontSize: 13, fontWeight: 500, lineHeight: 1.5 },
+    label: { fontSize: 12, fontWeight: 400, lineHeight: 1.5 },
+    micro: { fontSize: 11, fontWeight: 500, letterSpacing: '0.06em', lineHeight: 1.5 },
+    subhead: { fontSize: 15, fontWeight: 500, lineHeight: 1.2 },
+    section: { fontSize: 18, fontWeight: 600, lineHeight: 1.2 },
 };
 const font = 'Inter, system-ui, -apple-system, sans-serif';
 
@@ -370,13 +368,11 @@ const AttachmentsTab = ({ storyId, storyUUID }) => {
     const [uploadedBy, setUploadedBy] = useState('');
     const fileInputRef = useRef(null);
 
-    // Figma link form state
     const [showFigmaForm, setShowFigmaForm] = useState(false);
     const [figmaSaving, setFigmaSaving] = useState(false);
     const [newFigma, setNewFigma] = useState({ url: '', title: '', added_by: '' });
     const [figmaError, setFigmaError] = useState('');
 
-    // Web link form state
     const [showWebForm, setShowWebForm] = useState(false);
     const [webSaving, setWebSaving] = useState(false);
     const [newWeb, setNewWeb] = useState({ url: '', title: '', added_by: '' });
@@ -416,18 +412,9 @@ const AttachmentsTab = ({ storyId, storyUUID }) => {
         if (!isValidFigmaLink(newFigma.url)) { setFigmaError('Please enter a valid Figma URL (figma.com/...)'); return; }
         setFigmaSaving(true);
         try {
-            const { error } = await supabase.from('story_links').insert([{
-                story_id: storyUUID,
-                figma_link: newFigma.url.trim(),
-                web_link: null,
-                added_by: newFigma.added_by.trim() || 'Anonymous',
-                title: newFigma.title.trim() || null,
-            }]);
+            const { error } = await supabase.from('story_links').insert([{ story_id: storyUUID, figma_link: newFigma.url.trim(), web_link: null, added_by: newFigma.added_by.trim() || 'Anonymous', title: newFigma.title.trim() || null }]);
             if (error) throw error;
-            setNewFigma({ url: '', title: '', added_by: '' });
-            setFigmaError('');
-            setShowFigmaForm(false);
-            await fetchLinks();
+            setNewFigma({ url: '', title: '', added_by: '' }); setFigmaError(''); setShowFigmaForm(false); await fetchLinks();
         } catch (err) { alert(`Error: ${err.message}`); } finally { setFigmaSaving(false); }
     };
 
@@ -436,28 +423,15 @@ const AttachmentsTab = ({ storyId, storyUUID }) => {
         if (!isValidWebLink(newWeb.url)) { setWebError('Please enter a valid URL (https://...)'); return; }
         setWebSaving(true);
         try {
-            const { error } = await supabase.from('story_links').insert([{
-                story_id: storyUUID,
-                figma_link: null,
-                web_link: newWeb.url.trim(),
-                added_by: newWeb.added_by.trim() || 'Anonymous',
-                title: newWeb.title.trim() || null,
-            }]);
+            const { error } = await supabase.from('story_links').insert([{ story_id: storyUUID, figma_link: null, web_link: newWeb.url.trim(), added_by: newWeb.added_by.trim() || 'Anonymous', title: newWeb.title.trim() || null }]);
             if (error) throw error;
-            setNewWeb({ url: '', title: '', added_by: '' });
-            setWebError('');
-            setShowWebForm(false);
-            await fetchLinks();
+            setNewWeb({ url: '', title: '', added_by: '' }); setWebError(''); setShowWebForm(false); await fetchLinks();
         } catch (err) { alert(`Error: ${err.message}`); } finally { setWebSaving(false); }
     };
 
     const handleDeleteLink = async (link) => {
         if (!window.confirm('Delete this link?')) return;
-        try {
-            const { error } = await supabase.from('story_links').delete().eq('id', link.id);
-            if (error) throw error;
-            await fetchLinks();
-        } catch (err) { alert(`Delete error: ${err.message}`); }
+        try { const { error } = await supabase.from('story_links').delete().eq('id', link.id); if (error) throw error; await fetchLinks(); } catch (err) { alert(`Delete error: ${err.message}`); }
     };
 
     const handleFileUpload = async (e) => {
@@ -470,10 +444,7 @@ const AttachmentsTab = ({ storyId, storyUUID }) => {
                 const { error: uploadError } = await supabase.storage.from('story-attachments').upload(filePath, file);
                 if (uploadError) throw uploadError;
                 const { data: { publicUrl } } = supabase.storage.from('story-attachments').getPublicUrl(filePath);
-                const { error: dbError } = await supabase.from('attachments').insert([{
-                    story_id: storyUUID, file_name: file.name, file_url: publicUrl || filePath,
-                    file_size: file.size, file_type: file.type, uploaded_by: uploadedBy.trim() || 'Anonymous'
-                }]);
+                const { error: dbError } = await supabase.from('attachments').insert([{ story_id: storyUUID, file_name: file.name, file_url: publicUrl || filePath, file_size: file.size, file_type: file.type, uploaded_by: uploadedBy.trim() || 'Anonymous' }]);
                 if (dbError) throw dbError;
             }
             await fetchAttachments();
@@ -483,416 +454,187 @@ const AttachmentsTab = ({ storyId, storyUUID }) => {
 
     const handleDeleteFile = async (attachment) => {
         if (!window.confirm(`Delete "${attachment.file_name}"?`)) return;
-        try {
-            const { error } = await supabase.from('attachments').delete().eq('id', attachment.id);
-            if (error) throw error;
-            setAttachments(p => p.filter(a => a.id !== attachment.id));
-        } catch (err) { alert(`Delete error: ${err.message}`); }
+        try { const { error } = await supabase.from('attachments').delete().eq('id', attachment.id); if (error) throw error; setAttachments(p => p.filter(a => a.id !== attachment.id)); } catch (err) { alert(`Delete error: ${err.message}`); }
     };
 
     const formatSize = (bytes) => { if (!bytes) return '—'; if (bytes < 1024) return `${bytes} B`; if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`; return `${(bytes / 1048576).toFixed(1)} MB`; };
     const fileIcon = (type) => { if (!type) return 'fa-file'; if (type.startsWith('image/')) return 'fa-file-image'; if (type === 'application/pdf') return 'fa-file-pdf'; if (type.includes('word')) return 'fa-file-word'; if (type.includes('sheet') || type.includes('excel')) return 'fa-file-excel'; if (type.includes('zip') || type.includes('rar')) return 'fa-file-zipper'; return 'fa-file'; };
-    const fileIconColor = (type) => { if (!type) return 'text-gray-400'; if (type.startsWith('image/')) return 'text-green-500'; if (type === 'application/pdf') return 'text-red-500'; if (type.includes('word')) return 'text-blue-500'; if (type.includes('sheet') || type.includes('excel')) return 'text-emerald-500'; return 'text-gray-400'; };
 
     if (error) return (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, color: '#DC2626', fontFamily: font, ...T.body }}>
-            <i className="fa-solid fa-circle-exclamation"></i>
-            <span>{error}</span>
+            <i className="fa-solid fa-circle-exclamation"></i><span>{error}</span>
         </div>
     );
 
-    // ── Shared input style ─────────────────────────────────────────────────────
-    const inp = (extra = {}) => ({
-        width: '100%', padding: '10px 14px', background: '#FFFFFF',
-        border: '1px solid #E5E7EB', borderRadius: 8,
-        fontFamily: font, ...T.body, color: '#111827',
-        outline: 'none', boxSizing: 'border-box', lineHeight: 1.5,
-        ...extra,
-    });
-
-    const inpFocus = (ref) => {
-        if (ref) { ref.style.borderColor = '#6366F1'; ref.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)'; }
-    };
-    const inpBlur = (ref) => {
-        if (ref) { ref.style.borderColor = '#E5E7EB'; ref.style.boxShadow = 'none'; }
-    };
-
-    // ── Micro label (11px 500 uppercase +0.06em) ───────────────────────────────
-    const MicroLabel = ({ children, color = '#6B7280' }) => (
-        <span style={{ display: 'block', fontFamily: font, ...T.micro, textTransform: 'uppercase', color, marginBottom: 6 }}>
-            {children}
-        </span>
-    );
-
-    // ── Section heading (15px 500) ─────────────────────────────────────────────
+    const inp = (extra = {}) => ({ width: '100%', padding: '10px 14px', background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 8, fontFamily: font, ...T.body, color: '#111827', outline: 'none', boxSizing: 'border-box', lineHeight: 1.5, ...extra });
+    const inpFocus = (ref) => { if (ref) { ref.style.borderColor = '#6366F1'; ref.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)'; } };
+    const inpBlur = (ref) => { if (ref) { ref.style.borderColor = '#E5E7EB'; ref.style.boxShadow = 'none'; } };
+    const MicroLabel = ({ children, color = '#6B7280' }) => (<span style={{ display: 'block', fontFamily: font, ...T.micro, textTransform: 'uppercase', color, marginBottom: 6 }}>{children}</span>);
     const SectionHeading = ({ icon, iconBg, iconColor, title, count, countBg, countColor }) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-            <div style={{ width: 36, height: 36, background: iconBg, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <i className={icon} style={{ color: iconColor, fontSize: 15 }}></i>
-            </div>
+            <div style={{ width: 36, height: 36, background: iconBg, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><i className={icon} style={{ color: iconColor, fontSize: 15 }}></i></div>
             <span style={{ fontFamily: font, ...T.subhead, color: '#111827' }}>{title}</span>
-            {count > 0 && (
-                <span style={{ padding: '2px 10px', borderRadius: 99, background: countBg, color: countColor, fontFamily: font, ...T.label, fontWeight: 600 }}>
-                    {count}
-                </span>
-            )}
+            {count > 0 && <span style={{ padding: '2px 10px', borderRadius: 99, background: countBg, color: countColor, fontFamily: font, ...T.label, fontWeight: 600 }}>{count}</span>}
         </div>
     );
-
-    // ── Empty state ────────────────────────────────────────────────────────────
     const EmptyState = ({ icon, message }) => (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 0', gap: 10, border: '2px dashed #E5E7EB', borderRadius: 12 }}>
-            <div style={{ width: 40, height: 40, background: '#F3F4F6', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <i className={icon} style={{ color: '#9CA3AF', fontSize: 16 }}></i>
-            </div>
+            <div style={{ width: 40, height: 40, background: '#F3F4F6', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><i className={icon} style={{ color: '#9CA3AF', fontSize: 16 }}></i></div>
             <span style={{ fontFamily: font, ...T.body, color: '#6B7280' }}>{message}</span>
         </div>
     );
-
-    // ── Link card row ──────────────────────────────────────────────────────────
     const LinkRow = ({ href, icon, iconBg, iconColor, urlColor, metaColor, url, title, meta, onDelete, hoverBorder }) => {
         const [hov, setHov] = useState(false);
         return (
-            <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: hov ? '#F9FAFB' : '#FFFFFF', border: `1px solid ${hov ? hoverBorder : '#E5E7EB'}`, borderRadius: 10, transition: 'all 0.15s' }}>
-                <div style={{ width: 36, height: 36, background: iconBg, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <i className={icon} style={{ color: iconColor, fontSize: 15 }}></i>
-                </div>
+            <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: hov ? '#F9FAFB' : '#FFFFFF', border: `1px solid ${hov ? hoverBorder : '#E5E7EB'}`, borderRadius: 10, transition: 'all 0.15s' }}>
+                <div style={{ width: 36, height: 36, background: iconBg, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><i className={icon} style={{ color: iconColor, fontSize: 15 }}></i></div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                    {title && (
-                        <span style={{ display: 'block', fontFamily: font, ...T.bodyMed, color: '#111827', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {title}
-                        </span>
-                    )}
-                    <a href={href} target="_blank" rel="noopener noreferrer"
-                        style={{ display: 'block', fontFamily: font, ...T.label, color: urlColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }}
-                        onMouseEnter={e => e.target.style.textDecoration = 'underline'}
-                        onMouseLeave={e => e.target.style.textDecoration = 'none'}>
-                        {url}
-                    </a>
+                    {title && <span style={{ display: 'block', fontFamily: font, ...T.bodyMed, color: '#111827', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>}
+                    <a href={href} target="_blank" rel="noopener noreferrer" style={{ display: 'block', fontFamily: font, ...T.label, color: urlColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }} onMouseEnter={e => e.target.style.textDecoration = 'underline'} onMouseLeave={e => e.target.style.textDecoration = 'none'}>{url}</a>
                     <span style={{ fontFamily: font, ...T.label, color: metaColor }}>{meta}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 4, opacity: hov ? 1 : 0, transition: 'opacity 0.15s' }}>
-                    <a href={href} target="_blank" rel="noopener noreferrer"
-                        style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: '#9CA3AF', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'none' }}
-                        title="Open link">
-                        <i className="fa-solid fa-arrow-up-right-from-square" style={{ fontSize: 11 }}></i>
-                    </a>
-                    <button onClick={onDelete}
-                        style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: '#9CA3AF', background: 'none', border: 'none', cursor: 'pointer' }}
-                        title="Delete">
-                        <i className="fa-solid fa-trash" style={{ fontSize: 11 }}></i>
-                    </button>
+                    <a href={href} target="_blank" rel="noopener noreferrer" style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: '#9CA3AF', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'none' }} title="Open link"><i className="fa-solid fa-arrow-up-right-from-square" style={{ fontSize: 11 }}></i></a>
+                    <button onClick={onDelete} style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: '#9CA3AF', background: 'none', border: 'none', cursor: 'pointer' }} title="Delete"><i className="fa-solid fa-trash" style={{ fontSize: 11 }}></i></button>
                 </div>
             </div>
         );
     };
-
-    // ── Add link form panel ────────────────────────────────────────────────────
     const AddLinkForm = ({ bg, borderColor, accentColor, urlLabel, urlPlaceholder, urlIcon, urlValue, onUrlChange, urlError, titleValue, onTitleChange, nameValue, onNameChange, onSave, onCancel, saving, saveLabel }) => (
         <div style={{ background: bg, border: `1px solid ${borderColor}`, borderRadius: 12, padding: '20px 20px 16px', marginBottom: 16 }}>
-
-            {/* URL field */}
             <div style={{ marginBottom: 14 }}>
                 <MicroLabel color={accentColor}>{urlLabel} <span style={{ color: '#EF4444' }}>*</span></MicroLabel>
                 <div style={{ position: 'relative' }}>
                     <i className={urlIcon} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: accentColor, fontSize: 13, opacity: 0.7 }}></i>
-                    <input
-                        type="url"
-                        value={urlValue}
-                        onChange={onUrlChange}
-                        placeholder={urlPlaceholder}
-                        style={{ ...inp({ paddingLeft: 36, borderColor: urlError ? '#EF4444' : '#E5E7EB' }) }}
-                        onFocus={e => inpFocus(e.target)}
-                        onBlur={e => inpBlur(e.target)}
-                    />
+                    <input type="url" value={urlValue} onChange={onUrlChange} placeholder={urlPlaceholder} style={{ ...inp({ paddingLeft: 36, borderColor: urlError ? '#EF4444' : '#E5E7EB' }) }} onFocus={e => inpFocus(e.target)} onBlur={e => inpBlur(e.target)} />
                 </div>
-                {urlError && (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 5, fontFamily: font, ...T.label, color: '#EF4444' }}>
-                        <i className="fa-solid fa-circle-exclamation" style={{ fontSize: 11 }}></i>
-                        {urlError}
-                    </span>
-                )}
+                {urlError && <span style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 5, fontFamily: font, ...T.label, color: '#EF4444' }}><i className="fa-solid fa-circle-exclamation" style={{ fontSize: 11 }}></i>{urlError}</span>}
             </div>
-
-            {/* Title field */}
             <div style={{ marginBottom: 14 }}>
                 <MicroLabel color={accentColor}>Link title</MicroLabel>
-                <input
-                    type="text"
-                    value={titleValue}
-                    onChange={onTitleChange}
-                    placeholder="e.g. Homepage wireframe, Jira ticket…"
-                    style={inp()}
-                    onFocus={e => inpFocus(e.target)}
-                    onBlur={e => inpBlur(e.target)}
-                />
+                <input type="text" value={titleValue} onChange={onTitleChange} placeholder="e.g. Homepage wireframe, Jira ticket…" style={inp()} onFocus={e => inpFocus(e.target)} onBlur={e => inpBlur(e.target)} />
             </div>
-
-            {/* Added by field */}
             <div style={{ marginBottom: 18 }}>
                 <MicroLabel color={accentColor}>Added by</MicroLabel>
-                <input
-                    type="text"
-                    value={nameValue}
-                    onChange={onNameChange}
-                    placeholder="Your name (optional)"
-                    style={inp()}
-                    onFocus={e => inpFocus(e.target)}
-                    onBlur={e => inpBlur(e.target)}
-                />
+                <input type="text" value={nameValue} onChange={onNameChange} placeholder="Your name (optional)" style={inp()} onFocus={e => inpFocus(e.target)} onBlur={e => inpBlur(e.target)} />
             </div>
-
-            {/* Buttons */}
             <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                    onClick={onSave}
-                    disabled={saving}
-                    style={{ padding: '9px 20px', background: accentColor, color: '#FFFFFF', border: 'none', borderRadius: 8, fontFamily: font, ...T.bodyMed, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {saving
-                        ? <><i className="fa-solid fa-spinner fa-spin" style={{ fontSize: 12 }}></i> Saving…</>
-                        : <><i className="fa-solid fa-floppy-disk" style={{ fontSize: 12 }}></i> {saveLabel}</>
-                    }
+                <button onClick={onSave} disabled={saving} style={{ padding: '9px 20px', background: accentColor, color: '#FFFFFF', border: 'none', borderRadius: 8, fontFamily: font, ...T.bodyMed, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {saving ? <><i className="fa-solid fa-spinner fa-spin" style={{ fontSize: 12 }}></i> Saving…</> : <><i className="fa-solid fa-floppy-disk" style={{ fontSize: 12 }}></i> {saveLabel}</>}
                 </button>
-                <button
-                    onClick={onCancel}
-                    style={{ padding: '9px 18px', background: '#FFFFFF', color: '#374151', border: '1px solid #E5E7EB', borderRadius: 8, fontFamily: font, ...T.bodyMed, cursor: 'pointer' }}>
-                    Cancel
-                </button>
+                <button onClick={onCancel} style={{ padding: '9px 18px', background: '#FFFFFF', color: '#374151', border: '1px solid #E5E7EB', borderRadius: 8, fontFamily: font, ...T.bodyMed, cursor: 'pointer' }}>Cancel</button>
             </div>
         </div>
     );
-
-    // ── Add button ─────────────────────────────────────────────────────────────
     const AddButton = ({ onClick, active, accentColor, label }) => (
-        <button
-            onClick={onClick}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: active ? '#F3F4F6' : accentColor, color: active ? '#374151' : '#FFFFFF', border: active ? '1px solid #E5E7EB' : 'none', borderRadius: 8, fontFamily: font, ...T.bodyMed, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 }}>
-            <i className={`fa-solid ${active ? 'fa-times' : 'fa-plus'}`} style={{ fontSize: 12 }}></i>
-            {active ? 'Cancel' : label}
+        <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: active ? '#F3F4F6' : accentColor, color: active ? '#374151' : '#FFFFFF', border: active ? '1px solid #E5E7EB' : 'none', borderRadius: 8, fontFamily: font, ...T.bodyMed, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 }}>
+            <i className={`fa-solid ${active ? 'fa-times' : 'fa-plus'}`} style={{ fontSize: 12 }}></i>{active ? 'Cancel' : label}
         </button>
     );
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24, fontFamily: font }}>
-
-            {/* ── CATEGORY 1: Figma Design Links ── */}
             <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 14, padding: '20px 20px 16px' }}>
-
-                {/* Section header */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showFigmaForm ? 16 : figmaLinks.length > 0 ? 16 : 12 }}>
-                    <SectionHeading
-                        icon="fa-brands fa-figma" iconBg="rgba(139,92,246,0.10)" iconColor="#7C3AED"
-                        title="Figma Design Links" count={figmaLinks.length}
-                        countBg="rgba(139,92,246,0.10)" countColor="#6D28D9"
-                    />
+                    <SectionHeading icon="fa-brands fa-figma" iconBg="rgba(139,92,246,0.10)" iconColor="#7C3AED" title="Figma Design Links" count={figmaLinks.length} countBg="rgba(139,92,246,0.10)" countColor="#6D28D9" />
                     <AddButton onClick={() => { setShowFigmaForm(p => !p); setFigmaError(''); }} active={showFigmaForm} accentColor="#7C3AED" label="Add Figma Link" />
                 </div>
-
-                {/* Add form */}
-                {showFigmaForm && (
-                    <AddLinkForm
-                        bg="rgba(139,92,246,0.04)" borderColor="rgba(139,92,246,0.20)" accentColor="#7C3AED"
-                        urlLabel="Figma URL" urlPlaceholder="https://www.figma.com/file/..."
-                        urlIcon="fa-brands fa-figma"
-                        urlValue={newFigma.url}
-                        onUrlChange={e => { setNewFigma(p => ({ ...p, url: e.target.value })); setFigmaError(''); }}
-                        urlError={figmaError}
-                        titleValue={newFigma.title}
-                        onTitleChange={e => setNewFigma(p => ({ ...p, title: e.target.value }))}
-                        nameValue={newFigma.added_by}
-                        onNameChange={e => setNewFigma(p => ({ ...p, added_by: e.target.value }))}
-                        onSave={handleSaveFigma}
-                        onCancel={() => { setShowFigmaForm(false); setFigmaError(''); setNewFigma({ url: '', title: '', added_by: '' }); }}
-                        saving={figmaSaving}
-                        saveLabel="Save Figma Link"
-                    />
-                )}
-
-                {/* List */}
-                {linksLoading ? (
-                    <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
-                        <div style={{ width: 20, height: 20, border: '2px solid #7C3AED', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }}></div>
-                    </div>
-                ) : figmaLinks.length === 0 && !showFigmaForm ? (
-                    <EmptyState icon="fa-brands fa-figma" message="No Figma design links added yet" />
-                ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {figmaLinks.map(link => (
-                            <LinkRow
-                                key={link.id}
-                                href={link.figma_link} url={link.figma_link}
-                                icon="fa-brands fa-figma" iconBg="rgba(139,92,246,0.10)" iconColor="#7C3AED"
-                                urlColor="#6D28D9" hoverBorder="#C4B5FD"
-                                title={link.title || ''}
-                                meta={`Added by ${link.added_by || 'Anonymous'} · ${new Date(link.created_at).toLocaleDateString()}`}
-                                metaColor="#9CA3AF"
-                                onDelete={() => handleDeleteLink(link)}
-                            />
-                        ))}
-                    </div>
-                )}
+                {showFigmaForm && <AddLinkForm bg="rgba(139,92,246,0.04)" borderColor="rgba(139,92,246,0.20)" accentColor="#7C3AED" urlLabel="Figma URL" urlPlaceholder="https://www.figma.com/file/..." urlIcon="fa-brands fa-figma" urlValue={newFigma.url} onUrlChange={e => { setNewFigma(p => ({ ...p, url: e.target.value })); setFigmaError(''); }} urlError={figmaError} titleValue={newFigma.title} onTitleChange={e => setNewFigma(p => ({ ...p, title: e.target.value }))} nameValue={newFigma.added_by} onNameChange={e => setNewFigma(p => ({ ...p, added_by: e.target.value }))} onSave={handleSaveFigma} onCancel={() => { setShowFigmaForm(false); setFigmaError(''); setNewFigma({ url: '', title: '', added_by: '' }); }} saving={figmaSaving} saveLabel="Save Figma Link" />}
+                {linksLoading ? <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}><div style={{ width: 20, height: 20, border: '2px solid #7C3AED', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }}></div></div>
+                    : figmaLinks.length === 0 && !showFigmaForm ? <EmptyState icon="fa-brands fa-figma" message="No Figma design links added yet" />
+                        : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{figmaLinks.map(link => <LinkRow key={link.id} href={link.figma_link} url={link.figma_link} icon="fa-brands fa-figma" iconBg="rgba(139,92,246,0.10)" iconColor="#7C3AED" urlColor="#6D28D9" hoverBorder="#C4B5FD" title={link.title || ''} meta={`Added by ${link.added_by || 'Anonymous'} · ${new Date(link.created_at).toLocaleDateString()}`} metaColor="#9CA3AF" onDelete={() => handleDeleteLink(link)} />)}</div>}
             </div>
-
-            {/* ── CATEGORY 2: Web Links ── */}
             <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 14, padding: '20px 20px 16px' }}>
-
-                {/* Section header */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showWebForm ? 16 : webLinks.length > 0 ? 16 : 12 }}>
-                    <SectionHeading
-                        icon="fa-solid fa-globe" iconBg="rgba(59,130,246,0.10)" iconColor="#2563EB"
-                        title="Web Links" count={webLinks.length}
-                        countBg="rgba(59,130,246,0.10)" countColor="#1D4ED8"
-                    />
+                    <SectionHeading icon="fa-solid fa-globe" iconBg="rgba(59,130,246,0.10)" iconColor="#2563EB" title="Web Links" count={webLinks.length} countBg="rgba(59,130,246,0.10)" countColor="#1D4ED8" />
                     <AddButton onClick={() => { setShowWebForm(p => !p); setWebError(''); }} active={showWebForm} accentColor="#2563EB" label="Add Web Link" />
                 </div>
-
-                {/* Add form */}
-                {showWebForm && (
-                    <AddLinkForm
-                        bg="rgba(59,130,246,0.04)" borderColor="rgba(59,130,246,0.20)" accentColor="#2563EB"
-                        urlLabel="Web URL" urlPlaceholder="https://example.com/..."
-                        urlIcon="fa-solid fa-globe"
-                        urlValue={newWeb.url}
-                        onUrlChange={e => { setNewWeb(p => ({ ...p, url: e.target.value })); setWebError(''); }}
-                        urlError={webError}
-                        titleValue={newWeb.title}
-                        onTitleChange={e => setNewWeb(p => ({ ...p, title: e.target.value }))}
-                        nameValue={newWeb.added_by}
-                        onNameChange={e => setNewWeb(p => ({ ...p, added_by: e.target.value }))}
-                        onSave={handleSaveWeb}
-                        onCancel={() => { setShowWebForm(false); setWebError(''); setNewWeb({ url: '', title: '', added_by: '' }); }}
-                        saving={webSaving}
-                        saveLabel="Save Web Link"
-                    />
-                )}
-
-                {/* List */}
-                {linksLoading ? (
-                    <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
-                        <div style={{ width: 20, height: 20, border: '2px solid #2563EB', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }}></div>
-                    </div>
-                ) : webLinks.length === 0 && !showWebForm ? (
-                    <EmptyState icon="fa-solid fa-globe" message="No web links added yet" />
-                ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {webLinks.map(link => (
-                            <LinkRow
-                                key={link.id}
-                                href={link.web_link} url={link.web_link}
-                                icon="fa-solid fa-globe" iconBg="rgba(59,130,246,0.10)" iconColor="#2563EB"
-                                urlColor="#1D4ED8" hoverBorder="#93C5FD"
-                                title={link.title || ''}
-                                meta={`Added by ${link.added_by || 'Anonymous'} · ${new Date(link.created_at).toLocaleDateString()}`}
-                                metaColor="#9CA3AF"
-                                onDelete={() => handleDeleteLink(link)}
-                            />
-                        ))}
-                    </div>
-                )}
+                {showWebForm && <AddLinkForm bg="rgba(59,130,246,0.04)" borderColor="rgba(59,130,246,0.20)" accentColor="#2563EB" urlLabel="Web URL" urlPlaceholder="https://example.com/..." urlIcon="fa-solid fa-globe" urlValue={newWeb.url} onUrlChange={e => { setNewWeb(p => ({ ...p, url: e.target.value })); setWebError(''); }} urlError={webError} titleValue={newWeb.title} onTitleChange={e => setNewWeb(p => ({ ...p, title: e.target.value }))} nameValue={newWeb.added_by} onNameChange={e => setNewWeb(p => ({ ...p, added_by: e.target.value }))} onSave={handleSaveWeb} onCancel={() => { setShowWebForm(false); setWebError(''); setNewWeb({ url: '', title: '', added_by: '' }); }} saving={webSaving} saveLabel="Save Web Link" />}
+                {linksLoading ? <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}><div style={{ width: 20, height: 20, border: '2px solid #2563EB', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }}></div></div>
+                    : webLinks.length === 0 && !showWebForm ? <EmptyState icon="fa-solid fa-globe" message="No web links added yet" />
+                        : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{webLinks.map(link => <LinkRow key={link.id} href={link.web_link} url={link.web_link} icon="fa-solid fa-globe" iconBg="rgba(59,130,246,0.10)" iconColor="#2563EB" urlColor="#1D4ED8" hoverBorder="#93C5FD" title={link.title || ''} meta={`Added by ${link.added_by || 'Anonymous'} · ${new Date(link.created_at).toLocaleDateString()}`} metaColor="#9CA3AF" onDelete={() => handleDeleteLink(link)} />)}</div>}
             </div>
-
-            {/* ── CATEGORY 3: File Attachments ── */}
             <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 14, padding: '20px 20px 16px' }}>
-
-                {/* Section header */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                    <div style={{ width: 36, height: 36, background: 'rgba(16,185,129,0.10)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <i className="fa-solid fa-paperclip" style={{ color: '#059669', fontSize: 15 }}></i>
-                    </div>
+                    <div style={{ width: 36, height: 36, background: 'rgba(16,185,129,0.10)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><i className="fa-solid fa-paperclip" style={{ color: '#059669', fontSize: 15 }}></i></div>
                     <span style={{ fontFamily: font, ...T.subhead, color: '#111827' }}>File Attachments</span>
-                    {attachments.length > 0 && (
-                        <span style={{ padding: '2px 10px', borderRadius: 99, background: 'rgba(16,185,129,0.10)', color: '#065F46', fontFamily: font, ...T.label, fontWeight: 600 }}>
-                            {attachments.length}
-                        </span>
-                    )}
+                    {attachments.length > 0 && <span style={{ padding: '2px 10px', borderRadius: 99, background: 'rgba(16,185,129,0.10)', color: '#065F46', fontFamily: font, ...T.label, fontWeight: 600 }}>{attachments.length}</span>}
                 </div>
-
-                {/* Drop zone */}
-                <div
-                    onDragOver={e => e.preventDefault()}
-                    onDrop={e => {
-                        e.preventDefault();
-                        const files = Array.from(e.dataTransfer.files);
-                        if (files.length) { const dt = new DataTransfer(); files.forEach(f => dt.items.add(f)); fileInputRef.current.files = dt.files; handleFileUpload({ target: { files: dt.files } }); }
-                    }}
-                    style={{ border: '2px dashed #D1FAE5', borderRadius: 12, padding: '28px 20px', textAlign: 'center', marginBottom: 16, transition: 'border-color 0.15s', cursor: 'pointer' }}>
-                    <div style={{ width: 40, height: 40, background: '#F0FDF4', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
-                        <i className="fa-solid fa-cloud-arrow-up" style={{ color: '#059669', fontSize: 18 }}></i>
-                    </div>
+                <div onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const files = Array.from(e.dataTransfer.files); if (files.length) { const dt = new DataTransfer(); files.forEach(f => dt.items.add(f)); fileInputRef.current.files = dt.files; handleFileUpload({ target: { files: dt.files } }); } }} style={{ border: '2px dashed #D1FAE5', borderRadius: 12, padding: '28px 20px', textAlign: 'center', marginBottom: 16 }}>
+                    <div style={{ width: 40, height: 40, background: '#F0FDF4', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}><i className="fa-solid fa-cloud-arrow-up" style={{ color: '#059669', fontSize: 18 }}></i></div>
                     <p style={{ fontFamily: font, ...T.bodyMed, color: '#111827', marginBottom: 4 }}>Drop files here or click to upload</p>
                     <p style={{ fontFamily: font, ...T.label, color: '#6B7280', marginBottom: 14 }}>Supports any file type</p>
-                    <input
-                        type="text" value={uploadedBy} onChange={e => setUploadedBy(e.target.value)}
-                        placeholder="Your name (optional)"
-                        style={{ ...inp({ width: 'auto', padding: '7px 14px', marginBottom: 12, display: 'inline-block', textAlign: 'center' }) }}
-                    />
+                    <input type="text" value={uploadedBy} onChange={e => setUploadedBy(e.target.value)} placeholder="Your name (optional)" style={{ ...inp({ width: 'auto', padding: '7px 14px', marginBottom: 12, display: 'inline-block', textAlign: 'center' }) }} />
                     <div>
                         <input ref={fileInputRef} type="file" multiple onChange={handleFileUpload} style={{ display: 'none' }} id="file-upload" />
-                        <label htmlFor="file-upload" style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 20px',
-                            background: uploading ? '#9CA3AF' : '#059669', color: '#FFFFFF',
-                            borderRadius: 8, fontFamily: font, ...T.bodyMed,
-                            cursor: uploading ? 'not-allowed' : 'pointer', transition: 'background 0.15s',
-                        }}>
-                            <i className="fa-solid fa-paperclip" style={{ fontSize: 12 }}></i>
-                            {uploading ? 'Uploading…' : 'Choose Files'}
+                        <label htmlFor="file-upload" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 20px', background: uploading ? '#9CA3AF' : '#059669', color: '#FFFFFF', borderRadius: 8, fontFamily: font, ...T.bodyMed, cursor: uploading ? 'not-allowed' : 'pointer' }}>
+                            <i className="fa-solid fa-paperclip" style={{ fontSize: 12 }}></i>{uploading ? 'Uploading…' : 'Choose Files'}
                         </label>
                     </div>
                 </div>
-
-                {/* File list */}
-                {loading ? (
-                    <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
-                        <div style={{ width: 20, height: 20, border: '2px solid #059669', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }}></div>
-                    </div>
-                ) : attachments.length === 0 ? (
-                    <EmptyState icon="fa-solid fa-file" message={`No file attachments yet for ${storyId}`} />
-                ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <span style={{ fontFamily: font, ...T.micro, textTransform: 'uppercase', color: '#6B7280', letterSpacing: '0.06em', marginBottom: 4 }}>
-                            {attachments.length} file{attachments.length !== 1 ? 's' : ''}
-                        </span>
-                        {attachments.map(att => {
-                            const [hov, setHov] = useState(false);
-                            return (
-                                <div key={att.id}
-                                    onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-                                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: hov ? '#F9FAFB' : '#FFFFFF', border: `1px solid ${hov ? '#6EE7B7' : '#E5E7EB'}`, borderRadius: 10, transition: 'all 0.15s' }}>
-                                    <div style={{ width: 36, height: 36, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                        <i className={`fa-solid ${fileIcon(att.file_type)}`} style={{ fontSize: 16, color: fileIconColor(att.file_type).replace('text-', '') === 'green-500' ? '#22C55E' : fileIconColor(att.file_type).replace('text-', '') === 'red-500' ? '#EF4444' : fileIconColor(att.file_type).replace('text-', '') === 'blue-500' ? '#3B82F6' : '#9CA3AF' }}></i>
+                {loading ? <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}><div style={{ width: 20, height: 20, border: '2px solid #059669', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }}></div></div>
+                    : attachments.length === 0 ? <EmptyState icon="fa-solid fa-file" message={`No file attachments yet for ${storyId}`} />
+                        : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <span style={{ fontFamily: font, ...T.micro, textTransform: 'uppercase', color: '#6B7280', letterSpacing: '0.06em', marginBottom: 4 }}>{attachments.length} file{attachments.length !== 1 ? 's' : ''}</span>
+                            {attachments.map(att => {
+                                const [hov, setHov] = useState(false);
+                                return (
+                                    <div key={att.id} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: hov ? '#F9FAFB' : '#FFFFFF', border: `1px solid ${hov ? '#6EE7B7' : '#E5E7EB'}`, borderRadius: 10, transition: 'all 0.15s' }}>
+                                        <div style={{ width: 36, height: 36, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><i className={`fa-solid ${fileIcon(att.file_type)}`} style={{ fontSize: 16, color: '#9CA3AF' }}></i></div>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <p style={{ fontFamily: font, ...T.bodyMed, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>{att.file_name}</p>
+                                            <span style={{ fontFamily: font, ...T.label, color: '#9CA3AF' }}>{formatSize(att.file_size)} · Uploaded by {att.uploaded_by || '—'} · {new Date(att.uploaded_at).toLocaleDateString()}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: 4, opacity: hov ? 1 : 0, transition: 'opacity 0.15s' }}>
+                                            <a href={att.file_url} target="_blank" rel="noopener noreferrer" style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: '#9CA3AF', textDecoration: 'none' }} title="Download"><i className="fa-solid fa-download" style={{ fontSize: 11 }}></i></a>
+                                            <button onClick={() => handleDeleteFile(att)} style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: '#9CA3AF', background: 'none', border: 'none', cursor: 'pointer' }} title="Delete"><i className="fa-solid fa-trash" style={{ fontSize: 11 }}></i></button>
+                                        </div>
                                     </div>
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <p style={{ fontFamily: font, ...T.bodyMed, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>{att.file_name}</p>
-                                        <span style={{ fontFamily: font, ...T.label, color: '#9CA3AF' }}>
-                                            {formatSize(att.file_size)} · Uploaded by {att.uploaded_by || '—'} · {new Date(att.uploaded_at).toLocaleDateString()}
-                                        </span>
-                                    </div>
-                                    <div style={{ display: 'flex', gap: 4, opacity: hov ? 1 : 0, transition: 'opacity 0.15s' }}>
-                                        <a href={att.file_url} target="_blank" rel="noopener noreferrer"
-                                            style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: '#9CA3AF', textDecoration: 'none' }}
-                                            title="Download">
-                                            <i className="fa-solid fa-download" style={{ fontSize: 11 }}></i>
-                                        </a>
-                                        <button onClick={() => handleDeleteFile(att)}
-                                            style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: '#9CA3AF', background: 'none', border: 'none', cursor: 'pointer' }}
-                                            title="Delete">
-                                            <i className="fa-solid fa-trash" style={{ fontSize: 11 }}></i>
-                                        </button>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
+                                );
+                            })}
+                        </div>}
             </div>
-
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
     );
 };
 
+// ── Helper: generate next story ID ───────────────────────────────────────────
+const generateNextStoryId = (existingIds = []) => {
+    if (!existingIds.length) return 'US-001';
+    const nums = existingIds
+        .map(id => { const match = id.match(/^US-(\d+)$/i); return match ? parseInt(match[1], 10) : 0; })
+        .filter(n => !isNaN(n));
+    const max = nums.length ? Math.max(...nums) : 0;
+    return `US-${String(max + 1).padStart(3, '0')}`;
+};
+
+const EMPTY_FORM = {
+    storyId: '', storyType: '', storyTitle: '', storySummary: '',
+    moduleId: '', parentStoryId: '', sequence: '', businessContext: '',
+    problemStatement: '', expectedOutcome: '', businessDomain: '', processArea: '',
+    transactionType: '', criticality: '', product: 'NexTech RMS', application: '',
+    module: '', feature: '', userRole: '', screenPage: '', asA: '', iWant: '',
+    soThat: '', preconditions: '', mainFlow: '', alternateFlow: '', exceptionFlow: '',
+    postconditions: '', businessRules: '', validationRules: '', fieldBehavior: '',
+    calculationLogic: '', apiImpacted: '', dbTablesImpacted: '', integrationImpacted: '',
+    reportsImpacted: '', configurationImpacted: '', securityRBACImpact: '',
+    auditTrailRequired: '', performanceImpact: '', testScenarioCount: '',
+    currentStatus: '', blocked: false, blockedReason: '',
+    storyPoints: '', estimateHours: '', plannedSprint: '', plannedRelease: '', versionBuild: '',
+    assignedBa: [], assignedFrontendDeveloper: [], assignedBackendDeveloper: [], assignedTester: [],
+    linkedFeatures: [],
+    approvalStatus: 'Pending', developmentStatus: 'Not Started', qaStatus: 'Not Started', releaseStatus: 'Not Released',
+    createdBy: '', approvedBy: '', approvedAt: '', createdAt: '', updatedAt: ''
+};
+
 const UserStoryMapping = () => {
+    // ── Router hooks ──────────────────────────────────────────────────────────
+    const { storyId: urlStoryId } = useParams();   // e.g. "US-045" or undefined for /stories/new
+    const navigate = useNavigate();
+
+    const isNew = !urlStoryId || urlStoryId === 'new';
+
     const [activeTab, setActiveTab] = useState('details');
     const [collapsedSections, setCollapsedSections] = useState({});
     const [lastSaved, setLastSaved] = useState('never');
@@ -904,27 +646,36 @@ const UserStoryMapping = () => {
     const [storyUUID, setStoryUUID] = useState(null);
     const [tabCounts, setTabCounts] = useState({ testcases: null, bugs: null, comments: null, attachments: null });
 
-    const [formData, setFormData] = useState({
-        storyId: 'US-045', storyType: '', storyTitle: '', storySummary: '',
-        moduleId: '', parentStoryId: '', sequence: '', businessContext: '',
-        problemStatement: '', expectedOutcome: '', businessDomain: '', processArea: '',
-        transactionType: '', criticality: '', product: 'NexTech RMS', application: '',
-        module: '', feature: '', userRole: '', screenPage: '', asA: '', iWant: '',
-        soThat: '', preconditions: '', mainFlow: '', alternateFlow: '', exceptionFlow: '',
-        postconditions: '', businessRules: '', validationRules: '', fieldBehavior: '',
-        calculationLogic: '', apiImpacted: '', dbTablesImpacted: '', integrationImpacted: '',
-        reportsImpacted: '', configurationImpacted: '', securityRBACImpact: '',
-        auditTrailRequired: '', performanceImpact: '', testScenarioCount: '',
-        currentStatus: '', blocked: false, blockedReason: '',
-        storyPoints: '', estimateHours: '', plannedSprint: '', plannedRelease: '', versionBuild: '',
-        assignedBa: [],
-        assignedFrontendDeveloper: [],
-        assignedBackendDeveloper: [],
-        assignedTester: [],
-        linkedFeatures: [],
-        approvalStatus: 'Pending', developmentStatus: 'Not Started', qaStatus: 'Not Started', releaseStatus: 'Not Released',
-        createdBy: '', approvedBy: '', approvedAt: '', createdAt: '', updatedAt: ''
-    });
+    // ── Story ID edit state ───────────────────────────────────────────────────
+    const [storyIdEditing, setStoryIdEditing] = useState(false);
+    const [storyIdDraft, setStoryIdDraft] = useState('');
+    const [storyIdError, setStoryIdError] = useState('');
+    const storyIdInputRef = useRef(null);
+
+    // ── Initialise formData from URL param ────────────────────────────────────
+    const [formData, setFormData] = useState({ ...EMPTY_FORM, storyId: isNew ? '' : urlStoryId });
+
+    // When URL param changes (e.g. user navigates directly), reset form
+    useEffect(() => {
+        if (!isNew && urlStoryId) {
+            setFormData(prev => ({ ...EMPTY_FORM, storyId: urlStoryId }));
+            setStoryUUID(null);
+            setActiveTab('details');
+            setCollapsedSections({});
+            setLastSaved('never');
+            setTabCounts({ testcases: null, bugs: null, comments: null, attachments: null });
+        }
+    }, [urlStoryId]);
+
+    // For new stories, auto-generate an ID
+    useEffect(() => {
+        if (!isNew) return;
+        (async () => {
+            const { data } = await supabase.from('user_stories').select('story_id').order('story_id', { ascending: true });
+            const existingIds = (data || []).map(s => s.story_id);
+            setFormData(prev => ({ ...prev, storyId: generateNextStoryId(existingIds) }));
+        })();
+    }, [isNew]);
 
     const [acceptanceCriteria, setAcceptanceCriteria] = useState([]);
     const [definitionOfDone, setDefinitionOfDone] = useState([
@@ -967,6 +718,7 @@ const UserStoryMapping = () => {
     }, []);
 
     useEffect(() => {
+        if (!formData.storyId) return;
         const fetchStoryData = async () => {
             const { data } = await supabase
                 .from('user_stories')
@@ -1008,6 +760,48 @@ const UserStoryMapping = () => {
         fetchCounts();
     }, [storyUUID, activeTab]);
 
+    // ── Story ID editing handlers ─────────────────────────────────────────────
+    const handleStoryIdEditStart = () => {
+        setStoryIdDraft(formData.storyId);
+        setStoryIdError('');
+        setStoryIdEditing(true);
+        setTimeout(() => storyIdInputRef.current?.select(), 50);
+    };
+
+    const handleStoryIdSave = async () => {
+        const trimmed = storyIdDraft.trim().toUpperCase();
+        if (!trimmed) { setStoryIdError('Story ID cannot be empty'); return; }
+        if (!/^US-\d+$/.test(trimmed)) { setStoryIdError('Format must be US-### (e.g. US-046)'); return; }
+        if (trimmed === formData.storyId) { setStoryIdEditing(false); return; }
+        const { data } = await supabase.from('user_stories').select('id').eq('story_id', trimmed).maybeSingle();
+        if (data) { setStoryIdError(`${trimmed} already exists`); return; }
+        setFormData(prev => ({ ...prev, storyId: trimmed }));
+        setStoryUUID(null);
+        setStoryIdEditing(false);
+        setStoryIdError('');
+    };
+
+    const handleStoryIdKeyDown = (e) => {
+        if (e.key === 'Enter') handleStoryIdSave();
+        if (e.key === 'Escape') { setStoryIdEditing(false); setStoryIdError(''); }
+    };
+
+    // ── Add New Story — navigate to /stories/new ──────────────────────────────
+    const handleAddNewStory = () => {
+        if (formData.storyTitle || formData.storySummary || formData.mainFlow) {
+            if (!window.confirm('Unsaved changes on the current story will be lost. Continue?')) return;
+        }
+        navigate('/stories/new');
+    };
+
+    // ── Back to list ──────────────────────────────────────────────────────────
+    const handleBackToList = () => {
+        if (formData.storyTitle || formData.storySummary) {
+            if (!window.confirm('Unsaved changes will be lost. Continue?')) return;
+        }
+        navigate('/stories');
+    };
+
     const tabs = [
         { id: 'details', label: 'Story Details', icon: 'fa-info-circle' },
         { id: 'testcases', label: 'Linked Test Cases', icon: 'fa-list-check', countKey: 'testcases' },
@@ -1042,10 +836,8 @@ const UserStoryMapping = () => {
         story_points: formData.storyPoints ? parseInt(formData.storyPoints) : null,
         estimate_hours: formData.estimateHours ? parseFloat(formData.estimateHours) : null,
         planned_sprint: formData.plannedSprint, planned_release: formData.plannedRelease, version_build: formData.versionBuild,
-        assigned_ba: formData.assignedBa,
-        assigned_frontend_developer: formData.assignedFrontendDeveloper,
-        assigned_backend_developer: formData.assignedBackendDeveloper,
-        assigned_tester: formData.assignedTester,
+        assigned_ba: formData.assignedBa, assigned_frontend_developer: formData.assignedFrontendDeveloper,
+        assigned_backend_developer: formData.assignedBackendDeveloper, assigned_tester: formData.assignedTester,
         linked_features: formData.linkedFeatures,
         approval_status: formData.approvalStatus, development_status: formData.developmentStatus,
         qa_status: formData.qaStatus, release_status: formData.releaseStatus,
@@ -1076,6 +868,8 @@ const UserStoryMapping = () => {
             const savedUUID = data?.id;
             if (savedUUID) { setStoryUUID(savedUUID); await syncFeatures(savedUUID, formData.storyId, formData.linkedFeatures); }
             setLastSaved(new Date().toLocaleString());
+            // After saving a new story, update the URL to the actual story ID
+            if (isNew) navigate(`/stories/${formData.storyId}`, { replace: true });
             alert('✅ Draft saved!');
         } catch (err) { alert(`❌ ${err.message}`); }
         finally { setSaveLoading(false); }
@@ -1090,13 +884,18 @@ const UserStoryMapping = () => {
             const savedUUID = data?.id;
             if (savedUUID) { setStoryUUID(savedUUID); await syncFeatures(savedUUID, formData.storyId, formData.linkedFeatures); }
             setLastSaved(new Date().toLocaleString());
+            // After submitting a new story, update the URL to the actual story ID
+            if (isNew) navigate(`/stories/${formData.storyId}`, { replace: true });
             alert('✅ Submitted!');
         } catch (err) { alert(`❌ ${err.message}`); }
         finally { setSaveLoading(false); }
     };
 
-    const handleDuplicate = () => { const newId = `US-${String(parseInt(formData.storyId.split('-')[1]) + 1).padStart(3, '0')}`; setFormData(prev => ({ ...prev, storyId: newId, currentStatus: '' })); setStoryUUID(null); alert(`✅ Duplicated as ${newId}. Save to create.`); };
-    const handleBackToList = () => { if (window.confirm('Unsaved changes will be lost. Continue?')) window.history.back(); };
+    const handleDuplicate = () => {
+        const newId = `US-${String(parseInt(formData.storyId.split('-')[1]) + 1).padStart(3, '0')}`;
+        navigate(`/stories/${newId}`);
+        alert(`✅ Duplicated as ${newId}. Save to create.`);
+    };
 
     const storyTypeOpts = ['Feature Enhancement', 'New Feature', 'Bug Fix', 'Technical Debt'];
     const moduleIdOpts = ['MOD-001 - Dashboard', 'MOD-002 - User Management', 'MOD-003 - Reports', 'MOD-004 - Settings'];
@@ -1112,13 +911,8 @@ const UserStoryMapping = () => {
     const qaStatusOpts = ['Not Started', 'In Progress', 'Pass', 'Fail', 'Blocked'];
     const releaseStatusOpts = ['Not Released', 'Scheduled', 'Released', 'Rolled Back'];
 
-    const teamMemberOpts = profiles
-        .filter(p => p.full_name && p.full_name.trim() !== '')
-        .map(p => ({ value: p.full_name, label: p.role ? `${p.full_name} (${p.role})` : p.full_name }));
-
-    const featureOpts = features
-        .filter(f => f.feature_name && f.feature_name.trim() !== '')
-        .map(f => ({ value: f.feature_name, label: f.feature_code ? `${f.feature_name} (${f.feature_code})` : f.feature_name }));
+    const teamMemberOpts = profiles.filter(p => p.full_name && p.full_name.trim() !== '').map(p => ({ value: p.full_name, label: p.role ? `${p.full_name} (${p.role})` : p.full_name }));
+    const featureOpts = features.filter(f => f.feature_name && f.feature_name.trim() !== '').map(f => ({ value: f.feature_name, label: f.feature_code ? `${f.feature_name} (${f.feature_code})` : f.feature_name }));
 
     const inputCls = "w-full px-4 py-2.5 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary";
     const labelCls = "text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block";
@@ -1135,20 +929,107 @@ const UserStoryMapping = () => {
                 .status-badge { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 500; }
                 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
                 .modal-content { background: white; border-radius: 0.5rem; padding: 2rem; max-width: 600px; width: 100%; max-height: 80vh; overflow-y: auto; }
+                .add-story-btn { position: relative; overflow: hidden; }
+                .add-story-btn::after { content: ''; position: absolute; inset: 0; background: rgba(255,255,255,0.15); opacity: 0; transition: opacity 0.15s; }
+                .add-story-btn:hover::after { opacity: 1; }
+                .story-id-edit-input:focus { outline: none; box-shadow: 0 0 0 2px rgba(99,102,241,0.25); }
             `}</style>
 
             <div className="flex min-h-screen">
                 <div className="flex-1 flex flex-col min-w-0">
                     <header className="bg-card border-b border-border">
                         <div className="px-4 lg:px-8 py-4">
-                            <div className="flex items-center gap-4">
-                                <div>
-                                    <div className="flex items-center gap-3 mb-1">
-                                        <h2 className="text-xl lg:text-2xl font-bold text-foreground">User Story: {formData.storyId}</h2>
-                                        {formData.currentStatus && <span className="status-badge bg-blue-500 bg-opacity-10 text-blue-600"><i className="fa-solid fa-circle text-xs"></i> {formData.currentStatus}</span>}
+                            <div className="flex items-center justify-between gap-4 flex-wrap">
+                                {/* Left: back button + title */}
+                                <div className="flex items-center gap-3 min-w-0">
+                                    {/* Back to list */}
+                                    <button
+                                        onClick={handleBackToList}
+                                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0"
+                                        title="Back to User Stories list"
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                                            <path d="M9 2L5 7L9 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
+                                        <span className="hidden sm:inline">Stories</span>
+                                    </button>
+
+                                    <span className="text-muted-foreground text-sm hidden sm:inline">/</span>
+
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-3 mb-1 flex-wrap">
+                                            {/* Story ID — editable inline */}
+                                            <div className="flex items-center gap-1.5">
+                                                {storyIdEditing ? (
+                                                    <div className="flex flex-col gap-1">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <input
+                                                                ref={storyIdInputRef}
+                                                                value={storyIdDraft}
+                                                                onChange={e => { setStoryIdDraft(e.target.value.toUpperCase()); setStoryIdError(''); }}
+                                                                onKeyDown={handleStoryIdKeyDown}
+                                                                placeholder="US-###"
+                                                                className="story-id-edit-input px-2.5 py-1 text-xl font-bold border-2 border-indigo-400 rounded-lg bg-white text-foreground w-32"
+                                                                style={{ fontSize: '1.15rem' }}
+                                                            />
+                                                            <button onClick={handleStoryIdSave} className="flex items-center justify-center w-7 h-7 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors" title="Confirm">
+                                                                <i className="fa-solid fa-check" style={{ fontSize: 11 }}></i>
+                                                            </button>
+                                                            <button onClick={() => { setStoryIdEditing(false); setStoryIdError(''); }} className="flex items-center justify-center w-7 h-7 bg-gray-200 hover:bg-gray-300 text-gray-600 rounded-md transition-colors" title="Cancel">
+                                                                <i className="fa-solid fa-times" style={{ fontSize: 11 }}></i>
+                                                            </button>
+                                                        </div>
+                                                        {storyIdError && (
+                                                            <span className="text-xs text-red-500 flex items-center gap-1">
+                                                                <i className="fa-solid fa-circle-exclamation" style={{ fontSize: 10 }}></i>{storyIdError}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        onClick={handleStoryIdEditStart}
+                                                        className="group flex items-center gap-1.5 hover:bg-indigo-50 rounded-lg px-1.5 py-0.5 transition-colors"
+                                                        title="Click to edit Story ID"
+                                                    >
+                                                        <h2 className="text-xl lg:text-2xl font-bold text-foreground">
+                                                            {isNew ? 'New Story' : `User Story: ${formData.storyId}`}
+                                                        </h2>
+                                                        {!isNew && <i className="fa-solid fa-pencil text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity" style={{ fontSize: 12 }}></i>}
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {formData.currentStatus && (
+                                                <span className="status-badge bg-blue-500 bg-opacity-10 text-blue-600">
+                                                    <i className="fa-solid fa-circle text-xs"></i> {formData.currentStatus}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-sm text-muted-foreground">{formData.storyTitle || 'No title yet'}</p>
                                     </div>
-                                    <p className="text-sm text-muted-foreground">{formData.storyTitle || 'No title yet'}</p>
                                 </div>
+
+                                {/* ── Add User Story button ── */}
+                                <button
+                                    onClick={handleAddNewStory}
+                                    className="add-story-btn flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-md hover:shadow-lg active:scale-95"
+                                    style={{
+                                        background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                                        border: 'none',
+                                        letterSpacing: '0.01em',
+                                        flexShrink: 0,
+                                    }}
+                                    title="Create a new user story"
+                                >
+                                    <span style={{
+                                        width: 22, height: 22, borderRadius: 6,
+                                        background: 'rgba(255,255,255,0.22)',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        flexShrink: 0,
+                                    }}>
+                                        <i className="fa-solid fa-plus" style={{ fontSize: 11 }}></i>
+                                    </span>
+                                    Add User Story
+                                </button>
                             </div>
                         </div>
                     </header>
@@ -1176,7 +1057,28 @@ const UserStoryMapping = () => {
 
                                         <Section id="story-identification" title="Story Identification" icon="fa-fingerprint" iconColor="bg-primary" collapsedSections={collapsedSections} toggleSection={toggleSection}>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                                <div><label className={labelCls}>Story ID</label><input type="text" value={formData.storyId} className="w-full px-4 py-2.5 bg-muted border border-border rounded-lg text-sm" readOnly /></div>
+                                                <div>
+                                                    <label className={labelCls}>Story ID</label>
+                                                    <div className="relative">
+                                                        <input
+                                                            type="text"
+                                                            value={formData.storyId}
+                                                            readOnly
+                                                            className="w-full px-4 py-2.5 bg-muted border border-border rounded-lg text-sm pr-10 cursor-default"
+                                                        />
+                                                        <button
+                                                            onClick={handleStoryIdEditStart}
+                                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                                            title="Edit Story ID"
+                                                        >
+                                                            <i className="fa-solid fa-pencil" style={{ fontSize: 11 }}></i>
+                                                        </button>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                                                        <i className="fa-solid fa-circle-info text-indigo-400" style={{ fontSize: 10 }}></i>
+                                                        Auto-generated · click <i className="fa-solid fa-pencil text-indigo-400 mx-0.5" style={{ fontSize: 9 }}></i> to change
+                                                    </p>
+                                                </div>
                                                 <div><label className={labelCls}>Story Type</label><CustomSelect value={formData.storyType} onChange={v => handleInputChange('storyType', v)} options={storyTypeOpts} /></div>
                                                 <div className="sm:col-span-2"><label className={labelCls}>Story Title <span className="text-destructive">*</span></label><input type="text" value={formData.storyTitle} onChange={e => handleInputChange('storyTitle', e.target.value)} placeholder="Enter story title..." className={inputCls} /></div>
                                                 <div className="sm:col-span-2"><label className={labelCls}>Story Summary</label><textarea rows="3" value={formData.storySummary} onChange={e => handleInputChange('storySummary', e.target.value)} className={inputCls} placeholder="Brief summary..." /></div>
@@ -1212,13 +1114,7 @@ const UserStoryMapping = () => {
                                                         Linked Features
                                                         {formData.linkedFeatures.length > 0 && <span className="ml-2 px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs font-bold rounded-full normal-case">{formData.linkedFeatures.length}</span>}
                                                     </label>
-                                                    <MultiSelect
-                                                        values={formData.linkedFeatures}
-                                                        onChange={v => handleInputChange('linkedFeatures', v)}
-                                                        options={featureOpts}
-                                                        placeholder={featuresLoading ? 'Loading features…' : featureOpts.length === 0 ? 'No features found' : 'Select features…'}
-                                                        searchPlaceholder="Search features..."
-                                                    />
+                                                    <MultiSelect values={formData.linkedFeatures} onChange={v => handleInputChange('linkedFeatures', v)} options={featureOpts} placeholder={featuresLoading ? 'Loading features…' : featureOpts.length === 0 ? 'No features found' : 'Select features…'} searchPlaceholder="Search features..." />
                                                 </div>
                                             </div>
                                         </Section>
@@ -1292,8 +1188,6 @@ const UserStoryMapping = () => {
 
                                     {/* ── RIGHT SIDEBAR ── */}
                                     <div className="space-y-6">
-
-                                        {/* Quick Information */}
                                         <div className="bg-card border border-border rounded-lg shadow-sm p-6">
                                             <h3 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2"><i className="fa-solid fa-circle-info text-primary"></i> Quick Information</h3>
                                             <div className="space-y-4">
@@ -1308,139 +1202,48 @@ const UserStoryMapping = () => {
                                                 </div>
                                                 {formData.linkedFeatures.length > 0 && (
                                                     <div className="pt-3 border-t border-border">
-                                                        <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1.5">
-                                                            <i className="fa-solid fa-puzzle-piece text-purple-500 text-xs"></i>
-                                                            Linked Features
-                                                            <span className="ml-auto px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs font-bold rounded-full">{formData.linkedFeatures.length}</span>
-                                                        </p>
-                                                        <div className="flex flex-wrap gap-1.5">
-                                                            {formData.linkedFeatures.map(f => (
-                                                                <span key={f} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-50 border border-purple-200 text-purple-700 text-xs font-medium rounded-md">
-                                                                    <i className="fa-solid fa-puzzle-piece text-purple-400" style={{ fontSize: 9 }}></i>{f}
-                                                                </span>
-                                                            ))}
-                                                        </div>
+                                                        <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1.5"><i className="fa-solid fa-puzzle-piece text-purple-500 text-xs"></i>Linked Features<span className="ml-auto px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs font-bold rounded-full">{formData.linkedFeatures.length}</span></p>
+                                                        <div className="flex flex-wrap gap-1.5">{formData.linkedFeatures.map(f => (<span key={f} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-50 border border-purple-200 text-purple-700 text-xs font-medium rounded-md"><i className="fa-solid fa-puzzle-piece text-purple-400" style={{ fontSize: 9 }}></i>{f}</span>))}</div>
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
 
-                                        {/* ── TEAM ASSIGNMENT ── */}
                                         <div className="bg-card border border-border rounded-lg shadow-sm p-6">
                                             <h3 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2">
-                                                <i className="fa-solid fa-users text-primary"></i>
-                                                Team Assignment
-                                                {profilesLoading && (
-                                                    <span className="text-xs text-muted-foreground font-normal ml-1 flex items-center gap-1">
-                                                        <span className="w-3 h-3 border border-primary border-t-transparent rounded-full animate-spin inline-block"></span>
-                                                        loading…
-                                                    </span>
-                                                )}
-                                                {!profilesLoading && teamMemberOpts.length === 0 && (
-                                                    <span className="text-xs text-amber-500 font-normal ml-1">(no profiles found)</span>
-                                                )}
+                                                <i className="fa-solid fa-users text-primary"></i>Team Assignment
+                                                {profilesLoading && <span className="text-xs text-muted-foreground font-normal ml-1 flex items-center gap-1"><span className="w-3 h-3 border border-primary border-t-transparent rounded-full animate-spin inline-block"></span>loading…</span>}
+                                                {!profilesLoading && teamMemberOpts.length === 0 && <span className="text-xs text-amber-500 font-normal ml-1">(no profiles found)</span>}
                                             </h3>
                                             <div className="space-y-5">
-
-                                                {/* Assigned BA */}
                                                 <div>
-                                                    <label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-2">
-                                                        <i className="fa-solid fa-user-tie text-purple-500 text-xs"></i>
-                                                        Assigned BA
-                                                        {formData.assignedBa.length > 0 && (
-                                                            <span className="ml-auto px-1.5 py-0.5 bg-primary bg-opacity-10 text-primary text-xs font-bold rounded-full">{formData.assignedBa.length}</span>
-                                                        )}
-                                                    </label>
-                                                    <MultiSelect
-                                                        values={formData.assignedBa}
-                                                        onChange={v => handleInputChange('assignedBa', v)}
-                                                        options={teamMemberOpts}
-                                                        placeholder={profilesLoading ? 'Loading members…' : teamMemberOpts.length === 0 ? 'No profiles found' : 'Select BAs…'}
-                                                        searchPlaceholder="Search members..."
-                                                    />
+                                                    <label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-2"><i className="fa-solid fa-user-tie text-purple-500 text-xs"></i>Assigned BA{formData.assignedBa.length > 0 && <span className="ml-auto px-1.5 py-0.5 bg-primary bg-opacity-10 text-primary text-xs font-bold rounded-full">{formData.assignedBa.length}</span>}</label>
+                                                    <MultiSelect values={formData.assignedBa} onChange={v => handleInputChange('assignedBa', v)} options={teamMemberOpts} placeholder={profilesLoading ? 'Loading members…' : teamMemberOpts.length === 0 ? 'No profiles found' : 'Select BAs…'} searchPlaceholder="Search members..." />
                                                 </div>
-
-                                                {/* Developer Sub-section */}
                                                 <div className="border border-blue-200 rounded-xl p-4 space-y-4 bg-blue-50/40">
-                                                    <p className="text-xs font-semibold text-blue-700 flex items-center gap-1.5">
-                                                        <i className="fa-solid fa-code text-blue-500 text-xs"></i>
-                                                        Developers
-                                                    </p>
-
-                                                    {/* Frontend Developer */}
+                                                    <p className="text-xs font-semibold text-blue-700 flex items-center gap-1.5"><i className="fa-solid fa-code text-blue-500 text-xs"></i>Developers</p>
                                                     <div>
-                                                        <label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-2">
-                                                            <span className="w-4 h-4 rounded bg-blue-100 flex items-center justify-center flex-shrink-0">
-                                                                <i className="fa-solid fa-desktop text-blue-500" style={{ fontSize: 9 }}></i>
-                                                            </span>
-                                                            Frontend Developer
-                                                            {formData.assignedFrontendDeveloper.length > 0 && (
-                                                                <span className="ml-auto px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">{formData.assignedFrontendDeveloper.length}</span>
-                                                            )}
-                                                        </label>
-                                                        <MultiSelect
-                                                            values={formData.assignedFrontendDeveloper}
-                                                            onChange={v => handleInputChange('assignedFrontendDeveloper', v)}
-                                                            options={teamMemberOpts}
-                                                            placeholder={profilesLoading ? 'Loading members…' : teamMemberOpts.length === 0 ? 'No profiles found' : 'Select Frontend Devs…'}
-                                                            searchPlaceholder="Search members..."
-                                                        />
+                                                        <label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-2"><span className="w-4 h-4 rounded bg-blue-100 flex items-center justify-center flex-shrink-0"><i className="fa-solid fa-desktop text-blue-500" style={{ fontSize: 9 }}></i></span>Frontend Developer{formData.assignedFrontendDeveloper.length > 0 && <span className="ml-auto px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">{formData.assignedFrontendDeveloper.length}</span>}</label>
+                                                        <MultiSelect values={formData.assignedFrontendDeveloper} onChange={v => handleInputChange('assignedFrontendDeveloper', v)} options={teamMemberOpts} placeholder={profilesLoading ? 'Loading members…' : teamMemberOpts.length === 0 ? 'No profiles found' : 'Select Frontend Devs…'} searchPlaceholder="Search members..." />
                                                     </div>
-
-                                                    {/* Backend Developer */}
                                                     <div>
-                                                        <label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-2">
-                                                            <span className="w-4 h-4 rounded bg-indigo-100 flex items-center justify-center flex-shrink-0">
-                                                                <i className="fa-solid fa-server text-indigo-500" style={{ fontSize: 9 }}></i>
-                                                            </span>
-                                                            Backend Developer
-                                                            {formData.assignedBackendDeveloper.length > 0 && (
-                                                                <span className="ml-auto px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full">{formData.assignedBackendDeveloper.length}</span>
-                                                            )}
-                                                        </label>
-                                                        <MultiSelect
-                                                            values={formData.assignedBackendDeveloper}
-                                                            onChange={v => handleInputChange('assignedBackendDeveloper', v)}
-                                                            options={teamMemberOpts}
-                                                            placeholder={profilesLoading ? 'Loading members…' : teamMemberOpts.length === 0 ? 'No profiles found' : 'Select Backend Devs…'}
-                                                            searchPlaceholder="Search members..."
-                                                        />
+                                                        <label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-2"><span className="w-4 h-4 rounded bg-indigo-100 flex items-center justify-center flex-shrink-0"><i className="fa-solid fa-server text-indigo-500" style={{ fontSize: 9 }}></i></span>Backend Developer{formData.assignedBackendDeveloper.length > 0 && <span className="ml-auto px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full">{formData.assignedBackendDeveloper.length}</span>}</label>
+                                                        <MultiSelect values={formData.assignedBackendDeveloper} onChange={v => handleInputChange('assignedBackendDeveloper', v)} options={teamMemberOpts} placeholder={profilesLoading ? 'Loading members…' : teamMemberOpts.length === 0 ? 'No profiles found' : 'Select Backend Devs…'} searchPlaceholder="Search members..." />
                                                     </div>
                                                 </div>
-
-                                                {/* Assigned Tester */}
                                                 <div>
-                                                    <label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-2">
-                                                        <i className="fa-solid fa-flask text-green-500 text-xs"></i>
-                                                        Assigned Tester
-                                                        {formData.assignedTester.length > 0 && (
-                                                            <span className="ml-auto px-1.5 py-0.5 bg-primary bg-opacity-10 text-primary text-xs font-bold rounded-full">{formData.assignedTester.length}</span>
-                                                        )}
-                                                    </label>
-                                                    <MultiSelect
-                                                        values={formData.assignedTester}
-                                                        onChange={v => handleInputChange('assignedTester', v)}
-                                                        options={teamMemberOpts}
-                                                        placeholder={profilesLoading ? 'Loading members…' : teamMemberOpts.length === 0 ? 'No profiles found' : 'Select Testers…'}
-                                                        searchPlaceholder="Search members..."
-                                                    />
+                                                    <label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-2"><i className="fa-solid fa-flask text-green-500 text-xs"></i>Assigned Tester{formData.assignedTester.length > 0 && <span className="ml-auto px-1.5 py-0.5 bg-primary bg-opacity-10 text-primary text-xs font-bold rounded-full">{formData.assignedTester.length}</span>}</label>
+                                                    <MultiSelect values={formData.assignedTester} onChange={v => handleInputChange('assignedTester', v)} options={teamMemberOpts} placeholder={profilesLoading ? 'Loading members…' : teamMemberOpts.length === 0 ? 'No profiles found' : 'Select Testers…'} searchPlaceholder="Search members..." />
                                                 </div>
-
                                                 {!profilesLoading && teamMemberOpts.length === 0 && (
                                                     <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                                                         <i className="fa-solid fa-triangle-exclamation text-amber-500 text-xs mt-0.5 flex-shrink-0"></i>
-                                                        <p className="text-xs text-amber-700 leading-relaxed">
-                                                            No profiles loaded. You may need to add a Supabase RLS policy:
-                                                            <code className="block mt-1 bg-amber-100 px-2 py-1 rounded font-mono text-xs">
-                                                                CREATE POLICY "read_profiles" ON profiles FOR SELECT USING (true);
-                                                            </code>
-                                                        </p>
+                                                        <p className="text-xs text-amber-700 leading-relaxed">No profiles loaded. You may need to add a Supabase RLS policy:<code className="block mt-1 bg-amber-100 px-2 py-1 rounded font-mono text-xs">CREATE POLICY "read_profiles" ON profiles FOR SELECT USING (true);</code></p>
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
 
-                                        {/* Status Tracking */}
                                         <div className="bg-card border border-border rounded-lg shadow-sm p-6">
                                             <h3 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2"><i className="fa-solid fa-tasks text-primary"></i> Status Tracking</h3>
                                             <div className="space-y-4">
@@ -1450,16 +1253,12 @@ const UserStoryMapping = () => {
                                                 <div><p className="text-xs text-muted-foreground mb-2">QA Status</p><CustomSelect value={formData.qaStatus} onChange={v => handleInputChange('qaStatus', v)} options={qaStatusOpts} /></div>
                                                 <div><p className="text-xs text-muted-foreground mb-2">Release Status</p><CustomSelect value={formData.releaseStatus} onChange={v => handleInputChange('releaseStatus', v)} options={releaseStatusOpts} /></div>
                                                 <div className="pt-4 border-t border-border">
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <input type="checkbox" checked={formData.blocked} onChange={e => handleInputChange('blocked', e.target.checked)} className="w-4 h-4 text-primary rounded" />
-                                                        <p className="text-xs font-semibold text-muted-foreground">Blocked</p>
-                                                    </div>
+                                                    <div className="flex items-center gap-2 mb-2"><input type="checkbox" checked={formData.blocked} onChange={e => handleInputChange('blocked', e.target.checked)} className="w-4 h-4 text-primary rounded" /><p className="text-xs font-semibold text-muted-foreground">Blocked</p></div>
                                                     {formData.blocked && <textarea rows="2" value={formData.blockedReason} onChange={e => handleInputChange('blockedReason', e.target.value)} className="w-full px-3 py-2 bg-input border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Describe the blocker..." />}
                                                 </div>
                                             </div>
                                         </div>
 
-                                        {/* Related Items */}
                                         <div className="bg-card border border-border rounded-lg shadow-sm p-6">
                                             <h3 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2"><i className="fa-solid fa-link text-primary"></i> Related Items</h3>
                                             <div className="space-y-3">
@@ -1469,7 +1268,6 @@ const UserStoryMapping = () => {
                                             </div>
                                         </div>
 
-                                        {/* Audit Information */}
                                         <div className="bg-card border border-border rounded-lg shadow-sm p-6">
                                             <h3 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2"><i className="fa-solid fa-clock text-primary"></i> Audit Information</h3>
                                             <div className="space-y-3">
@@ -1482,7 +1280,6 @@ const UserStoryMapping = () => {
                                                 </div>
                                             </div>
                                         </div>
-
                                     </div>
                                 </div>
                             )}
@@ -1499,23 +1296,11 @@ const UserStoryMapping = () => {
                             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground"><i className="fa-solid fa-clock"></i><span>Last saved: {lastSaved}</span></div>
                                 <div className="flex items-center gap-3">
-
-                                    <button
-                                        onClick={handleSaveDraft}
-                                        disabled={saveLoading}
-                                        className="px-6 py-2.5 bg-card border border-border text-foreground rounded-lg text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50"
-                                    >
-                                        <i className="fa-solid fa-floppy-disk mr-2"></i>
-                                        {saveLoading ? 'Saving...' : 'Save Draft'}
+                                    <button onClick={handleSaveDraft} disabled={saveLoading} className="px-6 py-2.5 bg-card border border-border text-foreground rounded-lg text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50">
+                                        <i className="fa-solid fa-floppy-disk mr-2"></i>{saveLoading ? 'Saving...' : 'Save Draft'}
                                     </button>
-
-                                    <button
-                                        onClick={handleSaveAndSubmit}
-                                        disabled={saveLoading}
-                                        className="px-6 py-2.5 bg-card border border-border text-foreground rounded-lg text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50"
-                                    >
-                                        <i className="fa-solid fa-check mr-2"></i>
-                                        {saveLoading ? 'Submitting...' : 'Save & Submit'}
+                                    <button onClick={handleSaveAndSubmit} disabled={saveLoading} className="px-6 py-2.5 bg-card border border-border text-foreground rounded-lg text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50">
+                                        <i className="fa-solid fa-check mr-2"></i>{saveLoading ? 'Submitting...' : 'Save & Submit'}
                                     </button>
                                 </div>
                             </div>

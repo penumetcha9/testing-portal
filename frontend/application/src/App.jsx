@@ -11,6 +11,7 @@ const VersionManagement = lazy(() => import("./pages/VersionManagement"));
 const CreateVersion = lazy(() => import("./pages/CreateVersion"));
 const ModulesLibrary = lazy(() => import("./pages/ModulesLibrary"));
 const FeaturesLibrary = lazy(() => import("./pages/FeaturesLibrary"));
+const UserStoriesList = lazy(() => import("./pages/UserStoriesList"));
 const UserStoryMapping = lazy(() => import("./pages/UserStoryMapping"));
 const TestExecution = lazy(() => import("./pages/TestExecution"));
 const FailedIssues = lazy(() => import("./pages/FailedIssues"));
@@ -79,9 +80,17 @@ function ProtectedLayout() {
               element={can("view_features", role) ? <FeaturesLibrary /> : <AccessDenied />}
             />
 
-            {/* ── User Story Mapping — admin, developer, tester ── */}
+            {/* ── User Stories: list at /stories, detail at /stories/:storyId ── */}
             <Route
               path="/stories"
+              element={can("view_user_stories", role) ? <UserStoriesList /> : <AccessDenied />}
+            />
+            <Route
+              path="/stories/new"
+              element={can("view_user_stories", role) ? <UserStoryMapping /> : <AccessDenied />}
+            />
+            <Route
+              path="/stories/:storyId"
               element={can("view_user_stories", role) ? <UserStoryMapping /> : <AccessDenied />}
             />
 
