@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { supabase } from '../services/supabaseClient'
 
+// ─── If you use React Router, uncomment this line: ───────────
+// import { useNavigate } from 'react-router-dom'
+
 // ─── Constants ───────────────────────────────────────────────
 const ROLES = [
     { value: 'tester', label: 'Tester', icon: '🧪' },
@@ -8,10 +11,9 @@ const ROLES = [
     { value: 'admin', label: 'Admin', icon: '🔑' },
 ]
 
-// ─── NexTech Logo ────────────────────────────────────────────
 function NexTechLogo({ size = 52 }) {
     return (
-        <div style={{ width: size, height: size, borderRadius: 12, overflow: 'hidden', background: '#fce8dc', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <div style={{ width: size, height: size, borderRadius: 10, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <img src="data:image/png;base64,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" alt="NexTech Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </div>
     )
@@ -222,6 +224,9 @@ function OAuthButton({ icon, label, onClick, disabled }) {
 // ─── Main LoginPage ───────────────────────────────────────────
 // view: 'login' | 'signup' | 'forgot'
 export default function LoginPage() {
+    // ── If using React Router, uncomment: ──────────────────────
+    // const navigate = useNavigate()
+
     const [view, setView] = useState('login')
     const [fullName, setFullName] = useState('')
     const [email, setEmail] = useState('')
@@ -233,6 +238,39 @@ export default function LoginPage() {
     const [error, setError] = useState(null)
     const [success, setSuccess] = useState(null)
 
+    // ─────────────────────────────────────────────────────────
+    // ✅ FIX: Listen for auth state changes and redirect on sign-in.
+    // Uses a ref guard to prevent React Strict Mode double-mount
+    // from creating two competing Supabase lock subscribers.
+    // ─────────────────────────────────────────────────────────
+    const authListenerRef = useRef(null)
+
+    useEffect(() => {
+        // If a subscription already exists (Strict Mode double-mount), skip
+        if (authListenerRef.current) return
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_IN' && session) {
+                // ── Option A: React Router (uncomment if using react-router-dom) ──
+                // navigate('/dashboard')
+
+                // ── Option B: Plain redirect (works with Next.js, Vite, CRA, etc.) ──
+                window.location.href = '/dashboard'
+            }
+        })
+
+        authListenerRef.current = subscription
+
+        // Cleanup on true unmount
+        return () => {
+            subscription.unsubscribe()
+            authListenerRef.current = null
+        }
+
+        // If using React Router's navigate, add it as a dependency:
+        // }, [navigate])
+    }, [])
+
     const reset = () => { setError(null); setSuccess(null) }
     const switchView = (v) => { reset(); setView(v) }
     const anyLoading = loading || !!oauthLoading
@@ -242,9 +280,12 @@ export default function LoginPage() {
         e.preventDefault()
         setLoading(true); reset()
         const { error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error) setError(error.message)
-        // Success → onAuthStateChange fires → your router redirects
-        setLoading(false)
+        if (error) {
+            setError(error.message)
+            setLoading(false)
+        }
+        // ✅ On success: onAuthStateChange fires above → redirects to /dashboard
+        // Do NOT setLoading(false) on success — keeps button disabled during redirect
     }
 
     // ── Email sign up ─────────────────────────────────────────
@@ -284,7 +325,6 @@ export default function LoginPage() {
     }
 
     // ── Google OAuth ──────────────────────────────────────────
-    // Requires: Supabase Dashboard → Auth → Providers → Google → enabled
     async function handleGoogleLogin() {
         setOauthLoading('google'); reset()
         const { error } = await supabase.auth.signInWithOAuth({
@@ -295,12 +335,10 @@ export default function LoginPage() {
             },
         })
         if (error) { setError(error.message); setOauthLoading(null) }
-        // Success → browser redirects; spinner stays until navigation
+        // Success → browser redirects via Supabase OAuth flow
     }
 
     // ── Microsoft OAuth ───────────────────────────────────────
-    // Requires: Supabase Dashboard → Auth → Providers → Azure → enabled
-    // In Azure AD: register app, add redirect URI, copy Client ID + Secret → Supabase
     async function handleMicrosoftLogin() {
         setOauthLoading('microsoft'); reset()
         const { error } = await supabase.auth.signInWithOAuth({
@@ -399,7 +437,6 @@ export default function LoginPage() {
 
                         {/* Testing doodle background */}
                         <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.07, pointerEvents: 'none' }} xmlns="http://www.w3.org/2000/svg">
-                            {/* Bug icon top-right */}
                             <g transform="translate(340,30) rotate(-15)">
                                 <ellipse cx="16" cy="10" rx="10" ry="7" stroke="#064e3b" strokeWidth="2.5" fill="none" />
                                 <line x1="16" y1="3" x2="16" y2="-4" stroke="#064e3b" strokeWidth="2.5" strokeLinecap="round" />
@@ -409,7 +446,6 @@ export default function LoginPage() {
                                 <line x1="26" y1="13" x2="34" y2="13" stroke="#064e3b" strokeWidth="2.5" strokeLinecap="round" />
                                 <ellipse cx="16" cy="17" rx="10" ry="7" stroke="#064e3b" strokeWidth="2.5" fill="none" />
                             </g>
-                            {/* Checklist top-left */}
                             <g transform="translate(28,60)">
                                 <rect x="0" y="0" width="32" height="40" rx="4" stroke="#064e3b" strokeWidth="2.5" fill="none" />
                                 <line x1="8" y1="10" x2="24" y2="10" stroke="#064e3b" strokeWidth="2" strokeLinecap="round" />
@@ -418,18 +454,15 @@ export default function LoginPage() {
                                 <polyline points="5,28 8,31 13,25" stroke="#064e3b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
                                 <line x1="16" y1="28" x2="24" y2="28" stroke="#064e3b" strokeWidth="2" strokeLinecap="round" />
                             </g>
-                            {/* Code brackets bottom-left */}
                             <g transform="translate(60,460)">
                                 <polyline points="0,0 -18,16 0,32" stroke="#064e3b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />
                                 <polyline points="40,0 58,16 40,32" stroke="#064e3b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />
                                 <line x1="18" y1="0" x2="22" y2="32" stroke="#064e3b" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
                             </g>
-                            {/* Magnifier mid-right */}
                             <g transform="translate(330,220) rotate(30)">
                                 <circle cx="14" cy="14" r="12" stroke="#064e3b" strokeWidth="2.5" fill="none" />
                                 <line x1="23" y1="23" x2="34" y2="34" stroke="#064e3b" strokeWidth="3" strokeLinecap="round" />
                             </g>
-                            {/* Chart bars bottom-right */}
                             <g transform="translate(310,440)">
                                 <rect x="0" y="28" width="10" height="20" rx="2" stroke="#064e3b" strokeWidth="2.5" fill="none" />
                                 <rect x="14" y="16" width="10" height="32" rx="2" stroke="#064e3b" strokeWidth="2.5" fill="none" />
@@ -437,12 +470,10 @@ export default function LoginPage() {
                                 <rect x="42" y="22" width="10" height="26" rx="2" stroke="#064e3b" strokeWidth="2.5" fill="none" />
                                 <line x1="-4" y1="50" x2="56" y2="50" stroke="#064e3b" strokeWidth="2" strokeLinecap="round" />
                             </g>
-                            {/* Play/Run button mid-left */}
                             <g transform="translate(24,280)">
                                 <circle cx="22" cy="22" r="20" stroke="#064e3b" strokeWidth="2.5" fill="none" />
                                 <polygon points="16,12 34,22 16,32" stroke="#064e3b" strokeWidth="2" fill="none" strokeLinejoin="round" />
                             </g>
-                            {/* Test tube / flask top-center */}
                             <g transform="translate(180,20) rotate(15)">
                                 <line x1="8" y1="0" x2="8" y2="28" stroke="#064e3b" strokeWidth="2.5" strokeLinecap="round" />
                                 <line x1="20" y1="0" x2="20" y2="28" stroke="#064e3b" strokeWidth="2.5" strokeLinecap="round" />
@@ -450,13 +481,11 @@ export default function LoginPage() {
                                 <line x1="4" y1="2" x2="24" y2="2" stroke="#064e3b" strokeWidth="2.5" strokeLinecap="round" />
                                 <circle cx="14" cy="36" r="3" stroke="#064e3b" strokeWidth="1.5" fill="none" opacity="0.6" />
                             </g>
-                            {/* Wifi / signal waves mid-center */}
                             <g transform="translate(190,310)">
                                 <path d="M0,30 Q20,-10 40,30" stroke="#064e3b" strokeWidth="2.5" fill="none" strokeLinecap="round" />
                                 <path d="M8,30 Q20,5 32,30" stroke="#064e3b" strokeWidth="2.5" fill="none" strokeLinecap="round" />
                                 <circle cx="20" cy="30" r="3" stroke="#064e3b" strokeWidth="2" fill="none" />
                             </g>
-                            {/* Stars / sparkles */}
                             <g transform="translate(140,160)" opacity="0.8">
                                 <line x1="6" y1="0" x2="6" y2="12" stroke="#E87722" strokeWidth="2" strokeLinecap="round" />
                                 <line x1="0" y1="6" x2="12" y2="6" stroke="#E87722" strokeWidth="2" strokeLinecap="round" />
@@ -473,7 +502,6 @@ export default function LoginPage() {
                                 <line x1="1.5" y1="1.5" x2="8.5" y2="8.5" stroke="#E87722" strokeWidth="1.5" strokeLinecap="round" />
                                 <line x1="8.5" y1="1.5" x2="1.5" y2="8.5" stroke="#E87722" strokeWidth="1.5" strokeLinecap="round" />
                             </g>
-                            {/* Dots grid */}
                             {[0, 1, 2, 3, 4].map(row =>
                                 [0, 1, 2, 3].map(col => (
                                     <circle key={`${row}-${col}`} cx={240 + col * 22} cy={80 + row * 22} r="2.5" fill="#064e3b" opacity="0.5" />

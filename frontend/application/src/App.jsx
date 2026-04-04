@@ -2,7 +2,6 @@ import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useRole } from "./hooks/useRole";
 import Sidebar from "./components/Sidebar";
-import { can } from "./components/RoleGuard";
 
 // ── All pages load lazily — only downloaded when the user navigates to them ──
 const Login = lazy(() => import("./pages/Login"));
@@ -26,19 +25,6 @@ function PageLoader() {
   );
 }
 
-// ── Shown when a user tries to access a page they don't have permission for ──
-function AccessDenied() {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-      <i className="fa-solid fa-lock text-4xl text-muted-foreground" />
-      <h2 className="text-xl font-bold text-foreground">Access Denied</h2>
-      <p className="text-muted-foreground text-sm">
-        You don't have permission to view this page.
-      </p>
-    </div>
-  );
-}
-
 // ── Layout for all authenticated pages (sidebar + content) ───────────────────
 function ProtectedLayout() {
   const { role, loading } = useRole();
@@ -55,64 +41,17 @@ function ProtectedLayout() {
       <div className="flex-1 overflow-auto flex flex-col">
         <Suspense fallback={<PageLoader />}>
           <Routes>
-            {/* ── Dashboard — all roles ── */}
             <Route path="/" element={<Dashboard />} />
-
-            {/* ── Version Management — admin only ── */}
-            <Route
-              path="/versions"
-              element={can("view_version_management", role) ? <VersionManagement /> : <AccessDenied />}
-            />
-            <Route
-              path="/versions/new"
-              element={can("create_version", role) ? <CreateVersion /> : <AccessDenied />}
-            />
-
-            {/* ── Modules Library — admin, developer, tester ── */}
-            <Route
-              path="/modules"
-              element={can("view_modules", role) ? <ModulesLibrary /> : <AccessDenied />}
-            />
-
-            {/* ── Features Library — admin, developer, tester ── */}
-            <Route
-              path="/features"
-              element={can("view_features", role) ? <FeaturesLibrary /> : <AccessDenied />}
-            />
-
-            {/* ── User Stories: list at /stories, detail at /stories/:storyId ── */}
-            <Route
-              path="/stories"
-              element={can("view_user_stories", role) ? <UserStoriesList /> : <AccessDenied />}
-            />
-            <Route
-              path="/stories/new"
-              element={can("view_user_stories", role) ? <UserStoryMapping /> : <AccessDenied />}
-            />
-            <Route
-              path="/stories/:storyId"
-              element={can("view_user_stories", role) ? <UserStoryMapping /> : <AccessDenied />}
-            />
-
-            {/* ── Test Execution — admin, tester ── */}
-            <Route
-              path="/test-execution"
-              element={can("view_test_execution", role) ? <TestExecution /> : <AccessDenied />}
-            />
-
-            {/* ── Failed Issues — all roles ── */}
-            <Route
-              path="/failed-issues"
-              element={can("view_failed_issues", role) ? <FailedIssues /> : <AccessDenied />}
-            />
-
-            {/* ── User Management — admin only ── */}
-            <Route
-              path="/users"
-              element={can("manage_users", role) ? <UserManagement /> : <AccessDenied />}
-            />
-
-            {/* ── Catch-all — redirect home ── */}
+            <Route path="/versions" element={<VersionManagement />} />
+            <Route path="/versions/new" element={<CreateVersion />} />
+            <Route path="/modules" element={<ModulesLibrary />} />
+            <Route path="/features" element={<FeaturesLibrary />} />
+            <Route path="/stories" element={<UserStoriesList />} />
+            <Route path="/stories/new" element={<UserStoryMapping />} />
+            <Route path="/stories/:storyId" element={<UserStoryMapping />} />
+            <Route path="/test-execution" element={<TestExecution />} />
+            <Route path="/failed-issues" element={<FailedIssues />} />
+            <Route path="/users" element={<UserManagement />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>

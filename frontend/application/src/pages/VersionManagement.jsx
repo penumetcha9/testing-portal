@@ -68,13 +68,13 @@ const CONFIRM_STYLES = {
 
 const DD_BTN_BASE = { width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: "10px", fontSize: "13.5px", cursor: "pointer", outline: "none", letterSpacing: "0.01em" };
 
+// ── Shared Components ─────────────────────────────────────────────────────────
+
 const Toast = memo(({ toasts }) => (
     <div style={TOAST_STYLES.wrapper}>
         {toasts.map((t) => (
             <div key={t.id} style={{ ...TOAST_STYLES.base, ...(TOAST_STYLES[t.type] ?? TOAST_STYLES.success) }}>
-                <span style={{ fontSize: 18 }}>
-                    {t.type === "error" ? "❌" : t.type === "warning" ? "⚠️" : "✅"}
-                </span>
+                <span style={{ fontSize: 18 }}>{t.type === "error" ? "❌" : t.type === "warning" ? "⚠️" : "✅"}</span>
                 <span style={{ flex: 1 }}>{t.msg}</span>
             </div>
         ))}
@@ -114,7 +114,8 @@ const DropdownList = memo(({ children }) => (
 DropdownList.displayName = "DropdownList";
 
 const MultiItem = memo(({ opt, isSel, onSelect }) => (
-    <div onClick={() => onSelect(opt.id)} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "13.5px", fontWeight: isSel ? 600 : 400, color: isSel ? "#4f46e5" : "#374151", background: isSel ? "linear-gradient(135deg,#eef2ff 0%,#f0f4ff 100%)" : "transparent", transition: "background 0.12s ease" }}
+    <div onClick={() => onSelect(opt.id)}
+        style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "13.5px", fontWeight: isSel ? 600 : 400, color: isSel ? "#4f46e5" : "#374151", background: isSel ? "linear-gradient(135deg,#eef2ff 0%,#f0f4ff 100%)" : "transparent", transition: "background 0.12s ease" }}
         onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = "#f8fafc"; }}
         onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = "transparent"; }}>
         <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", border: isSel ? "none" : "1.5px solid #cbd5e1", background: isSel ? "linear-gradient(135deg,#6366f1 0%,#4f46e5 100%)" : "#fff" }}>
@@ -126,7 +127,8 @@ const MultiItem = memo(({ opt, isSel, onSelect }) => (
 MultiItem.displayName = "MultiItem";
 
 const SingleItem = memo(({ opt, isSel, onChange }) => (
-    <div onClick={() => onChange(opt.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "13.5px", fontWeight: isSel ? 600 : 400, color: isSel ? "#4f46e5" : "#374151", background: isSel ? "linear-gradient(135deg,#eef2ff 0%,#f0f4ff 100%)" : "transparent", transition: "background 0.12s ease" }}
+    <div onClick={() => onChange(opt.id)}
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "13.5px", fontWeight: isSel ? 600 : 400, color: isSel ? "#4f46e5" : "#374151", background: isSel ? "linear-gradient(135deg,#eef2ff 0%,#f0f4ff 100%)" : "transparent", transition: "background 0.12s ease" }}
         onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = "#f8fafc"; }}
         onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = "transparent"; }}>
         <span>{opt.name}</span>
@@ -225,11 +227,12 @@ const SingleDropdown = memo(({ options, selected, onChange, placeholder = "Selec
 });
 SingleDropdown.displayName = "SingleDropdown";
 
-/* ── Assign Modules Modal ── */
-const AssignModulesModal = memo(({ version, modules, onClose, onSuccess, showToast }) => {
+// ── Assign Modules Full Page ──────────────────────────────────────────────────
+const AssignModulesPage = memo(({ version, modules, onBack, onSuccess, showToast }) => {
     const [selected, setSelected] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [search, setSearch] = useState("");
 
     useEffect(() => {
         async function load() {
@@ -247,6 +250,13 @@ const AssignModulesModal = memo(({ version, modules, onClose, onSuccess, showToa
         setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
     }, []);
 
+    const selectAll = useCallback(() => setSelected(modules.map(m => m.id)), [modules]);
+    const clearAll = useCallback(() => setSelected([]), []);
+
+    const filtered = useMemo(() =>
+        modules.filter(m => m.module_name.toLowerCase().includes(search.toLowerCase())),
+        [modules, search]);
+
     const handleSave = async () => {
         setSaving(true);
         try {
@@ -260,7 +270,7 @@ const AssignModulesModal = memo(({ version, modules, onClose, onSuccess, showToa
             }
             showToast(`Modules assigned to ${version.version_number} ✅`);
             onSuccess();
-            onClose();
+            onBack();
         } catch (err) {
             showToast(err.message, "error");
         } finally {
@@ -269,64 +279,189 @@ const AssignModulesModal = memo(({ version, modules, onClose, onSuccess, showToa
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                <div className="p-6 border-b flex items-center justify-between">
+        <div className="flex-1 flex flex-col min-h-screen bg-gray-50">
+            {/* Header */}
+            <header className="bg-white border-b px-8 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <button onClick={onBack}
+                        className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors text-sm font-medium">
+                        <i className="fa-solid fa-arrow-left" /> Back to Versions
+                    </button>
+                    <div className="w-px h-6 bg-gray-200" />
                     <div>
-                        <h3 className="text-xl font-bold">Assign Modules</h3>
-                        <p className="text-sm text-gray-500 mt-0.5">
-                            {version.version_number} — {selected.length} module{selected.length !== 1 ? "s" : ""} selected
+                        <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                            <i className="fa-solid fa-puzzle-piece text-green-700" />
+                            Assign Modules
+                        </h2>
+                        <p className="text-sm text-gray-500">
+                            {version.version_number} · Build {version.build_number}
                         </p>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl">
-                        <i className="fa-solid fa-times" />
-                    </button>
                 </div>
-                <div className="flex-1 overflow-y-auto p-6">
-                    {loading ? (
-                        <p className="text-center text-gray-400 py-8">Loading modules...</p>
-                    ) : modules.length === 0 ? (
-                        <p className="text-center text-gray-400 py-8">No active modules found.</p>
-                    ) : (
-                        <div className="space-y-2">
-                            {modules.map(mod => {
-                                const isSel = selected.includes(mod.id);
-                                return (
-                                    <div key={mod.id} onClick={() => toggle(mod.id)}
-                                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${isSel ? "border-green-500 bg-green-50" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"}`}>
-                                        <div className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border-2 transition-all ${isSel ? "bg-green-600 border-green-600" : "border-gray-300"}`}>
-                                            {isSel && <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                                                <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                                            </svg>}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-gray-900">{mod.module_name}</p>
-                                            <p className="text-xs text-gray-400">Code: {mod.module_code}</p>
-                                        </div>
-                                        {isSel && <span className="text-xs text-green-600 font-medium">Selected</span>}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
-                <div className="p-6 border-t flex gap-3">
+                <div className="flex items-center gap-3">
+                    <span className="text-sm text-gray-500">
+                        <span className="font-semibold text-green-700">{selected.length}</span> of {modules.length} selected
+                    </span>
                     <button onClick={handleSave} disabled={saving}
-                        className="flex-1 px-6 py-3 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
-                        {saving ? "Saving..." : "Save Assignments"}
-                    </button>
-                    <button onClick={onClose}
-                        className="flex-1 px-6 py-3 border rounded-lg font-medium hover:bg-gray-50 transition-colors">
-                        Cancel
+                        className="flex items-center gap-2 px-5 py-2.5 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 text-sm">
+                        {saving ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : <><i className="fa-solid fa-check" /> Save Assignments</>}
                     </button>
                 </div>
-            </div>
+            </header>
+
+            <main className="flex-1 p-8">
+                <div className="max-w-4xl mx-auto space-y-6">
+
+                    {/* Summary bar */}
+                    <div className="bg-white border border-green-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center">
+                                <i className="fa-solid fa-code-branch text-green-700 text-xl" />
+                            </div>
+                            <div>
+                                <p className="font-bold text-gray-900 text-lg">{version.version_number}</p>
+                                <div className="flex items-center gap-3 mt-0.5">
+                                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_CONFIG[version.status]?.className}`}>
+                                        {STATUS_CONFIG[version.status]?.label}
+                                    </span>
+                                    <span className="text-sm text-gray-500">Build {version.build_number}</span>
+                                    <span className="text-sm text-gray-500">{version.version_type}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="text-center px-4 py-2 bg-green-50 rounded-lg">
+                                <p className="text-2xl font-bold text-green-700">{selected.length}</p>
+                                <p className="text-xs text-gray-500">Selected</p>
+                            </div>
+                            <div className="text-center px-4 py-2 bg-gray-50 rounded-lg">
+                                <p className="text-2xl font-bold text-gray-700">{modules.length - selected.length}</p>
+                                <p className="text-xs text-gray-500">Remaining</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Search + bulk actions */}
+                    <div className="bg-white border border-gray-200 rounded-xl p-5">
+                        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+                            <div className="relative flex-1 max-w-sm">
+                                <i className="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                                <input
+                                    type="text"
+                                    value={search}
+                                    onChange={e => setSearch(e.target.value)}
+                                    placeholder="Search modules..."
+                                    className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300"
+                                />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={selectAll}
+                                    className="px-4 py-2 text-sm font-medium text-green-700 border border-green-300 rounded-lg hover:bg-green-50 transition-colors">
+                                    Select All
+                                </button>
+                                <button onClick={clearAll}
+                                    className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                                    Clear All
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Module list */}
+                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                            <h3 className="font-semibold text-gray-900">
+                                Available Modules
+                                {search && <span className="ml-2 text-sm text-gray-400 font-normal">({filtered.length} results)</span>}
+                            </h3>
+                        </div>
+
+                        {loading ? (
+                            <div className="p-12 text-center">
+                                <i className="fa-solid fa-spinner fa-spin text-green-700 text-3xl mb-3 block" />
+                                <p className="text-gray-500 text-sm">Loading modules…</p>
+                            </div>
+                        ) : filtered.length === 0 ? (
+                            <div className="p-12 text-center">
+                                <i className="fa-solid fa-cube text-gray-300 text-3xl mb-3 block" />
+                                <p className="text-gray-500 text-sm">No modules found</p>
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-gray-50">
+                                {filtered.map((mod, idx) => {
+                                    const isSel = selected.includes(mod.id);
+                                    return (
+                                        <div key={mod.id} onClick={() => toggle(mod.id)}
+                                            className={`flex items-center gap-4 px-6 py-4 cursor-pointer transition-all ${isSel ? "bg-green-50" : "hover:bg-gray-50"}`}>
+                                            {/* Row number */}
+                                            <span className="text-xs text-gray-400 w-6 flex-shrink-0 font-mono">{idx + 1}</span>
+
+                                            {/* Checkbox */}
+                                            <div className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border-2 transition-all ${isSel ? "bg-green-600 border-green-600" : "border-gray-300 bg-white"}`}>
+                                                {isSel && (
+                                                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                                                        <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                                                    </svg>
+                                                )}
+                                            </div>
+
+                                            {/* Module icon */}
+                                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${isSel ? "bg-green-100" : "bg-gray-100"}`}>
+                                                <i className={`fa-solid fa-cube text-sm ${isSel ? "text-green-600" : "text-gray-400"}`} />
+                                            </div>
+
+                                            {/* Info */}
+                                            <div className="flex-1 min-w-0">
+                                                <p className={`text-sm font-semibold ${isSel ? "text-green-900" : "text-gray-900"}`}>
+                                                    {mod.module_name}
+                                                </p>
+                                                <p className="text-xs text-gray-400 mt-0.5">
+                                                    Code: <span className="font-mono">{mod.module_code}</span>
+                                                </p>
+                                            </div>
+
+                                            {/* Status pill */}
+                                            {isSel ? (
+                                                <span className="flex items-center gap-1.5 px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full flex-shrink-0">
+                                                    <i className="fa-solid fa-check text-xs" /> Assigned
+                                                </span>
+                                            ) : (
+                                                <span className="px-3 py-1 bg-gray-100 text-gray-400 text-xs rounded-full flex-shrink-0">
+                                                    Not assigned
+                                                </span>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Bottom save bar */}
+                    <div className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <p className="text-sm text-gray-600">
+                            <span className="font-semibold text-green-700">{selected.length} module{selected.length !== 1 ? "s" : ""}</span> will be assigned to <span className="font-semibold">{version.version_number}</span>
+                        </p>
+                        <div className="flex items-center gap-3">
+                            <button onClick={onBack}
+                                className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
+                                Cancel
+                            </button>
+                            <button onClick={handleSave} disabled={saving}
+                                className="flex items-center gap-2 px-6 py-2.5 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 text-sm">
+                                {saving ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : <><i className="fa-solid fa-check" /> Save Assignments</>}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </main>
         </div>
     );
 });
-AssignModulesModal.displayName = "AssignModulesModal";
+AssignModulesPage.displayName = "AssignModulesPage";
 
-const VersionCard = memo(({ v, onEdit, onArchive, onDelete, onViewDetails, onAssignTests, onViewIssues, onExport, onRestore, onAssignModules }) => (
+// ── Version Card ──────────────────────────────────────────────────────────────
+const VersionCard = memo(({ v, onEdit, onArchive, onDelete, onViewDetails, onAssignTesters, onViewIssues, onExport, onRestore, onAssignModules }) => (
     <div className={`bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow ${v.status === "archived" ? "opacity-60" : ""}`}>
         <div className="p-6">
             <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-4">
@@ -377,7 +512,6 @@ const VersionCard = memo(({ v, onEdit, onArchive, onDelete, onViewDetails, onAss
                 </div>
             </div>
 
-            {/* Linked Modules Preview */}
             {v.linkedModules && v.linkedModules.length > 0 && (
                 <div className="mb-4 flex flex-wrap gap-2">
                     {v.linkedModules.slice(0, 4).map(m => (
@@ -394,19 +528,37 @@ const VersionCard = memo(({ v, onEdit, onArchive, onDelete, onViewDetails, onAss
             )}
 
             <div className="flex flex-wrap gap-2">
-                <button onClick={() => onViewDetails(v)} className="px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">View Details</button>
+                <button onClick={() => onViewDetails(v)}
+                    className="px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+                    View Details
+                </button>
                 {v.status !== "archived" && (
                     <>
-                        <button onClick={() => onAssignTests(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors">Assign Tests</button>
-                        <button onClick={() => onAssignModules(v)} className="px-4 py-2 border border-green-300 text-green-700 rounded-lg text-sm hover:bg-green-50 transition-colors">
-                            <i className="fa-solid fa-puzzle-piece mr-1" /> Assign Modules
+                        {/* ✅ Renamed: Assign Tests → Assign Testers */}
+                        <button onClick={() => onAssignTesters(v)}
+                            className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors flex items-center gap-1.5">
+                            <i className="fa-solid fa-users text-sm" /> Assign Testers
                         </button>
-                        <button onClick={() => onViewIssues(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors">View Issues</button>
+                        {/* ✅ Assign Modules → opens full page */}
+                        <button onClick={() => onAssignModules(v)}
+                            className="px-4 py-2 border border-green-300 text-green-700 rounded-lg text-sm hover:bg-green-50 transition-colors flex items-center gap-1.5">
+                            <i className="fa-solid fa-puzzle-piece" /> Assign Modules
+                        </button>
+                        <button onClick={() => onViewIssues(v)}
+                            className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors">
+                            View Issues
+                        </button>
                     </>
                 )}
-                <button onClick={() => onExport(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors">Export Report</button>
+                <button onClick={() => onExport(v)}
+                    className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors">
+                    Export Report
+                </button>
                 {v.status === "archived" && (
-                    <button onClick={() => onRestore(v)} className="px-4 py-2 border border-green-600 text-green-600 rounded-lg text-sm hover:bg-green-50 transition-colors">Restore</button>
+                    <button onClick={() => onRestore(v)}
+                        className="px-4 py-2 border border-green-600 text-green-600 rounded-lg text-sm hover:bg-green-50 transition-colors">
+                        Restore
+                    </button>
                 )}
             </div>
         </div>
@@ -414,6 +566,7 @@ const VersionCard = memo(({ v, onEdit, onArchive, onDelete, onViewDetails, onAss
 ));
 VersionCard.displayName = "VersionCard";
 
+// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function VersionManagement() {
     const [versions, setVersions] = useState([]);
     const [users, setUsers] = useState([]);
@@ -422,15 +575,18 @@ export default function VersionManagement() {
     const [showModal, setShowModal] = useState(false);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [showAssignModal, setShowAssignModal] = useState(false);
-    const [showModulesModal, setShowModulesModal] = useState(false);
+
+    // ✅ Full page instead of modal for assign modules
+    const [assignModulesVersion, setAssignModulesVersion] = useState(null);
+
     const [selectedVersion, setSelectedVersion] = useState(null);
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [formData, setFormData] = useState(EMPTY_FORM);
-
     const [toasts, setToasts] = useState([]);
+
     const showToast = useCallback((msg, type = "success") => {
         const id = Date.now();
         setToasts(prev => [...prev, { id, msg, type }]);
@@ -461,10 +617,7 @@ export default function VersionManagement() {
 
     const generateBuildNumber = useCallback(() => {
         const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, "0");
-        const sequence = String(Math.floor(Math.random() * 999) + 1).padStart(3, "0");
-        return `${year}.${month}.${sequence}`;
+        return `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, "0")}.${String(Math.floor(Math.random() * 999) + 1).padStart(3, "0")}`;
     }, []);
 
     const handleVersionTypeChange = useCallback((value) => {
@@ -486,12 +639,9 @@ export default function VersionManagement() {
         try {
             setLoading(true);
             const { data: versionData, error: versionError } = await supabase
-                .from("versions")
-                .select("*")
-                .order("created_date", { ascending: false });
+                .from("versions").select("*").order("created_date", { ascending: false });
             if (versionError) throw versionError;
 
-            // Fetch linked modules for each version
             const { data: vmData } = await supabase
                 .from("version_modules")
                 .select("version_id, modules(id, module_name, module_code)");
@@ -502,36 +652,36 @@ export default function VersionManagement() {
                 if (row.modules) modulesByVersion[row.version_id].push(row.modules);
             });
 
-            setVersions((versionData || []).map(v => ({
-                ...v,
-                linkedModules: modulesByVersion[v.id] || [],
-            })));
+            setVersions((versionData || []).map(v => ({ ...v, linkedModules: modulesByVersion[v.id] || [] })));
         } catch (err) { console.error(err); setError(err.message); }
         finally { setLoading(false); }
     }, []);
 
     const fetchUsers = useCallback(async () => {
         try {
-            const { data, error: fetchError } = await supabase
-                .from("users").select("id, name").order("name", { ascending: true });
-            if (fetchError) throw fetchError;
+            const { data, error: e } = await supabase.from("users").select("id, name").order("name");
+            if (e) throw e;
             setUsers(data || []);
         } catch (err) { console.error(err); }
     }, []);
 
     const fetchModules = useCallback(async () => {
         try {
-            const { data, error: fetchError } = await supabase
-                .from("modules")
-                .select("id, module_name, module_code")
-                .eq("status", "Active")
-                .order("module_code", { ascending: true });
-            if (fetchError) throw fetchError;
+            const { data, error: e } = await supabase.from("modules").select("id, module_name, module_code").eq("status", "Active").order("module_code");
+            if (e) throw e;
             setModules(data || []);
         } catch (err) { console.error(err); }
     }, []);
 
     useEffect(() => { fetchVersions(); fetchUsers(); fetchModules(); }, [fetchVersions, fetchUsers, fetchModules]);
+
+    // Keep selectedVersion in sync when versions refresh
+    useEffect(() => {
+        if (selectedVersion) {
+            const fresh = versions.find(v => v.id === selectedVersion.id);
+            if (fresh) setSelectedVersion(fresh);
+        }
+    }, [versions]); // eslint-disable-line
 
     const tabs = useMemo(() => [
         { key: "all", label: "All Versions", count: versions.length },
@@ -550,11 +700,11 @@ export default function VersionManagement() {
     ], [versions]);
 
     const filtered = useMemo(() => {
-        const lowerSearch = search.toLowerCase();
-        return versions.filter((v) => {
+        const q = search.toLowerCase();
+        return versions.filter(v => {
             if (activeTab !== "all" && v.status !== activeTab) return false;
             if (statusFilter && v.status !== statusFilter) return false;
-            if (lowerSearch && !v.version_number.toLowerCase().includes(lowerSearch) && !v.build_number.toLowerCase().includes(lowerSearch)) return false;
+            if (q && !v.version_number.toLowerCase().includes(q) && !v.build_number.toLowerCase().includes(q)) return false;
             return true;
         });
     }, [versions, activeTab, statusFilter, search]);
@@ -586,16 +736,13 @@ export default function VersionManagement() {
     }, [formData, resetForm, fetchVersions, showToast]);
 
     const handleViewDetails = useCallback((v) => { setSelectedVersion(v); setShowDetailsModal(true); }, []);
+    const handleAssignTesters = useCallback((v) => { setSelectedVersion(v); setShowAssignModal(true); }, []);
 
-    // Keep selectedVersion in sync whenever versions array refreshes
-    useEffect(() => {
-        if (selectedVersion) {
-            const fresh = versions.find(v => v.id === selectedVersion.id);
-            if (fresh) setSelectedVersion(fresh);
-        }
-    }, [versions]);
-    const handleAssignTests = useCallback((v) => { setSelectedVersion(v); setShowAssignModal(true); }, []);
-    const handleAssignModules = useCallback((v) => { setSelectedVersion(v); setShowModulesModal(true); }, []);
+    // ✅ Opens full page instead of modal
+    const handleAssignModules = useCallback((v) => {
+        setShowDetailsModal(false);
+        setAssignModulesVersion(v);
+    }, []);
 
     const handleEditVersion = useCallback((v) => {
         setFormData({ version_number: v.version_number, build_number: v.build_number, release_date: v.release_date, status: v.status, version_type: v.version_type, description: v.description || "", selectedTesters: [] });
@@ -683,9 +830,24 @@ export default function VersionManagement() {
     }, [showConfirm, fetchVersions, showToast]);
 
     const handleResetFilters = useCallback(() => { setSearch(""); setStatusFilter(""); setActiveTab("all"); }, []);
-
     const setTestersSel = useCallback((sel) => setFormData(prev => ({ ...prev, selectedTesters: sel })), []);
     const setStatus = useCallback((v) => setFormData(prev => ({ ...prev, status: v })), []);
+
+    // ✅ If assign modules page is open, render it full screen
+    if (assignModulesVersion) {
+        return (
+            <>
+                <Toast toasts={toasts} />
+                <AssignModulesPage
+                    version={assignModulesVersion}
+                    modules={modules}
+                    onBack={() => setAssignModulesVersion(null)}
+                    onSuccess={fetchVersions}
+                    showToast={showToast}
+                />
+            </>
+        );
+    }
 
     if (loading) return (
         <div className="flex-1 flex items-center justify-center">
@@ -773,18 +935,22 @@ export default function VersionManagement() {
                     ) : (
                         filtered.map((v) => (
                             <VersionCard key={v.id} v={v}
-                                onEdit={handleEditVersion} onArchive={handleArchiveVersion}
-                                onDelete={handleDeleteVersion} onViewDetails={handleViewDetails}
-                                onAssignTests={handleAssignTests} onViewIssues={handleViewIssues}
-                                onExport={handleExportReport} onRestore={handleRestoreVersion}
-                                onAssignModules={handleAssignModules}
+                                onEdit={handleEditVersion}
+                                onArchive={handleArchiveVersion}
+                                onDelete={handleDeleteVersion}
+                                onViewDetails={handleViewDetails}
+                                onAssignTesters={handleAssignTesters}   // ✅ renamed
+                                onViewIssues={handleViewIssues}
+                                onExport={handleExportReport}
+                                onRestore={handleRestoreVersion}
+                                onAssignModules={handleAssignModules}   // ✅ opens full page
                             />
                         ))
                     )}
                 </div>
             </main>
 
-            {/* Create / Edit Modal */}
+            {/* ── Create / Edit Modal ── */}
             {showModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
                     <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -886,12 +1052,10 @@ export default function VersionManagement() {
                 </div>
             )}
 
-            {/* View Details Modal */}
+            {/* ── View Details Modal ── */}
             {showDetailsModal && selectedVersion && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setShowDetailsModal(false)}>
                     <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-
-                        {/* Header */}
                         <div className="p-6 border-b flex items-center justify-between sticky top-0 bg-white z-10">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -911,8 +1075,6 @@ export default function VersionManagement() {
                         </div>
 
                         <div className="p-6 space-y-5">
-
-                            {/* Key Info Grid */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                 {[
                                     { label: "Release Date", value: new Date(selectedVersion.release_date).toLocaleDateString(), icon: "fa-calendar", color: "text-blue-600", bg: "bg-blue-50" },
@@ -930,7 +1092,6 @@ export default function VersionManagement() {
                                 ))}
                             </div>
 
-                            {/* Test Results */}
                             <div className="bg-gray-50 rounded-xl p-4">
                                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Test Results</p>
                                 <div className="grid grid-cols-4 gap-3 mb-4">
@@ -957,7 +1118,6 @@ export default function VersionManagement() {
                                 </div>
                             </div>
 
-                            {/* Linked Modules */}
                             <div className="border border-gray-100 rounded-xl p-4">
                                 <div className="flex items-center justify-between mb-3">
                                     <div className="flex items-center gap-2">
@@ -970,8 +1130,7 @@ export default function VersionManagement() {
                                         </span>
                                     </div>
                                     {selectedVersion.status !== "archived" && (
-                                        <button
-                                            onClick={() => { setShowDetailsModal(false); handleAssignModules(selectedVersion); }}
+                                        <button onClick={() => handleAssignModules(selectedVersion)}
                                             className="flex items-center gap-1.5 px-3 py-1.5 border border-green-300 text-green-700 rounded-lg text-xs font-medium hover:bg-green-50 transition-colors">
                                             <i className="fa-solid fa-plus text-xs" /> Manage
                                         </button>
@@ -982,8 +1141,7 @@ export default function VersionManagement() {
                                         <i className="fa-solid fa-puzzle-piece text-gray-300 text-2xl" />
                                         <p className="text-sm text-gray-400">No modules linked yet</p>
                                         {selectedVersion.status !== "archived" && (
-                                            <button
-                                                onClick={() => { setShowDetailsModal(false); handleAssignModules(selectedVersion); }}
+                                            <button onClick={() => handleAssignModules(selectedVersion)}
                                                 className="mt-1 px-4 py-1.5 bg-green-700 text-white rounded-lg text-xs font-medium hover:opacity-90 transition-opacity">
                                                 Assign Modules
                                             </button>
@@ -1002,7 +1160,6 @@ export default function VersionManagement() {
                                 )}
                             </div>
 
-                            {/* Description */}
                             {selectedVersion.description && (
                                 <div className="border border-gray-100 rounded-xl p-4">
                                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Description</p>
@@ -1010,7 +1167,6 @@ export default function VersionManagement() {
                                 </div>
                             )}
 
-                            {/* Footer actions */}
                             <div className="flex gap-3 pt-2 border-t">
                                 <button onClick={() => { setShowDetailsModal(false); handleEditVersion(selectedVersion); }}
                                     className="flex-1 px-6 py-2.5 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
@@ -1026,18 +1182,23 @@ export default function VersionManagement() {
                 </div>
             )}
 
-            {/* Assign Tests Modal */}
+            {/* ── Assign Testers Modal ── */}
             {showAssignModal && selectedVersion && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setShowAssignModal(false)}>
                     <div className="bg-white rounded-lg shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
                         <div className="p-6 border-b flex items-center justify-between">
-                            <h3 className="text-xl font-bold">Assign Testers</h3>
+                            <div>
+                                <h3 className="text-xl font-bold flex items-center gap-2">
+                                    <i className="fa-solid fa-users text-green-700" /> Assign Testers
+                                </h3>
+                                <p className="text-sm text-gray-500 mt-0.5">{selectedVersion.version_number}</p>
+                            </div>
                             <button onClick={() => setShowAssignModal(false)} className="text-gray-400 hover:text-gray-700 text-xl">
                                 <i className="fa-solid fa-times" />
                             </button>
                         </div>
                         <div className="p-6 space-y-4">
-                            <p className="text-sm text-gray-600 mb-4">
+                            <p className="text-sm text-gray-600">
                                 Assign testers to <span className="font-semibold">{selectedVersion.version_number}</span>
                             </p>
                             <CustomDropdown options={users} selected={formData.selectedTesters} onChange={setTestersSel} placeholder="Select testers to assign..." />
@@ -1062,22 +1223,13 @@ export default function VersionManagement() {
                                     <i className="fa-solid fa-check mr-2" /> Save Assignments
                                 </button>
                                 <button onClick={() => { setShowAssignModal(false); setFormData(prev => ({ ...prev, selectedTesters: [] })); }}
-                                    className="flex-1 px-6 py-3 border rounded-lg font-medium hover:bg-gray-50 transition-colors">Cancel</button>
+                                    className="flex-1 px-6 py-3 border rounded-lg font-medium hover:bg-gray-50 transition-colors">
+                                    Cancel
+                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
-            )}
-
-            {/* Assign Modules Modal */}
-            {showModulesModal && selectedVersion && (
-                <AssignModulesModal
-                    version={selectedVersion}
-                    modules={modules}
-                    onClose={() => { setShowModulesModal(false); setSelectedVersion(null); }}
-                    onSuccess={fetchVersions}
-                    showToast={showToast}
-                />
             )}
         </div>
     );

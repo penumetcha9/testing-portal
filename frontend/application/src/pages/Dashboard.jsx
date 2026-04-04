@@ -51,6 +51,347 @@ function Toast({ toasts }) {
     );
 }
 
+// ── Assignment Badge ─────────────────────────────────────────────────────────
+function AssignmentBadge({ status }) {
+    const map = {
+        Passed: "bg-green-500/10 text-green-600",
+        Failed: "bg-red-500/10 text-red-600",
+        Pending: "bg-yellow-500/10 text-yellow-600",
+        "In Progress": "bg-blue-500/10 text-blue-600",
+        Active: "bg-emerald-500/10 text-emerald-600",
+        Inactive: "bg-gray-200 text-gray-500",
+    };
+    return (
+        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${map[status] || "bg-muted text-muted-foreground"}`}>
+            {status}
+        </span>
+    );
+}
+
+// ── My Assignments Section ───────────────────────────────────────────────────
+function MyAssignments({ userId, loading: parentLoading }) {
+    const navigate = useNavigate();
+    const [loading, setLoading] = useState(true);
+    const [myModules, setMyModules] = useState([]);
+    const [myVersions, setMyVersions] = useState([]);
+    const [myFeatures, setMyFeatures] = useState([]);
+    const [myTestCases, setMyTestCases] = useState([]);
+    const [activeTab, setActiveTab] = useState("testcases");
+
+    useEffect(() => {
+        if (!userId) return;
+        fetchMyAssignments();
+    }, [userId]); // eslint-disable-line
+
+    async function fetchMyAssignments() {
+        setLoading(true);
+        console.log("MyAssignments — logged in userId:", userId);
+        await Promise.all([
+            fetchMyTestCases(),
+            fetchMyModules(),
+            fetchMyVersions(),
+            fetchMyFeatures(),
+        ]);
+        setLoading(false);
+    }
+
+    // Test cases where assigned_to = current user
+    async function fetchMyTestCases() {
+        const { data, error } = await supabase
+            .from("test_cases")
+            .select(`
+                id, name, test_case_id, status, priority,
+                modules ( module_name ),
+                versions ( version_number )
+            `)
+            .eq("assigned_to", userId.toString())
+            .order("created_at", { ascending: false })
+            .limit(20);
+
+        if (error) console.error("fetchMyTestCases error:", error);
+        if (!error && data) setMyTestCases(data);
+    }
+
+    // Modules where user has assigned test cases
+    async function fetchMyModules() {
+        // Get module_ids from test_cases assigned to user
+        const { data: tcData, error: tcError } = await supabase
+            .from("test_cases")
+            .select("module_id")
+            .eq("assigned_to", userId.toString());
+
+        if (tcError || !tcData) return;
+
+        const moduleIds = [...new Set(tcData.map(tc => tc.module_id).filter(Boolean))];
+        if (moduleIds.length === 0) { setMyModules([]); return; }
+
+        const { data, error } = await supabase
+            .from("modules")
+            .select("id, module_name, status, description")
+            .in("id", moduleIds)
+            .order("module_name");
+
+        if (error) console.error("fetchMyModules error:", error);
+        if (!error && data) setMyModules(data);
+    }
+
+    // Versions where user has assigned test cases
+    async function fetchMyVersions() {
+        // Get version_ids from test_cases assigned to user
+        const { data: tcData, error: tcError } = await supabase
+            .from("test_cases")
+            .select("version_id")
+            .eq("assigned_to", userId.toString());
+
+        if (tcError || !tcData) return;
+
+        const versionIds = [...new Set(tcData.map(tc => tc.version_id).filter(Boolean))];
+        if (versionIds.length === 0) { setMyVersions([]); return; }
+
+        const { data, error } = await supabase
+            .from("versions")
+            .select("id, version_number, status, release_date, description")
+            .in("id", versionIds)
+            .order("created_at", { ascending: false });
+
+        if (error) console.error("fetchMyVersions error:", error);
+        if (!error && data) setMyVersions(data);
+    }
+
+    // Features where assign_to = current user (column is assign_to in this table)
+    async function fetchMyFeatures() {
+        const { data: tcData, error: tcError } = await supabase
+            .from("test_cases")
+            .select("feature_id")
+            .eq("assigned_to", userId.toString());
+
+        if (tcError || !tcData) return;
+
+        const featureIds = [...new Set(tcData.map(tc => tc.feature_id).filter(Boolean))];
+        if (featureIds.length === 0) {
+            // Also try direct assign_to match
+            const { data: directData, error: directError } = await supabase
+                .from("features")
+                .select("id, feature_name, status, priority, modules ( module_name )")
+                .eq("assign_to", userId.toString())
+                .order("feature_name");
+            if (!directError && directData) setMyFeatures(directData);
+            return;
+        }
+
+        const { data, error } = await supabase
+            .from("features")
+            .select("id, feature_name, status, priority, modules ( module_name )")
+            .in("id", featureIds)
+            .order("feature_name");
+
+        if (error) console.error("fetchMyFeatures error:", error);
+        if (!error && data) setMyFeatures(data);
+    }
+
+    const tabs = [
+        { key: "testcases", label: "Test Cases", icon: "fa-vials", count: myTestCases.length },
+        { key: "modules", label: "Modules", icon: "fa-cubes", count: myModules.length },
+        { key: "versions", label: "Versions", icon: "fa-code-branch", count: myVersions.length },
+        { key: "features", label: "Features", icon: "fa-list-check", count: myFeatures.length },
+    ];
+
+    const isEmpty = {
+        testcases: myTestCases.length === 0,
+        modules: myModules.length === 0,
+        versions: myVersions.length === 0,
+        features: myFeatures.length === 0,
+    };
+
+    const navMap = {
+        testcases: "/test-execution",
+        modules: "/modules",
+        versions: "/versions",
+        features: "/features",
+    };
+
+    return (
+        <div className="bg-card border border-border rounded-lg shadow-sm">
+            {/* Header */}
+            <div className="p-6 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h3 className="text-lg font-bold text-foreground mb-1 flex items-center gap-2">
+                        <i className="fa-solid fa-user-check text-primary" />
+                        My Assignments
+                    </h3>
+                    <p className="text-sm text-muted-foreground">Items assigned to you across the project</p>
+                </div>
+                <button
+                    onClick={() => navigate(navMap[activeTab])}
+                    className="self-start sm:self-auto text-primary font-medium text-sm flex items-center gap-2 hover:opacity-80 transition-opacity"
+                >
+                    View All <i className="fa-solid fa-arrow-right" />
+                </button>
+            </div>
+
+            {/* Summary counters */}
+            <div className="grid grid-cols-4 border-b border-border divide-x divide-border">
+                {tabs.map(tab => (
+                    <button
+                        key={tab.key}
+                        onClick={() => setActiveTab(tab.key)}
+                        className={`p-4 text-center transition-colors hover:bg-muted/50 ${activeTab === tab.key ? "bg-primary/5 border-b-2 border-primary" : ""
+                            }`}
+                    >
+                        <div className={`text-2xl font-bold mb-1 ${activeTab === tab.key ? "text-primary" : "text-foreground"
+                            }`}>
+                            {loading ? <Skeleton className="h-7 w-8 mx-auto" /> : tab.count}
+                        </div>
+                        <div className="flex items-center justify-center gap-1.5">
+                            <i className={`fa-solid ${tab.icon} text-xs ${activeTab === tab.key ? "text-primary" : "text-muted-foreground"
+                                }`} />
+                            <span className={`text-xs font-medium ${activeTab === tab.key ? "text-primary" : "text-muted-foreground"
+                                }`}>{tab.label}</span>
+                        </div>
+                    </button>
+                ))}
+            </div>
+
+            {/* Tab content */}
+            <div className="p-6">
+                {loading ? (
+                    <div className="space-y-3">
+                        {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}
+                    </div>
+                ) : isEmpty[activeTab] ? (
+                    <div className="text-center py-10">
+                        <i className={`fa-solid ${tabs.find(t => t.key === activeTab)?.icon} text-3xl text-muted-foreground/30 mb-3 block`} />
+                        <p className="text-sm text-muted-foreground font-medium">
+                            No {tabs.find(t => t.key === activeTab)?.label.toLowerCase()} assigned to you
+                        </p>
+                    </div>
+                ) : (
+
+                    /* ── Test Cases ── */
+                    activeTab === "testcases" ? (
+                        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                            {myTestCases.map(tc => (
+                                <div key={tc.id}
+                                    onClick={() => navigate("/test-execution")}
+                                    className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                            <i className="fa-solid fa-flask text-primary text-xs" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium text-foreground truncate">{tc.name}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {tc.test_case_id}
+                                                {tc.modules?.module_name && ` · ${tc.modules.module_name}`}
+                                                {tc.versions?.version_number && ` · ${tc.versions.version_number}`}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                                        {tc.priority && (
+                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${tc.priority === "High" || tc.priority === "Critical"
+                                                    ? "bg-red-100 text-red-600"
+                                                    : tc.priority === "Medium"
+                                                        ? "bg-yellow-100 text-yellow-600"
+                                                        : "bg-gray-100 text-gray-500"
+                                                }`}>{tc.priority}</span>
+                                        )}
+                                        <AssignmentBadge status={tc.status} />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) :
+
+                        /* ── Modules ── */
+                        activeTab === "modules" ? (
+                            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                                {myModules.map(m => (
+                                    <div key={m.id}
+                                        onClick={() => navigate("/modules")}
+                                        className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="w-8 h-8 bg-blue-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                <i className="fa-solid fa-cube text-blue-500 text-xs" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-medium text-foreground truncate">{m.module_name}</p>
+                                                {m.description && (
+                                                    <p className="text-xs text-muted-foreground truncate">{m.description}</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {m.status && <AssignmentBadge status={m.status} />}
+                                    </div>
+                                ))}
+                            </div>
+                        ) :
+
+                            /* ── Versions ── */
+                            activeTab === "versions" ? (
+                                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                                    {myVersions.map(v => (
+                                        <div key={v.id}
+                                            onClick={() => navigate("/versions")}
+                                            className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                    <i className="fa-solid fa-code-branch text-emerald-500 text-xs" />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium text-foreground truncate">{v.version_number}</p>
+                                                    {v.release_date && (
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Release: {new Date(v.release_date).toLocaleDateString()}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {v.status && <AssignmentBadge status={v.status} />}
+                                        </div>
+                                    ))}
+                                </div>
+                            ) :
+
+                                /* ── Features ── */
+                                activeTab === "features" ? (
+                                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                                        {myFeatures.map(f => (
+                                            <div key={f.id}
+                                                onClick={() => navigate("/features")}
+                                                className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <div className="w-8 h-8 bg-purple-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                        <i className="fa-solid fa-list-check text-purple-500 text-xs" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-medium text-foreground truncate">{f.feature_name}</p>
+                                                        {f.modules?.module_name && (
+                                                            <p className="text-xs text-muted-foreground">{f.modules.module_name}</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                                                    {f.priority && (
+                                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${f.priority === "High" || f.priority === "Critical"
+                                                                ? "bg-red-100 text-red-600"
+                                                                : f.priority === "Medium"
+                                                                    ? "bg-yellow-100 text-yellow-600"
+                                                                    : "bg-gray-100 text-gray-500"
+                                                            }`}>{f.priority}</span>
+                                                    )}
+                                                    {f.status && <AssignmentBadge status={f.status} />}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : null
+                )}
+            </div>
+        </div>
+    );
+}
+
 // ── Main Dashboard ───────────────────────────────────────────────────────────
 export default function Dashboard() {
     const navigate = useNavigate();
@@ -58,6 +399,7 @@ export default function Dashboard() {
     // ── State ──
     const [loading, setLoading] = useState(true);
     const [toasts, setToasts] = useState([]);
+    const [currentUserId, setCurrentUserId] = useState(null);
 
     // Stats
     const [stats, setStats] = useState({ total: 0, passed: 0, failed: 0, pending: 0, passRate: 0, executions: 0 });
@@ -75,6 +417,13 @@ export default function Dashboard() {
         const id = Date.now();
         setToasts(prev => [...prev, { id, message, type }]);
         setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
+    }, []);
+
+    // ── Get current user id on mount ─────────────────────────────────────────
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data: { user } }) => {
+            if (user) setCurrentUserId(user.id);
+        });
     }, []);
 
     // ── Fetch all dashboard data ──────────────────────────────────────────────
@@ -98,7 +447,7 @@ export default function Dashboard() {
 
     useEffect(() => { fetchAll(); }, [fetchAll]);
 
-    // ── 1. Stats Cards — server-side counting, no full table download ─────────
+    // ── 1. Stats Cards ────────────────────────────────────────────────────────
     async function fetchStats() {
         const [
             { count: total },
@@ -121,7 +470,7 @@ export default function Dashboard() {
         setStats({ total: t, passed: p, failed: f, pending, passRate, executions: execCount || 0 });
     }
 
-    // ── 2. Active Versions (grouped by version_id on test_cases) ─────────────
+    // ── 2. Active Versions ────────────────────────────────────────────────────
     async function fetchVersionStats() {
         const { data, error } = await supabase
             .from("test_cases")
@@ -155,7 +504,7 @@ export default function Dashboard() {
         setVersions(versionsArr);
     }
 
-    // ── 3. Module Coverage — one query with embedded join, no second round-trip
+    // ── 3. Module Coverage ────────────────────────────────────────────────────
     async function fetchModules() {
         const { data, error } = await supabase
             .from("modules")
@@ -261,13 +610,10 @@ export default function Dashboard() {
             .limit(8);
 
         if (error || !data) return;
-        setRecentExecutions(data.map(e => ({
-            ...e,
-            timeAgo: timeAgo(e.created_at),
-        })));
+        setRecentExecutions(data.map(e => ({ ...e, timeAgo: timeAgo(e.created_at) })));
     }
 
-    // ── 7. Testing Trends (last 7 days) ──────────────────────────────────────
+    // ── 7. Testing Trends ─────────────────────────────────────────────────────
     async function fetchTrends() {
         const days = 7;
         const since = new Date();
@@ -351,10 +697,11 @@ export default function Dashboard() {
                             label="Pass Rate" value={`${stats.passRate}%`} sub="Overall quality" subColor={stats.passRate >= 80 ? "text-green-500" : "text-destructive"} />
                     </div>
 
+                    {/* ── MY ASSIGNMENTS ── */}
+                    <MyAssignments userId={currentUserId} loading={loading} />
+
                     {/* ── Active Versions + Status Chart ── */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
-
-                        {/* Active Versions */}
                         <div className="lg:col-span-2 bg-card border border-border rounded-lg shadow-sm">
                             <div className="p-6 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                 <div>
@@ -417,7 +764,6 @@ export default function Dashboard() {
                             </div>
                         </div>
 
-                        {/* Status Chart */}
                         <div className="bg-card border border-border rounded-lg shadow-sm">
                             <div className="p-6 border-b border-border">
                                 <h3 className="text-lg font-bold text-foreground mb-1">Test Status Distribution</h3>
@@ -452,9 +798,7 @@ export default function Dashboard() {
                                         </div>
                                     </div>
                                 ) : loading ? (
-                                    <div className="space-y-4">
-                                        {[1, 2, 3].map(i => <Skeleton key={i} className="h-8" />)}
-                                    </div>
+                                    <div className="space-y-4">{[1, 2, 3].map(i => <Skeleton key={i} className="h-8" />)}</div>
                                 ) : (
                                     <StatusChart />
                                 )}
@@ -464,8 +808,6 @@ export default function Dashboard() {
 
                     {/* ── Module Coverage + Failed Issues ── */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-
-                        {/* Module Coverage */}
                         <div className="bg-card border border-border rounded-lg shadow-sm">
                             <div className="p-6 border-b border-border flex items-center justify-between">
                                 <div>
@@ -473,9 +815,7 @@ export default function Dashboard() {
                                     <p className="text-sm text-muted-foreground">Pass rate by module</p>
                                 </div>
                                 <button onClick={() => navigate("/modules")}
-                                    className="text-primary font-medium text-sm hover:opacity-80 transition-opacity">
-                                    View All
-                                </button>
+                                    className="text-primary font-medium text-sm hover:opacity-80 transition-opacity">View All</button>
                             </div>
                             <div className="p-6 space-y-4">
                                 {loading ? [1, 2, 3, 4, 5].map(i => (
@@ -500,7 +840,6 @@ export default function Dashboard() {
                             </div>
                         </div>
 
-                        {/* Recent Failed Issues */}
                         <div className="bg-card border border-border rounded-lg shadow-sm">
                             <div className="p-6 border-b border-border flex items-center justify-between">
                                 <div>
@@ -508,9 +847,7 @@ export default function Dashboard() {
                                     <p className="text-sm text-muted-foreground">Latest issues requiring attention</p>
                                 </div>
                                 <button onClick={() => navigate("/failed-issues")}
-                                    className="text-primary font-medium text-sm hover:opacity-80 transition-opacity">
-                                    View All
-                                </button>
+                                    className="text-primary font-medium text-sm hover:opacity-80 transition-opacity">View All</button>
                             </div>
                             <div className="p-6 space-y-4">
                                 {loading ? [1, 2, 3, 4].map(i => (
@@ -534,12 +871,8 @@ export default function Dashboard() {
                                             </div>
                                             <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{issue.failure_comment || issue.affected_component}</p>
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <span className={`text-xs px-2 py-1 ${issue.style.severityBg} ${issue.style.severityColor} rounded-full`}>
-                                                    {issue.priority}
-                                                </span>
-                                                {issue.modules?.module_name && (
-                                                    <span className="text-xs text-muted-foreground">{issue.modules.module_name}</span>
-                                                )}
+                                                <span className={`text-xs px-2 py-1 ${issue.style.severityBg} ${issue.style.severityColor} rounded-full`}>{issue.priority}</span>
+                                                {issue.modules?.module_name && <span className="text-xs text-muted-foreground">{issue.modules.module_name}</span>}
                                                 <span className="text-xs text-muted-foreground ml-auto">{issue.timeAgo}</span>
                                             </div>
                                         </div>
@@ -556,8 +889,6 @@ export default function Dashboard() {
 
                     {/* ── Team Performance + Recent Activity ── */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
-
-                        {/* Team Performance */}
                         <div className="lg:col-span-2 bg-card border border-border rounded-lg shadow-sm">
                             <div className="p-6 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                 <div>
@@ -573,9 +904,7 @@ export default function Dashboard() {
                             </div>
                             <div className="overflow-x-auto">
                                 {loading ? (
-                                    <div className="p-6 space-y-4">
-                                        {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
-                                    </div>
+                                    <div className="p-6 space-y-4">{[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
                                 ) : teamMembers.length > 0 ? (
                                     <table className="w-full">
                                         <thead className="bg-muted border-b border-border">
@@ -623,15 +952,13 @@ export default function Dashboard() {
                             </div>
                         </div>
 
-                        {/* Recent Activity */}
                         <div className="bg-card border border-border rounded-lg shadow-sm">
                             <div className="p-6 border-b border-border flex items-center justify-between">
                                 <div>
                                     <h3 className="text-lg font-bold text-foreground mb-1">Recent Activity</h3>
                                     <p className="text-sm text-muted-foreground">Latest test executions</p>
                                 </div>
-                                <button onClick={fetchAll} title="Refresh"
-                                    className="text-muted-foreground hover:text-foreground transition-colors">
+                                <button onClick={fetchAll} title="Refresh" className="text-muted-foreground hover:text-foreground transition-colors">
                                     <i className={`fa-solid fa-rotate-right text-sm ${loading ? "animate-spin" : ""}`} />
                                 </button>
                             </div>
@@ -669,21 +996,18 @@ export default function Dashboard() {
 
                     {/* ── Testing Trends ── */}
                     <div className="bg-card border border-border rounded-lg shadow-sm">
-                        <div className="p-6 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <div>
-                                <h3 className="text-lg font-bold text-foreground mb-1">Testing Trends</h3>
-                                <p className="text-sm text-muted-foreground">Execution results over the last 7 days</p>
-                            </div>
+                        <div className="p-6 border-b border-border">
+                            <h3 className="text-lg font-bold text-foreground mb-1">Testing Trends</h3>
+                            <p className="text-sm text-muted-foreground">Execution results over the last 7 days</p>
                         </div>
                         <div className="p-6">
                             {!loading && trends.labels.length > 0 ? (
                                 <div className="space-y-4">
-                                    {/* Summary row */}
                                     <div className="grid grid-cols-3 gap-4 mb-6">
                                         {[
-                                            { label: "Passed", values: trends.passed, color: "text-green-500", bg: "bg-green-500" },
-                                            { label: "Failed", values: trends.failed, color: "text-destructive", bg: "bg-destructive" },
-                                            { label: "Pending", values: trends.pending, color: "text-accent", bg: "bg-accent" },
+                                            { label: "Passed", values: trends.passed, color: "text-green-500" },
+                                            { label: "Failed", values: trends.failed, color: "text-destructive" },
+                                            { label: "Pending", values: trends.pending, color: "text-accent" },
                                         ].map(s => (
                                             <div key={s.label} className="text-center p-3 bg-muted rounded-lg">
                                                 <p className={`text-2xl font-bold ${s.color}`}>{s.values.reduce((a, b) => a + b, 0)}</p>
@@ -691,7 +1015,6 @@ export default function Dashboard() {
                                             </div>
                                         ))}
                                     </div>
-                                    {/* Bar chart */}
                                     <div className="flex items-end gap-2 h-40">
                                         {trends.labels.map((label, i) => {
                                             const total = (trends.passed[i] || 0) + (trends.failed[i] || 0) + (trends.pending[i] || 0);
@@ -702,27 +1025,19 @@ export default function Dashboard() {
                                             return (
                                                 <div key={label} className="flex-1 flex flex-col items-center gap-1">
                                                     <div className="w-full flex flex-col justify-end rounded overflow-hidden" style={{ height: "120px" }}>
-                                                        <div title={`Passed: ${trends.passed[i]}`}
-                                                            style={{ height: `${total > 0 ? Math.round((trends.passed[i] / total) * height) : 0}%` }}
-                                                            className="bg-green-500 w-full transition-all" />
-                                                        <div title={`Failed: ${trends.failed[i]}`}
-                                                            style={{ height: `${total > 0 ? Math.round((trends.failed[i] / total) * height) : 0}%` }}
-                                                            className="bg-destructive w-full transition-all" />
-                                                        <div title={`Pending: ${trends.pending[i]}`}
-                                                            style={{ height: `${total > 0 ? Math.round((trends.pending[i] / total) * height) : 0}%` }}
-                                                            className="bg-accent w-full transition-all" />
+                                                        <div title={`Passed: ${trends.passed[i]}`} style={{ height: `${total > 0 ? Math.round((trends.passed[i] / total) * height) : 0}%` }} className="bg-green-500 w-full transition-all" />
+                                                        <div title={`Failed: ${trends.failed[i]}`} style={{ height: `${total > 0 ? Math.round((trends.failed[i] / total) * height) : 0}%` }} className="bg-destructive w-full transition-all" />
+                                                        <div title={`Pending: ${trends.pending[i]}`} style={{ height: `${total > 0 ? Math.round((trends.pending[i] / total) * height) : 0}%` }} className="bg-accent w-full transition-all" />
                                                     </div>
                                                     <span className="text-xs text-muted-foreground">{label}</span>
                                                 </div>
                                             );
                                         })}
                                     </div>
-                                    {/* Legend */}
                                     <div className="flex items-center gap-6 justify-center pt-2">
                                         {[["bg-green-500", "Passed"], ["bg-destructive", "Failed"], ["bg-accent", "Pending"]].map(([color, label]) => (
                                             <div key={label} className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                <div className={`w-3 h-3 rounded-sm ${color}`} />
-                                                {label}
+                                                <div className={`w-3 h-3 rounded-sm ${color}`} />{label}
                                             </div>
                                         ))}
                                     </div>
