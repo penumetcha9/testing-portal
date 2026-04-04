@@ -21,7 +21,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd /var/www/rmstesting
-            git fetch https://github.com/penumetcha9/testing-portal.git main
+            git fetch git@github.com:Dzotanextech/testing-portal.git main
             git reset --hard FETCH_HEAD
             cd frontend/application
             npm install
