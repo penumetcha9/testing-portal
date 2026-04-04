@@ -1,1 +1,1 @@
-export { useRole } from "../Context/RoleContext";
+export { useRole } from "../context/RoleContext";
