@@ -629,8 +629,7 @@ const EMPTY_FORM = {
 };
 
 const UserStoryMapping = () => {
-    // ── Router hooks ──────────────────────────────────────────────────────────
-    const { storyId: urlStoryId } = useParams();   // e.g. "US-045" or undefined for /stories/new
+    const { storyId: urlStoryId } = useParams();
     const navigate = useNavigate();
 
     const isNew = !urlStoryId || urlStoryId === 'new';
@@ -646,16 +645,13 @@ const UserStoryMapping = () => {
     const [storyUUID, setStoryUUID] = useState(null);
     const [tabCounts, setTabCounts] = useState({ testcases: null, bugs: null, comments: null, attachments: null });
 
-    // ── Story ID edit state ───────────────────────────────────────────────────
     const [storyIdEditing, setStoryIdEditing] = useState(false);
     const [storyIdDraft, setStoryIdDraft] = useState('');
     const [storyIdError, setStoryIdError] = useState('');
     const storyIdInputRef = useRef(null);
 
-    // ── Initialise formData from URL param ────────────────────────────────────
     const [formData, setFormData] = useState({ ...EMPTY_FORM, storyId: isNew ? '' : urlStoryId });
 
-    // When URL param changes (e.g. user navigates directly), reset form
     useEffect(() => {
         if (!isNew && urlStoryId) {
             setFormData(prev => ({ ...EMPTY_FORM, storyId: urlStoryId }));
@@ -667,7 +663,6 @@ const UserStoryMapping = () => {
         }
     }, [urlStoryId]);
 
-    // For new stories, auto-generate an ID
     useEffect(() => {
         if (!isNew) return;
         (async () => {
@@ -729,17 +724,25 @@ const UserStoryMapping = () => {
                 setStoryUUID(data.id);
                 setFormData(prev => ({
                     ...prev,
-                    storyPoints: data.story_points ?? '', estimateHours: data.estimate_hours ?? '',
-                    plannedSprint: data.planned_sprint ?? '', plannedRelease: data.planned_release ?? '', versionBuild: data.version_build ?? '',
+                    storyPoints: data.story_points ?? '',
+                    estimateHours: data.estimate_hours ?? '',
+                    plannedSprint: data.planned_sprint ?? '',
+                    plannedRelease: data.planned_release ?? '',
+                    versionBuild: data.version_build ?? '',
                     assignedBa: Array.isArray(data.assigned_ba) ? data.assigned_ba : (data.assigned_ba ? [data.assigned_ba] : []),
                     assignedFrontendDeveloper: Array.isArray(data.assigned_frontend_developer) ? data.assigned_frontend_developer : (data.assigned_frontend_developer ? [data.assigned_frontend_developer] : []),
                     assignedBackendDeveloper: Array.isArray(data.assigned_backend_developer) ? data.assigned_backend_developer : (data.assigned_backend_developer ? [data.assigned_backend_developer] : []),
                     assignedTester: Array.isArray(data.assigned_tester) ? data.assigned_tester : (data.assigned_tester ? [data.assigned_tester] : []),
                     linkedFeatures: Array.isArray(data.linked_features) ? data.linked_features : [],
-                    approvalStatus: data.approval_status ?? 'Pending', developmentStatus: data.development_status ?? 'Not Started',
-                    qaStatus: data.qa_status ?? 'Not Started', releaseStatus: data.release_status ?? 'Not Released',
-                    approvedBy: data.approved_by ?? '', approvedAt: data.approved_at ?? '',
-                    createdBy: data.created_by ?? '', createdAt: data.created_at ?? '', updatedAt: data.updated_at ?? '',
+                    approvalStatus: data.approval_status ?? 'Pending',
+                    developmentStatus: data.development_status ?? 'Not Started',
+                    qaStatus: data.qa_status ?? 'Not Started',
+                    releaseStatus: data.release_status ?? 'Not Released',
+                    approvedBy: data.approved_by ?? '',
+                    approvedAt: data.approved_at ?? '',
+                    createdBy: data.created_by ?? '',
+                    createdAt: data.created_at ?? '',
+                    updatedAt: data.updated_at ?? '',
                 }));
             }
         };
@@ -760,7 +763,6 @@ const UserStoryMapping = () => {
         fetchCounts();
     }, [storyUUID, activeTab]);
 
-    // ── Story ID editing handlers ─────────────────────────────────────────────
     const handleStoryIdEditStart = () => {
         setStoryIdDraft(formData.storyId);
         setStoryIdError('');
@@ -786,7 +788,6 @@ const UserStoryMapping = () => {
         if (e.key === 'Escape') { setStoryIdEditing(false); setStoryIdError(''); }
     };
 
-    // ── Add New Story — navigate to /stories/new ──────────────────────────────
     const handleAddNewStory = () => {
         if (formData.storyTitle || formData.storySummary || formData.mainFlow) {
             if (!window.confirm('Unsaved changes on the current story will be lost. Continue?')) return;
@@ -794,7 +795,6 @@ const UserStoryMapping = () => {
         navigate('/stories/new');
     };
 
-    // ── Back to list ──────────────────────────────────────────────────────────
     const handleBackToList = () => {
         if (formData.storyTitle || formData.storySummary) {
             if (!window.confirm('Unsaved changes will be lost. Continue?')) return;
@@ -816,34 +816,87 @@ const UserStoryMapping = () => {
     const toggleDefinitionOfDone = useCallback((id) => { setDefinitionOfDone(prev => prev.map(item => item.id === id ? { ...item, checked: !item.checked } : item)); }, []);
     const addAcceptanceCriteria = useCallback(() => { setAcceptanceCriteria(prev => { const newId = Math.max(...prev.map(ac => ac.id), 0) + 1; return [...prev, { id: newId, text: 'New acceptance criteria', checked: false }]; }); }, []);
 
-    const buildPayload = (extraStatus) => ({
-        story_id: formData.storyId, story_type: formData.storyType, story_title: formData.storyTitle,
-        story_summary: formData.storySummary, module_id: formData.moduleId, parent_story_id: formData.parentStoryId,
-        sequence: formData.sequence, business_context: formData.businessContext, problem_statement: formData.problemStatement,
-        expected_outcome: formData.expectedOutcome, business_domain: formData.businessDomain, process_area: formData.processArea,
-        transaction_type: formData.transactionType, criticality: formData.criticality, application: formData.application,
-        module: formData.module, feature: formData.feature, user_role: formData.userRole, screen_page: formData.screenPage,
-        as_a: formData.asA, i_want: formData.iWant, so_that: formData.soThat, preconditions: formData.preconditions,
-        main_flow: formData.mainFlow, alternate_flow: formData.alternateFlow, exception_flow: formData.exceptionFlow,
-        postconditions: formData.postconditions, business_rules: formData.businessRules, validation_rules: formData.validationRules,
-        field_behavior: formData.fieldBehavior, calculation_logic: formData.calculationLogic, api_impacted: formData.apiImpacted,
-        db_tables_impacted: formData.dbTablesImpacted, integration_impacted: formData.integrationImpacted,
-        reports_impacted: formData.reportsImpacted, configuration_impacted: formData.configurationImpacted,
-        security_rbac_impact: formData.securityRBACImpact, audit_trail_required: formData.auditTrailRequired,
-        performance_impact: formData.performanceImpact, test_scenario_count: formData.testScenarioCount,
-        current_status: formData.currentStatus || extraStatus, blocked: formData.blocked, blocked_reason: formData.blockedReason,
-        acceptance_criteria: acceptanceCriteria, definition_of_done: definitionOfDone, status: extraStatus,
-        story_points: formData.storyPoints ? parseInt(formData.storyPoints) : null,
-        estimate_hours: formData.estimateHours ? parseFloat(formData.estimateHours) : null,
-        planned_sprint: formData.plannedSprint, planned_release: formData.plannedRelease, version_build: formData.versionBuild,
-        assigned_ba: formData.assignedBa, assigned_frontend_developer: formData.assignedFrontendDeveloper,
-        assigned_backend_developer: formData.assignedBackendDeveloper, assigned_tester: formData.assignedTester,
-        linked_features: formData.linkedFeatures,
-        approval_status: formData.approvalStatus, development_status: formData.developmentStatus,
-        qa_status: formData.qaStatus, release_status: formData.releaseStatus,
-        approved_by: formData.approvedBy, approved_at: formData.approvedAt || null,
-        created_by: formData.createdBy, updated_at: new Date().toISOString(),
-    });
+    // ── buildPayload — matched exactly to user_stories schema ─────────────────
+    const buildPayload = (extraStatus) => {
+        const now = new Date().toISOString();
+        // approved_at must be a full ISO timestamp or null (it's timestamptz)
+        let approvedAt = null;
+        if (formData.approvedAt) {
+            // if it's just a date string like "2026-04-09", convert to full ISO
+            approvedAt = formData.approvedAt.includes('T')
+                ? formData.approvedAt
+                : `${formData.approvedAt}T00:00:00.000Z`;
+        }
+        return {
+            story_id: formData.storyId,
+            story_type: formData.storyType || null,
+            story_title: formData.storyTitle || 'Untitled Story',
+            story_summary: formData.storySummary || null,
+            module_id: formData.moduleId || null,
+            parent_story_id: formData.parentStoryId || null,
+            sequence: formData.sequence ? parseInt(formData.sequence) : null,
+            business_context: formData.businessContext || null,
+            problem_statement: formData.problemStatement || null,
+            expected_outcome: formData.expectedOutcome || null,
+            business_domain: formData.businessDomain || null,
+            process_area: formData.processArea || null,
+            transaction_type: formData.transactionType || null,
+            criticality: formData.criticality || null,
+            application: formData.application || null,
+            module: formData.module || null,
+            feature: formData.feature || null,
+            user_role: formData.userRole || null,
+            screen_page: formData.screenPage || null,
+            as_a: formData.asA || null,
+            i_want: formData.iWant || null,
+            so_that: formData.soThat || null,
+            preconditions: formData.preconditions || null,
+            main_flow: formData.mainFlow || null,
+            alternate_flow: formData.alternateFlow || null,
+            exception_flow: formData.exceptionFlow || null,
+            postconditions: formData.postconditions || null,
+            business_rules: formData.businessRules || null,
+            validation_rules: formData.validationRules || null,
+            field_behavior: formData.fieldBehavior || null,
+            calculation_logic: formData.calculationLogic || null,
+            api_impacted: formData.apiImpacted || null,
+            db_tables_impacted: formData.dbTablesImpacted || null,
+            integration_impacted: formData.integrationImpacted || null,
+            reports_impacted: formData.reportsImpacted || null,
+            configuration_impacted: formData.configurationImpacted || null,
+            security_rbac_impact: formData.securityRBACImpact || null,
+            audit_trail_required: formData.auditTrailRequired || null,
+            performance_impact: formData.performanceImpact || null,
+            test_scenario_count: formData.testScenarioCount ? parseInt(formData.testScenarioCount) : null,
+            current_status: formData.currentStatus || extraStatus,
+            blocked: formData.blocked ?? false,
+            blocked_reason: formData.blockedReason || null,
+            acceptance_criteria: acceptanceCriteria,
+            definition_of_done: definitionOfDone,
+            status: extraStatus,
+            story_points: formData.storyPoints ? parseInt(formData.storyPoints) : null,
+            estimate_hours: formData.estimateHours ? parseFloat(formData.estimateHours) : null,
+            planned_sprint: formData.plannedSprint || null,
+            planned_release: formData.plannedRelease || null,
+            version_build: formData.versionBuild || null,
+            // jsonb column
+            assigned_ba: formData.assignedBa.length > 0 ? formData.assignedBa : null,
+            // ARRAY columns
+            assigned_frontend_developer: formData.assignedFrontendDeveloper.length > 0 ? formData.assignedFrontendDeveloper : null,
+            assigned_backend_developer: formData.assignedBackendDeveloper.length > 0 ? formData.assignedBackendDeveloper : null,
+            assigned_tester: formData.assignedTester.length > 0 ? formData.assignedTester : null,
+            linked_features: formData.linkedFeatures.length > 0 ? formData.linkedFeatures : null,
+            approval_status: formData.approvalStatus || null,
+            development_status: formData.developmentStatus || null,
+            qa_status: formData.qaStatus || null,
+            release_status: formData.releaseStatus || null,
+            approved_by: formData.approvedBy || null,
+            approved_at: approvedAt,
+            created_by: formData.createdBy || null,
+            created_at: formData.createdAt || now,
+            updated_at: now,
+        };
+    };
 
     const syncFeatures = async (savedStoryUUID, savedStoryId, selectedFeatures) => {
         try {
@@ -868,7 +921,6 @@ const UserStoryMapping = () => {
             const savedUUID = data?.id;
             if (savedUUID) { setStoryUUID(savedUUID); await syncFeatures(savedUUID, formData.storyId, formData.linkedFeatures); }
             setLastSaved(new Date().toLocaleString());
-            // After saving a new story, update the URL to the actual story ID
             if (isNew) navigate(`/stories/${formData.storyId}`, { replace: true });
             alert('✅ Draft saved!');
         } catch (err) { alert(`❌ ${err.message}`); }
@@ -884,7 +936,6 @@ const UserStoryMapping = () => {
             const savedUUID = data?.id;
             if (savedUUID) { setStoryUUID(savedUUID); await syncFeatures(savedUUID, formData.storyId, formData.linkedFeatures); }
             setLastSaved(new Date().toLocaleString());
-            // After submitting a new story, update the URL to the actual story ID
             if (isNew) navigate(`/stories/${formData.storyId}`, { replace: true });
             alert('✅ Submitted!');
         } catch (err) { alert(`❌ ${err.message}`); }
@@ -940,9 +991,7 @@ const UserStoryMapping = () => {
                     <header className="bg-card border-b border-border">
                         <div className="px-4 lg:px-8 py-4">
                             <div className="flex items-center justify-between gap-4 flex-wrap">
-                                {/* Left: back button + title */}
                                 <div className="flex items-center gap-3 min-w-0">
-                                    {/* Back to list */}
                                     <button
                                         onClick={handleBackToList}
                                         className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0"
@@ -958,7 +1007,6 @@ const UserStoryMapping = () => {
 
                                     <div className="min-w-0">
                                         <div className="flex items-center gap-3 mb-1 flex-wrap">
-                                            {/* Story ID — editable inline */}
                                             <div className="flex items-center gap-1.5">
                                                 {storyIdEditing ? (
                                                     <div className="flex flex-col gap-1">
@@ -1008,7 +1056,6 @@ const UserStoryMapping = () => {
                                     </div>
                                 </div>
 
-                                {/* ── Add User Story button ── */}
                                 <button
                                     onClick={handleAddNewStory}
                                     className="add-story-btn flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-md hover:shadow-lg active:scale-95"
