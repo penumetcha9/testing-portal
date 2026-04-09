@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import supabase from "../services/supabaseClient";
 
 export default function CreateVersion() {
-    const [step, setStep] = useState(1); // 1: Version Info, 2: Modules Selection
+    const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [modules, setModules] = useState([]);
     const [users, setUsers] = useState([]);
@@ -21,14 +21,12 @@ export default function CreateVersion() {
         notes: "",
     });
 
-    // Fetch modules and users
     useEffect(() => {
         fetchData();
     }, []);
 
     const fetchData = async () => {
         try {
-            // Fetch modules
             const { data: modulesData, error: modulesError } = await supabase
                 .from("modules")
                 .select("*")
@@ -37,7 +35,6 @@ export default function CreateVersion() {
             if (modulesError) throw modulesError;
             setModules(modulesData || []);
 
-            // Fetch users
             const { data: usersData, error: usersError } = await supabase
                 .from("users")
                 .select("*");
@@ -52,10 +49,7 @@ export default function CreateVersion() {
 
     const handleVersionChange = (e) => {
         const { name, value } = e.target;
-        setVersionForm(prev => ({
-            ...prev,
-            [name]: value
-        }));
+        setVersionForm(prev => ({ ...prev, [name]: value }));
     };
 
     const toggleModule = (moduleId) => {
@@ -75,7 +69,6 @@ export default function CreateVersion() {
         setLoading(true);
 
         try {
-            // Create version
             const { data: versionData, error: versionError } = await supabase
                 .from("versions")
                 .insert([versionForm])
@@ -84,7 +77,6 @@ export default function CreateVersion() {
 
             if (versionError) throw versionError;
 
-            // Link modules to version
             if (selectedModules.length > 0) {
                 const versionModules = selectedModules.map(moduleId => ({
                     version_id: versionData.id,
@@ -100,7 +92,6 @@ export default function CreateVersion() {
             }
 
             alert("Version created successfully! ✅");
-            // Reset form
             setVersionForm({
                 version_number: "",
                 build_number: "",
@@ -123,15 +114,24 @@ export default function CreateVersion() {
         }
     };
 
+    // Shared input classes
+    const inputClass =
+        "w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#27500A]";
+
     return (
         <div className="flex-1 flex flex-col min-w-0">
+
             {/* Header */}
             <header className="sticky top-0 bg-white border-b border-gray-200 z-40">
                 <div className="px-4 lg:px-8 py-4">
                     <div className="flex items-center justify-between gap-4">
                         <div>
-                            <h2 className="text-xl lg:text-2xl font-bold text-gray-900">Create NexTech RMS Version</h2>
-                            <p className="text-sm text-gray-500">Define version details, select modules and features</p>
+                            <h2 className="text-xl lg:text-2xl font-bold text-gray-900">
+                                Create NexTech RMS Version
+                            </h2>
+                            <p className="text-sm text-gray-500">
+                                Define version details, select modules and features
+                            </p>
                         </div>
                         <span className="px-3 py-1 bg-yellow-500 bg-opacity-10 text-yellow-600 text-sm font-medium rounded-full">
                             Draft Auto-saved
@@ -147,7 +147,13 @@ export default function CreateVersion() {
                     {step === 1 && (
                         <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6 space-y-6">
                             <div className="flex items-start gap-3">
-                                <div className="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center font-bold flex-shrink-0">1</div>
+                                {/* Step indicator uses #27500A */}
+                                <div
+                                    className="w-8 h-8 rounded-full text-white flex items-center justify-center font-bold flex-shrink-0"
+                                    style={{ backgroundColor: "#27500A" }}
+                                >
+                                    1
+                                </div>
                                 <div>
                                     <h3 className="text-xl font-bold text-gray-900">Version Information</h3>
                                     <p className="text-sm text-gray-500">Basic details about this version</p>
@@ -156,39 +162,45 @@ export default function CreateVersion() {
 
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-900 mb-2">Version Number <span className="text-red-500">*</span></label>
+                                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                                        Version Number <span className="text-red-500">*</span>
+                                    </label>
                                     <input
                                         type="text"
                                         name="version_number"
                                         placeholder="e.g., 5.2.1"
                                         value={versionForm.version_number}
                                         onChange={handleVersionChange}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-700"
+                                        className={inputClass}
                                     />
                                     <p className="text-xs text-gray-500 mt-1">Semantic versioning format</p>
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-900 mb-2">Build Number <span className="text-red-500">*</span></label>
+                                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                                        Build Number <span className="text-red-500">*</span>
+                                    </label>
                                     <input
                                         type="text"
                                         name="build_number"
                                         placeholder="e.g., 2024.12.001"
                                         value={versionForm.build_number}
                                         onChange={handleVersionChange}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-700"
+                                        className={inputClass}
                                     />
                                     <p className="text-xs text-gray-500 mt-1">Unique build identifier</p>
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-900 mb-2">Release Date <span className="text-red-500">*</span></label>
+                                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                                        Release Date <span className="text-red-500">*</span>
+                                    </label>
                                     <input
                                         type="date"
                                         name="release_date"
                                         value={versionForm.release_date}
                                         onChange={handleVersionChange}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-700"
+                                        className={inputClass}
                                     />
                                     <p className="text-xs text-gray-500 mt-1">Target release date</p>
                                 </div>
@@ -196,36 +208,42 @@ export default function CreateVersion() {
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-900 mb-2">Testing Start Date</label>
+                                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                                        Testing Start Date
+                                    </label>
                                     <input
                                         type="date"
                                         name="testing_start_date"
                                         value={versionForm.testing_start_date}
                                         onChange={handleVersionChange}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-700"
+                                        className={inputClass}
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-900 mb-2">Testing End Date</label>
+                                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                                        Testing End Date
+                                    </label>
                                     <input
                                         type="date"
                                         name="testing_end_date"
                                         value={versionForm.testing_end_date}
                                         onChange={handleVersionChange}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-700"
+                                        className={inputClass}
                                     />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-900 mb-2">QA Owner <span className="text-red-500">*</span></label>
+                                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                                        QA Owner <span className="text-red-500">*</span>
+                                    </label>
                                     <select
                                         name="qa_owner_id"
                                         value={versionForm.qa_owner_id}
                                         onChange={handleVersionChange}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-700 appearance-none"
+                                        className={`${inputClass} appearance-none`}
                                     >
                                         <option value="">Select QA Owner</option>
                                         {users.map(user => (
@@ -235,12 +253,14 @@ export default function CreateVersion() {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-900 mb-2">Release Owner <span className="text-red-500">*</span></label>
+                                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                                        Release Owner <span className="text-red-500">*</span>
+                                    </label>
                                     <select
                                         name="release_owner_id"
                                         value={versionForm.release_owner_id}
                                         onChange={handleVersionChange}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-700 appearance-none"
+                                        className={`${inputClass} appearance-none`}
                                     >
                                         <option value="">Select Release Owner</option>
                                         {users.map(user => (
@@ -251,12 +271,14 @@ export default function CreateVersion() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-900 mb-2">Status <span className="text-red-500">*</span></label>
+                                <label className="block text-sm font-medium text-gray-900 mb-2">
+                                    Status <span className="text-red-500">*</span>
+                                </label>
                                 <select
                                     name="status"
                                     value={versionForm.status}
                                     onChange={handleVersionChange}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-700 appearance-none"
+                                    className={`${inputClass} appearance-none`}
                                 >
                                     <option value="Draft">Draft</option>
                                     <option value="In Progress">In Progress</option>
@@ -274,7 +296,7 @@ export default function CreateVersion() {
                                     value={versionForm.description}
                                     onChange={handleVersionChange}
                                     rows="4"
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-700 resize-none"
+                                    className={`${inputClass} resize-none`}
                                 />
                             </div>
 
@@ -286,14 +308,15 @@ export default function CreateVersion() {
                                     value={versionForm.notes}
                                     onChange={handleVersionChange}
                                     rows="3"
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-700 resize-none"
+                                    className={`${inputClass} resize-none`}
                                 />
                             </div>
 
                             <div className="flex justify-end gap-3 pt-6 border-t border-gray-200">
                                 <button
                                     onClick={() => setStep(2)}
-                                    className="px-6 py-2.5 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
+                                    className="px-6 py-2.5 text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
+                                    style={{ backgroundColor: "#27500A" }}
                                 >
                                     Next: Select Modules →
                                 </button>
@@ -306,13 +329,23 @@ export default function CreateVersion() {
                         <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6 space-y-6">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="flex items-start gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center font-bold flex-shrink-0">2</div>
+                                    <div
+                                        className="w-8 h-8 rounded-full text-white flex items-center justify-center font-bold flex-shrink-0"
+                                        style={{ backgroundColor: "#27500A" }}
+                                    >
+                                        2
+                                    </div>
                                     <div>
                                         <h3 className="text-xl font-bold text-gray-900">Modules Selection</h3>
-                                        <p className="text-sm text-gray-500">Choose which modules to include in this version</p>
+                                        <p className="text-sm text-gray-500">
+                                            Choose which modules to include in this version
+                                        </p>
                                     </div>
                                 </div>
-                                <button className="px-4 py-2.5 bg-green-700 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+                                <button
+                                    className="px-4 py-2.5 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+                                    style={{ backgroundColor: "#27500A" }}
+                                >
                                     + Add New Module
                                 </button>
                             </div>
@@ -334,6 +367,7 @@ export default function CreateVersion() {
                                                         }
                                                     }}
                                                     className="rounded"
+                                                    style={{ accentColor: "#27500A" }}
                                                 />
                                             </th>
                                             <th className="text-left py-3 px-4 font-semibold text-sm text-gray-900">MODULE NAME</th>
@@ -351,12 +385,20 @@ export default function CreateVersion() {
                                                         checked={selectedModules.includes(module.id)}
                                                         onChange={() => toggleModule(module.id)}
                                                         className="rounded"
+                                                        style={{ accentColor: "#27500A" }}
                                                     />
                                                 </td>
-                                                <td className="py-4 px-4 text-sm text-gray-900 font-medium">{module.module_name}</td>
+                                                <td className="py-4 px-4 text-sm text-gray-900 font-medium">
+                                                    {module.module_name}
+                                                </td>
                                                 <td className="py-4 px-4 text-sm text-gray-500">0</td>
                                                 <td className="py-4 px-4">
-                                                    <span className={`px-2 py-1 text-xs font-medium rounded ${module.priority === 'High' ? 'bg-red-500 bg-opacity-10 text-red-600' : module.priority === 'Medium' ? 'bg-amber-500 bg-opacity-10 text-amber-600' : 'bg-gray-500 bg-opacity-10 text-gray-600'}`}>
+                                                    <span className={`px-2 py-1 text-xs font-medium rounded ${module.priority === "High"
+                                                            ? "bg-red-500 bg-opacity-10 text-red-600"
+                                                            : module.priority === "Medium"
+                                                                ? "bg-amber-500 bg-opacity-10 text-amber-600"
+                                                                : "bg-gray-500 bg-opacity-10 text-gray-600"
+                                                        }`}>
                                                         {module.priority}
                                                     </span>
                                                 </td>
@@ -366,6 +408,7 @@ export default function CreateVersion() {
                                                         checked={selectedModules.includes(module.id)}
                                                         onChange={() => toggleModule(module.id)}
                                                         className="rounded"
+                                                        style={{ accentColor: "#27500A" }}
                                                     />
                                                 </td>
                                             </tr>
@@ -376,7 +419,7 @@ export default function CreateVersion() {
 
                             {/* Auto-save notice */}
                             <div className="flex items-center gap-2 text-sm text-gray-500">
-                                <i className="fa-solid fa-check text-green-600"></i>
+                                <i className="fa-solid fa-check" style={{ color: "#27500A" }}></i>
                                 All changes are auto-saved
                             </div>
 
@@ -394,7 +437,8 @@ export default function CreateVersion() {
                                     <button
                                         onClick={handleCreateVersion}
                                         disabled={loading}
-                                        className="px-6 py-2.5 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+                                        className="px-6 py-2.5 text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+                                        style={{ backgroundColor: "#27500A" }}
                                     >
                                         {loading ? "Creating..." : "✓ Create Version"}
                                     </button>

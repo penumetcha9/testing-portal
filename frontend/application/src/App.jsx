@@ -3,7 +3,6 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { useRole } from "./hooks/useRole";
 import Sidebar from "./components/Sidebar";
 
-// ── All pages load lazily — only downloaded when the user navigates to them ──
 const Login = lazy(() => import("./pages/Login"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const VersionManagement = lazy(() => import("./pages/VersionManagement"));
@@ -16,7 +15,6 @@ const TestExecution = lazy(() => import("./pages/TestExecution"));
 const FailedIssues = lazy(() => import("./pages/FailedIssues"));
 const UserManagement = lazy(() => import("./pages/UserManagement"));
 
-// ── Spinner shown while a page chunk is downloading ──────────────────────────
 function PageLoader() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
@@ -25,15 +23,11 @@ function PageLoader() {
   );
 }
 
-// ── Layout for all authenticated pages (sidebar + content) ───────────────────
 function ProtectedLayout() {
   const { role, loading } = useRole();
 
-  // Still fetching role — show spinner, don't flash wrong content
-  if (loading) return <PageLoader />;
-
-  // No role means not logged in — send to login
-  if (!role) return <Navigate to="/login" replace />;
+  if (loading) return <PageLoader />;   // ← wait until role is fetched
+  if (!role) return <Navigate to="/login" replace />;  // ← only redirect when sure
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -60,7 +54,6 @@ function ProtectedLayout() {
   );
 }
 
-// ── Root App ─────────────────────────────────────────────────────────────────
 export default function App() {
   return (
     <Suspense fallback={<PageLoader />}>

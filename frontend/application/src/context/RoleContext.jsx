@@ -6,7 +6,7 @@ const RoleContext = createContext(null);
 export function RoleProvider({ children }) {
     const [role, setRole] = useState(null);
     const [loading, setLoading] = useState(true);
-
+    const [initialized, setInitialized] = useState(false);
     async function loadRole() {
         try {
             const { data: { user } } = await supabase.auth.getUser();
@@ -30,16 +30,24 @@ export function RoleProvider({ children }) {
     }
 
     useEffect(() => {
-        loadRole();
+        loadRole().then(() => setInitialized(true));
 
-        // Re-fetch role whenever user logs in or out
-        const { data: listener } = supabase.auth.onAuthStateChange(() => {
-            setLoading(true);
-            loadRole();
+        const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+            if (!initialized) return;
+
+            if (event === "SIGNED_OUT") {
+                setRole(null);
+            }
+
+            if (event === "USER_UPDATED") {
+                loadRole();
+            }
+
+            // 🚫 Ignore SIGNED_IN unless you really need it
         });
 
         return () => listener.subscription.unsubscribe();
-    }, []);
+    }, [initialized]);
 
     return (
         <RoleContext.Provider

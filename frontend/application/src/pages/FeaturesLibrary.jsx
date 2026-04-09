@@ -9,11 +9,8 @@ const GLOBAL_STYLES = `
 
   .fl-root { font-family: 'DM Sans', system-ui, sans-serif; }
 
-  .fl-acc-row { transition: background 0.13s; }
-  .fl-acc-row:hover { background: #F4F6F3 !important; }
-
-  .fl-feat-row { transition: background 0.13s; }
-  .fl-feat-row:hover { background: #F9FAF8 !important; }
+  .fl-feat-card-row { transition: background 0.13s; }
+  .fl-feat-card-row:hover { background: #F4F6F3 !important; }
 
   .fl-tc-row { transition: background 0.13s; }
   .fl-tc-row:hover { background: #F4F6F3 !important; }
@@ -232,7 +229,7 @@ const Dropdown = memo(({ options, selected, onChange, placeholder = "Select..." 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const PRIORITY_OPTIONS = [{ id: "High", name: "High" }, { id: "Medium", name: "Medium" }, { id: "Low", name: "Low" }];
 const STATUS_OPTIONS = [{ id: "Active", name: "Active" }, { id: "Draft", name: "Draft" }, { id: "Archived", name: "Archived" }];
-const FILTER_STATUS_OPT = [{ id: "", name: "All Status" }, { id: "active", name: "Active" }, { id: "draft", name: "Draft" }, { id: "archived", name: "Archived" }];
+const FILTER_STATUS_OPT = [{ id: "", name: "All Status" }, { id: "Active", name: "Active" }, { id: "Draft", name: "Draft" }, { id: "Archived", name: "Archived" }];
 const PRIORITY_WITH_PH = [{ id: "", name: "Select Priority" }, ...PRIORITY_OPTIONS];
 
 const emptyForm = { id: "", name: "", description: "", preconditions: "", steps: "", expected: "", assignee: "", status: "Active", priority: "", tags: "" };
@@ -244,6 +241,27 @@ const generateUUID = () =>
         const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
     });
+
+// Derives the next TC-NNN id from an existing flat list of test cases
+const generateNextTcId = (allTestCases) => {
+    let max = 0;
+    for (const tc of allTestCases) {
+        const m = (tc.tcId || tc.id || "").match(/^TC-(\d+)$/i);
+        if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    return `TC-${String(max + 1).padStart(3, "0")}`;
+};
+
+// Derives the next FEAT-NNN code from an existing flat list of features
+const generateNextFeatCode = (allFeatures) => {
+    let max = 0;
+    for (const f of allFeatures) {
+        const code = f.feature_code || f.code || "";
+        const m = code.match(/^FEAT-(\d+)$/i);
+        if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    return `FEAT-${String(max + 1).padStart(3, "0")}`;
+};
 
 // ─── Stat Card ─────────────────────────────────────────────────────────────────
 const STAT_COLORS = {
@@ -278,7 +296,7 @@ const StatCard = ({ stat }) => {
 const TestCaseRow = memo(({ tc, onEdit, onDelete }) => (
     <tr className="fl-tc-row" style={{ borderBottom: `1px solid ${T.borderLight}` }}>
         <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "2px 8px", borderRadius: 5 }}>{tc.id}</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "2px 8px", borderRadius: 5 }}>{tc.tcId}</span>
         </td>
         <td style={{ padding: "10px 16px" }}>
             <p style={{ fontSize: 12, color: T.text, fontWeight: 500, margin: 0, fontFamily: T.sans }}>{tc.name}</p>
@@ -290,6 +308,14 @@ const TestCaseRow = memo(({ tc, onEdit, onDelete }) => (
         <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
             <Chip label={tc.status} style={STATUS_STYLE[tc.status] || STATUS_STYLE["Active"]} />
         </td>
+        <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+            {tc.assignee
+                ? <span style={{ fontSize: 11, color: T.textMid, fontFamily: T.sans, display: "flex", alignItems: "center", gap: 5 }}>
+                    <i className="fa-solid fa-user" style={{ fontSize: 9, color: T.textFaint }}></i>{tc.assignee}
+                </span>
+                : <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>—</span>
+            }
+        </td>
         <td style={{ padding: "10px 16px", whiteSpace: "nowrap", fontSize: 11, color: T.textMuted, fontFamily: T.mono }}>{tc.updated}</td>
         <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
@@ -300,28 +326,35 @@ const TestCaseRow = memo(({ tc, onEdit, onDelete }) => (
     </tr>
 ));
 
-// ─── Feature Row ───────────────────────────────────────────────────────────────
-const FeatureRow = memo(({ feat, modId, isOpen, onToggle, onAddTC, onEdit, onDelete }) => (
-    <div style={{ borderBottom: `1px solid ${T.borderLight}` }}>
+// ─── Feature Card (PRIMARY level) ─────────────────────────────────────────────
+const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEdit, onDelete }) => (
+    <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, overflow: "hidden" }}>
+
+        {/* ── Feature header row ── */}
         <div
-            className="fl-feat-row"
-            style={{ padding: "13px 20px", cursor: "pointer", background: T.surface }}
+            className="fl-feat-card-row"
+            style={{ padding: "14px 20px", cursor: "pointer", background: T.surface }}
             onClick={onToggle}
         >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                {/* Left: chevron + meta */}
+                {/* Left: icon + meta */}
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
-                    <i className={`fa-solid fa-chevron-right fl-chevron${isOpen ? " open" : ""}`}
-                        style={{ color: T.textFaint, fontSize: 10, flexShrink: 0 }}></i>
+                    <div style={{
+                        width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+                        background: T.greenLight, display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                        <i className="fa-solid fa-list-check" style={{ color: T.green, fontSize: 14 }}></i>
+                    </div>
                     <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginBottom: 3 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: T.text, fontFamily: T.sans }}>{feat.name}</span>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: T.text, fontFamily: T.sans, letterSpacing: "-0.01em" }}>{feat.name}</span>
                             <Chip label={feat.code} style={{ background: T.purpleTint, color: T.purple }} mono />
                             {feat.user_story && <Chip label={feat.user_story} style={{ background: T.redTint, color: T.red }} mono />}
+                            <Chip label={feat.status || "Active"} style={STATUS_STYLE[feat.status] || STATUS_STYLE["Active"]} />
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                             {feat.description && (
-                                <span style={{ fontSize: 11, color: T.textMuted, fontFamily: T.sans, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 320 }}>{feat.description}</span>
+                                <span style={{ fontSize: 11, color: T.textMuted, fontFamily: T.sans, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 340 }}>{feat.description}</span>
                             )}
                             <span style={{ fontSize: 11, color: T.textMuted, display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
                                 <i className="fa-solid fa-vial" style={{ fontSize: 9 }}></i>
@@ -329,7 +362,7 @@ const FeatureRow = memo(({ feat, modId, isOpen, onToggle, onAddTC, onEdit, onDel
                             </span>
                             {feat.assign_to && (
                                 <span style={{ fontSize: 11, color: T.textMuted, display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-                                    <i className="fa-solid fa-user" style={{ fontSize: 9 }}></i> Assigned
+                                    <i className="fa-solid fa-user" style={{ fontSize: 9 }}></i> {feat.assign_to_name || feat.assign_to}
                                 </span>
                             )}
                         </div>
@@ -338,7 +371,7 @@ const FeatureRow = memo(({ feat, modId, isOpen, onToggle, onAddTC, onEdit, onDel
 
                 {/* Right: actions */}
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                    <button className="fl-btn-primary" onClick={(e) => { e.stopPropagation(); onAddTC(e, modId, feat.id); }}>
+                    <button className="fl-btn-primary" onClick={(e) => { e.stopPropagation(); onAddTC(e, feat.moduleId, feat.id); }}>
                         <i className="fa-solid fa-plus" style={{ fontSize: 10 }}></i> Test Case
                     </button>
                     <button className="fl-btn-ghost" onClick={onEdit} title="Edit Feature">
@@ -347,17 +380,37 @@ const FeatureRow = memo(({ feat, modId, isOpen, onToggle, onAddTC, onEdit, onDel
                     <button className="fl-btn-danger-sm" onClick={onDelete} title="Delete Feature">
                         <i className="fa-solid fa-trash" style={{ fontSize: 11 }}></i>
                     </button>
+                    <i className={`fa-solid fa-chevron-right fl-chevron${isOpen ? " open" : ""}`}
+                        style={{ color: T.textFaint, fontSize: 10 }}></i>
                 </div>
             </div>
         </div>
 
+        {/* ── Module badge — always visible ── */}
+        <div style={{
+            background: T.surfaceAlt,
+            borderTop: `1px solid ${T.borderLight}`,
+            padding: "8px 20px",
+            display: "flex", alignItems: "center", gap: 10,
+        }}>
+            <span style={{
+                fontSize: 10, fontWeight: 700, color: T.textFaint,
+                textTransform: "uppercase", letterSpacing: "0.07em",
+                fontFamily: T.sans, flexShrink: 0,
+            }}>Module</span>
+            <div style={{ width: 5, height: 5, borderRadius: "50%", background: T.blue, flexShrink: 0 }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: T.textMid, fontFamily: T.sans }}>{feat.moduleName}</span>
+            <Chip label={feat.moduleCode} style={{ background: T.blueTint, color: T.blue }} mono />
+        </div>
+
+        {/* ── Test cases (expanded) ── */}
         {isOpen && feat.testCases.length > 0 && (
-            <div style={{ background: "#F9FAF8", borderTop: `1px solid ${T.borderLight}` }}>
+            <div style={{ borderTop: `1px solid ${T.borderLight}` }}>
                 <div style={{ overflowX: "auto" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
                         <thead>
                             <tr style={{ background: T.surfaceAlt, borderBottom: `1px solid ${T.border}` }}>
-                                {["ID", "Name", "Priority", "Status", "Updated", ""].map(h => (
+                                {["ID", "Name", "Priority", "Status", "Assignee", "Updated", ""].map(h => (
                                     <th key={h} style={{ padding: "8px 16px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.07em", fontFamily: T.sans }}>{h}</th>
                                 ))}
                             </tr>
@@ -367,8 +420,8 @@ const FeatureRow = memo(({ feat, modId, isOpen, onToggle, onAddTC, onEdit, onDel
                                 <TestCaseRow
                                     key={tc.id}
                                     tc={tc}
-                                    onEdit={(e) => { e.stopPropagation(); onAddTC.__editTC(e, modId, feat.id, tc); }}
-                                    onDelete={(e) => { e.stopPropagation(); onAddTC.__deleteTC(e, modId, feat.id, tc); }}
+                                    onEdit={(e) => { e.stopPropagation(); onAddTC.__editTC(e, feat.moduleId, feat.id, tc); }}
+                                    onDelete={(e) => { e.stopPropagation(); onAddTC.__deleteTC(e, feat.moduleId, feat.id, tc); }}
                                 />
                             ))}
                         </tbody>
@@ -378,7 +431,7 @@ const FeatureRow = memo(({ feat, modId, isOpen, onToggle, onAddTC, onEdit, onDel
         )}
 
         {isOpen && feat.testCases.length === 0 && (
-            <div style={{ background: "#F9FAF8", borderTop: `1px solid ${T.borderLight}`, padding: "18px 20px", textAlign: "center" }}>
+            <div style={{ borderTop: `1px solid ${T.borderLight}`, background: "#F9FAF8", padding: "18px 20px", textAlign: "center" }}>
                 <p style={{ fontSize: 12, color: T.textFaint, margin: 0, fontFamily: T.sans }}>No test cases yet — add one above</p>
             </div>
         )}
@@ -434,7 +487,6 @@ const Field = ({ label, required, children }) => (
 export default function FeaturesLibrary() {
     const [modules, setModules] = useState([]);
     const [users, setUsers] = useState([]);
-    const [openModules, setOpenModules] = useState({});
     const [openFeatures, setOpenFeatures] = useState({});
     const [searchQuery, setSearchQuery] = useState("");
     const [filterStatus, setFilterStatus] = useState("");
@@ -446,6 +498,7 @@ export default function FeaturesLibrary() {
     const [deleteModal, setDeleteModal] = useState({ open: false, tc: null, featureId: null, moduleId: null });
     const [addFeatureModal, setAddFeatureModal] = useState(false);
     const [featureForm, setFeatureForm] = useState(emptyFeatureForm);
+
     const [editFeatureModal, setEditFeatureModal] = useState(false);
     const [editFeatureForm, setEditFeatureForm] = useState(emptyEditFeatureForm);
     const [deleteFeatureModal, setDeleteFeatureModal] = useState(false);
@@ -462,7 +515,7 @@ export default function FeaturesLibrary() {
             ] = await Promise.all([
                 supabase.from("modules").select("*").order("module_code", { ascending: false }),
                 supabase.from("features").select("*"),
-                supabase.from("test_cases").select("id, name, description, priority, status, updated_at, feature_id, module_id, assigned_to"),
+                supabase.from("test_cases").select("id, test_case_id, name, description, priority, status, updated_at, feature_id, module_id, assigned_to"),
             ]);
             if (modulesError) throw modulesError;
             if (featuresError) console.warn("Features:", featuresError.message);
@@ -474,7 +527,14 @@ export default function FeaturesLibrary() {
             for (const tc of tcs) {
                 if (!tc.feature_id) continue;
                 if (!tcsByFeature[tc.feature_id]) tcsByFeature[tc.feature_id] = [];
-                tcsByFeature[tc.feature_id].push({ id: tc.id, name: tc.name, description: tc.description, priority: tc.priority, status: tc.status, updated: new Date(tc.updated_at).toLocaleDateString() });
+                tcsByFeature[tc.feature_id].push({
+                    id: tc.id,
+                    tcId: tc.test_case_id || tc.id,
+                    name: tc.name, description: tc.description,
+                    priority: tc.priority, status: tc.status,
+                    assignee: tc.assigned_to || null,
+                    updated: new Date(tc.updated_at).toLocaleDateString(),
+                });
             }
             const featsByModule = {};
             for (const f of feats) {
@@ -483,8 +543,26 @@ export default function FeaturesLibrary() {
             }
             const enriched = (modulesData || []).map(mod => {
                 const mf = featsByModule[mod.id] || [];
-                const ef = mf.map(feat => ({ ...feat, name: feat.feature_name || feat.name, code: feat.feature_code || feat.code, testCasesCount: (tcsByFeature[feat.id] || []).length, testCases: tcsByFeature[feat.id] || [] }));
-                return { ...mod, name: mod.module_name || mod.name, featuresCount: ef.length, testCasesCount: ef.reduce((a, f) => a + f.testCasesCount, 0), features: ef, icon: "fa-puzzle-piece", status: "Active" };
+                const ef = mf.map(feat => {
+                    return {
+                        ...feat,
+                        name: feat.feature_name || feat.name,
+                        code: feat.feature_code || feat.code,
+                        moduleId: mod.id,
+                        moduleName: mod.module_name || mod.name,
+                        moduleCode: mod.module_code,
+                        testCasesCount: (tcsByFeature[feat.id] || []).length,
+                        testCases: tcsByFeature[feat.id] || [],
+                    };
+                });
+                return {
+                    ...mod,
+                    name: mod.module_name || mod.name,
+                    featuresCount: ef.length,
+                    testCasesCount: ef.reduce((a, f) => a + f.testCasesCount, 0),
+                    features: ef,
+                    status: "Active",
+                };
             });
             setModules(enriched);
         } catch (err) { setError(err.message || "Failed to load"); }
@@ -500,50 +578,79 @@ export default function FeaturesLibrary() {
 
     useEffect(() => { Promise.all([fetchModulesWithFeatures(), fetchUsers()]); }, [fetchModulesWithFeatures, fetchUsers]);
 
-    const totalFeatures = useMemo(() => modules.reduce((a, m) => a + m.featuresCount, 0), [modules]);
-    const totalTestCases = useMemo(() => modules.reduce((a, m) => a + m.testCasesCount, 0), [modules]);
+    // ── Flat features list (primary view) ──────────────────────────────────────
+    const flatFeatures = useMemo(() =>
+        modules.flatMap(mod => mod.features.map(feat => {
+            const assignedUser = users.find(u => u.id === feat.assign_to);
+            return {
+                ...feat,
+                assign_to_name: assignedUser ? assignedUser.name : (feat.assign_to || null),
+            };
+        })),
+        [modules, users]
+    );
+
+    const totalFeatures = useMemo(() => flatFeatures.length, [flatFeatures]);
+    const totalModules = useMemo(() => modules.length, [modules]);
+    const totalTestCases = useMemo(() => flatFeatures.reduce((a, f) => a + f.testCasesCount, 0), [flatFeatures]);
 
     const userOptions = useMemo(() => [{ id: "", name: "Select Assignee" }, ...users.map(u => ({ id: u.id, name: u.name }))], [users]);
     const testerOptions = useMemo(() => [{ id: "", name: "Select Tester" }, ...users.map(u => ({ id: u.name, name: u.name }))], [users]);
     const moduleOptions = useMemo(() => [{ id: "", name: "Choose Module" }, ...modules.map(m => ({ id: m.id, name: m.name }))], [modules]);
 
-    const filteredModules = useMemo(() => {
-        if (!searchQuery && !filterStatus) return modules;
-        const q = searchQuery.toLowerCase();
-        return modules.map(mod => ({
-            ...mod,
-            features: mod.features.filter(f =>
-                !q || f.name.toLowerCase().includes(q) || f.code.toLowerCase().includes(q) ||
-                mod.name.toLowerCase().includes(q) || f.testCases.some(tc => tc.id.toLowerCase().includes(q))
-            ),
-        })).filter(mod => !q || mod.features.length > 0 || mod.name.toLowerCase().includes(q));
-    }, [modules, searchQuery, filterStatus]);
+    // ── Filtered flat features ──────────────────────────────────────────────────
+    const filteredFeatures = useMemo(() => {
+        let list = flatFeatures;
+        if (filterStatus) {
+            list = list.filter(f => (f.status || "Active").toLowerCase() === filterStatus.toLowerCase());
+        }
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            list = list.filter(f =>
+                f.name.toLowerCase().includes(q) ||
+                f.code.toLowerCase().includes(q) ||
+                (f.moduleName || "").toLowerCase().includes(q) ||
+                (f.moduleCode || "").toLowerCase().includes(q) ||
+                f.testCases.some(tc => (tc.tcId || tc.id).toLowerCase().includes(q) || tc.name.toLowerCase().includes(q))
+            );
+        }
+        return list;
+    }, [flatFeatures, searchQuery, filterStatus]);
 
     const stats = useMemo(() => [
-        { label: "Modules", value: modules.length, icon: "fa-puzzle-piece", color: "blue" },
+        { label: "Modules", value: totalModules, icon: "fa-puzzle-piece", color: "blue" },
         { label: "Features", value: totalFeatures, icon: "fa-list-check", color: "green" },
         { label: "Test Cases", value: totalTestCases.toLocaleString(), icon: "fa-vial", color: "purple" },
-        { label: "Active", value: modules.filter(m => m.status === "Active").length, icon: "fa-check-circle", color: "amber" },
+        { label: "Active Features", value: flatFeatures.filter(f => (f.status || "Active") === "Active").length, icon: "fa-check-circle", color: "amber" },
         { label: "Team Members", value: users.length, icon: "fa-users", color: "red" },
-    ], [modules, totalFeatures, totalTestCases, users.length]);
+    ], [totalModules, totalFeatures, totalTestCases, flatFeatures, users.length]);
 
-    const toggleModule = useCallback(id => setOpenModules(p => ({ ...p, [id]: !p[id] })), []);
     const toggleFeature = useCallback(id => setOpenFeatures(p => ({ ...p, [id]: !p[id] })), []);
 
+    const openAddFeatureModal = useCallback(() => {
+        const nextCode = generateNextFeatCode(flatFeatures);
+        setFeatureForm({ ...emptyFeatureForm, code: nextCode });
+        setAddFeatureModal(true);
+    }, [flatFeatures]);
+
     const openAddModal = useCallback((e, moduleId, featureId) => {
-        e.stopPropagation(); setForm(emptyForm); setAddModal({ open: true, featureId, moduleId });
-    }, []);
+        e.stopPropagation();
+        const allTCs = modules.flatMap(m => m.features.flatMap(f => f.testCases));
+        const nextId = generateNextTcId(allTCs);
+        setForm({ ...emptyForm, id: nextId });
+        setAddModal({ open: true, featureId, moduleId });
+    }, [modules]);
     const openEditModal = useCallback((e, moduleId, featureId, tc) => {
         e.stopPropagation();
-        setForm({ id: tc.id, name: tc.name, description: tc.description, preconditions: "", steps: "", expected: "", assignee: tc.assignee || "", status: tc.status, priority: tc.priority, tags: "" });
+        setForm({ id: tc.tcId, name: tc.name, description: tc.description, preconditions: "", steps: "", expected: "", assignee: tc.assignee || "", status: tc.status, priority: tc.priority, tags: "" });
         setEditModal({ open: true, tc, featureId, moduleId });
     }, []);
     const openDeleteModal = useCallback((e, moduleId, featureId, tc) => {
         e.stopPropagation(); setDeleteModal({ open: true, tc, featureId, moduleId });
     }, []);
-    const openEditFeatureModal = useCallback((e, feat, moduleId) => {
+    const openEditFeatureModal = useCallback((e, feat) => {
         e.stopPropagation();
-        setEditFeatureForm({ id: feat.id, moduleId, name: feat.feature_name || feat.name || "", code: feat.feature_code || feat.code || "", user_story: feat.user_story || "", description: feat.description || "", assign_to: feat.assign_to || "" });
+        setEditFeatureForm({ id: feat.id, moduleId: feat.moduleId, name: feat.feature_name || feat.name || "", code: feat.feature_code || feat.code || "", user_story: feat.user_story || "", description: feat.description || "", assign_to: feat.assign_to || "" });
         setEditFeatureModal(true);
     }, []);
     const openDeleteFeatureModal = useCallback((e, feat) => {
@@ -552,13 +659,19 @@ export default function FeaturesLibrary() {
 
     const handleAddTestCase = useCallback(async () => {
         if (!form.name || !form.priority) { alert("Name and Priority required"); return; }
-        if (!form.id) { alert("Test Case ID required"); return; }
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) { alert("Must be logged in"); return; }
-            const { data: existing } = await supabase.from("test_cases").select("id").eq("test_case_id", form.id).maybeSingle();
-            if (existing) { alert(`ID "${form.id}" already exists`); return; }
-            const { error } = await supabase.from("test_cases").insert([{ id: generateUUID(), test_case_id: form.id, name: form.name, description: form.description, feature_id: addModal.featureId || null, priority: form.priority, status: form.status, created_by: user.id, assigned_to: form.assignee || null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }]);
+            const { error } = await supabase.from("test_cases").insert([{
+                id: generateUUID(), test_case_id: form.id, name: form.name,
+                description: form.description,
+                feature_id: addModal.featureId || null,
+                module_id: addModal.moduleId || null,
+                priority: form.priority, status: form.status,
+                created_by: user.id,
+                assigned_to: form.assignee || null,
+                created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+            }]);
             if (error) throw error;
             setAddModal({ open: false }); fetchModulesWithFeatures();
         } catch (err) { alert(`Error: ${err.message}`); }
@@ -567,7 +680,11 @@ export default function FeaturesLibrary() {
     const handleEditTestCase = useCallback(async () => {
         if (!form.name || !form.priority) { alert("Name and Priority required"); return; }
         try {
-            const { error } = await supabase.from("test_cases").update({ name: form.name, description: form.description, priority: form.priority, status: form.status, updated_at: new Date().toISOString() }).eq("id", editModal.tc.id);
+            const { error } = await supabase.from("test_cases").update({
+                name: form.name, description: form.description,
+                priority: form.priority, status: form.status,
+                updated_at: new Date().toISOString(),
+            }).eq("id", editModal.tc.id);
             if (error) throw error;
             setEditModal({ open: false }); fetchModulesWithFeatures();
         } catch (err) { alert(`Error: ${err.message}`); }
@@ -582,9 +699,13 @@ export default function FeaturesLibrary() {
     }, [deleteModal.tc, fetchModulesWithFeatures]);
 
     const handleAddFeature = useCallback(async () => {
-        if (!featureForm.moduleId || !featureForm.name || !featureForm.code) { alert("Module, Name, and Code required"); return; }
+        if (!featureForm.moduleId || !featureForm.name) { alert("Module and Name required"); return; }
         try {
-            const ins = { module_id: featureForm.moduleId, feature_name: featureForm.name, feature_code: featureForm.code, description: featureForm.description, created_at: new Date().toISOString() };
+            const ins = {
+                module_id: featureForm.moduleId, feature_name: featureForm.name,
+                feature_code: featureForm.code, description: featureForm.description,
+                created_at: new Date().toISOString(),
+            };
             if (featureForm.user_story) ins.user_story = featureForm.user_story;
             if (featureForm.assign_to) ins.assign_to = featureForm.assign_to;
             const { error } = await supabase.from("features").insert([ins]);
@@ -596,7 +717,13 @@ export default function FeaturesLibrary() {
     const handleEditFeature = useCallback(async () => {
         if (!editFeatureForm.name || !editFeatureForm.code) { alert("Name and Code required"); return; }
         try {
-            const { error } = await supabase.from("features").update({ feature_name: editFeatureForm.name, feature_code: editFeatureForm.code, description: editFeatureForm.description, user_story: editFeatureForm.user_story || null, assign_to: editFeatureForm.assign_to || null, module_id: editFeatureForm.moduleId }).eq("id", editFeatureForm.id);
+            const { error } = await supabase.from("features").update({
+                feature_name: editFeatureForm.name, feature_code: editFeatureForm.code,
+                description: editFeatureForm.description,
+                user_story: editFeatureForm.user_story || null,
+                assign_to: editFeatureForm.assign_to || null,
+                module_id: editFeatureForm.moduleId,
+            }).eq("id", editFeatureForm.id);
             if (error) throw error;
             setEditFeatureModal(false); setEditFeatureForm(emptyEditFeatureForm); fetchModulesWithFeatures();
         } catch (err) { alert(`Error: ${err.message}`); }
@@ -613,14 +740,16 @@ export default function FeaturesLibrary() {
     }, [deleteFeatureTarget, fetchModulesWithFeatures]);
 
     const exportToCSV = useCallback(() => {
-        if (!modules.length) { alert("No data"); return; }
+        if (!flatFeatures.length) { alert("No data"); return; }
         const rows = [];
-        modules.forEach(mod => {
-            rows.push({ Module: mod.name, Code: mod.module_code, Type: "MODULE" });
-            mod.features.forEach(feat => {
-                rows.push({ Module: mod.name, Feature: feat.name, Code: feat.code, Type: "FEATURE" });
-                feat.testCases.forEach(tc => rows.push({ Module: mod.name, Feature: feat.name, "TC ID": tc.id, "TC Name": tc.name, Priority: tc.priority, Status: tc.status, Type: "TEST_CASE" }));
-            });
+        flatFeatures.forEach(feat => {
+            rows.push({ Module: feat.moduleName, "Module Code": feat.moduleCode, Feature: feat.name, "Feature Code": feat.code, "User Story": feat.user_story || "", Status: feat.status || "Active", Type: "FEATURE" });
+            feat.testCases.forEach(tc => rows.push({
+                Module: feat.moduleName, "Module Code": feat.moduleCode,
+                Feature: feat.name, "Feature Code": feat.code,
+                "TC ID": tc.tcId, "TC Name": tc.name,
+                Priority: tc.priority, Status: tc.status, Type: "TEST_CASE",
+            }));
         });
         const headers = Object.keys(rows.reduce((acc, r) => ({ ...acc, ...r }), {}));
         const csv = [headers.join(","), ...rows.map(r => headers.map(h => `"${r[h] || ""}"`).join(","))].join("\n");
@@ -628,7 +757,7 @@ export default function FeaturesLibrary() {
         a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
         a.download = `features_${new Date().toISOString().split("T")[0]}.csv`;
         a.click();
-    }, [modules]);
+    }, [flatFeatures]);
 
     const addTCHandler = useCallback((e, moduleId, featureId) => openAddModal(e, moduleId, featureId), [openAddModal]);
     addTCHandler.__editTC = openEditModal;
@@ -652,13 +781,13 @@ export default function FeaturesLibrary() {
                 <div style={{ padding: "14px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
                     <div>
                         <h2 style={{ fontSize: 20, fontWeight: 700, color: T.text, margin: 0, lineHeight: 1.2, letterSpacing: "-0.02em" }}>Features Library</h2>
-                        <p style={{ fontSize: 12, color: T.textMuted, margin: "2px 0 0", lineHeight: 1.5 }}>Manage features and test cases across all modules</p>
+                        <p style={{ fontSize: 12, color: T.textMuted, margin: "2px 0 0", lineHeight: 1.5 }}>All features with linked modules and test cases</p>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <button className="fl-btn-ghost" onClick={exportToCSV} style={{ padding: "8px 14px", fontSize: 13 }}>
                             <i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Export
                         </button>
-                        <button className="fl-btn-primary" onClick={() => setAddFeatureModal(true)} style={{ padding: "8px 16px", fontSize: 13 }}>
+                        <button className="fl-btn-primary" onClick={openAddFeatureModal} style={{ padding: "8px 16px", fontSize: 13 }}>
                             <i className="fa-solid fa-plus" style={{ fontSize: 11 }}></i> Add Feature
                         </button>
                     </div>
@@ -686,7 +815,7 @@ export default function FeaturesLibrary() {
                                 <input
                                     className="fl-input"
                                     type="text"
-                                    placeholder="Search modules, features, test case IDs…"
+                                    placeholder="Search features, modules, test case IDs…"
                                     value={searchQuery}
                                     onChange={e => setSearchQuery(e.target.value)}
                                     style={{ paddingLeft: 36 }}
@@ -701,7 +830,7 @@ export default function FeaturesLibrary() {
                     </div>
 
                     {/* Empty */}
-                    {filteredModules.length === 0 && (
+                    {filteredFeatures.length === 0 && (
                         <div style={{ textAlign: "center", padding: "48px 0" }}>
                             <div style={{ width: 48, height: 48, background: T.surfaceAlt, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
                                 <i className="fa-solid fa-inbox" style={{ color: T.textFaint, fontSize: 20 }}></i>
@@ -710,61 +839,18 @@ export default function FeaturesLibrary() {
                         </div>
                     )}
 
-                    {/* Accordion */}
+                    {/* ── Feature cards (primary level) ── */}
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {filteredModules.map(mod => (
-                            <div key={mod.id} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, overflow: "hidden" }}>
-
-                                {/* Module header */}
-                                <div
-                                    className="fl-acc-row"
-                                    style={{ padding: "14px 20px", cursor: "pointer", background: T.surface, borderBottom: openModules[mod.id] ? `1px solid ${T.borderLight}` : "none" }}
-                                    onClick={() => toggleModule(mod.id)}
-                                >
-                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                            <div style={{ width: 36, height: 36, background: T.blueTint, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                                <i className={`fa-solid ${mod.icon}`} style={{ color: T.blue, fontSize: 14 }}></i>
-                                            </div>
-                                            <div>
-                                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-                                                    <h3 style={{ fontWeight: 700, color: T.text, fontSize: 14, margin: 0, letterSpacing: "-0.01em" }}>{mod.name}</h3>
-                                                    <Chip label={mod.module_code} style={{ background: T.blueTint, color: T.blue }} mono />
-                                                </div>
-                                                <p style={{ fontSize: 11, color: T.textMuted, margin: 0 }}>
-                                                    {mod.featuresCount} feature{mod.featuresCount !== 1 ? "s" : ""} · {mod.testCasesCount} test case{mod.testCasesCount !== 1 ? "s" : ""}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                            <Chip label={mod.status} style={STATUS_STYLE[mod.status] || STATUS_STYLE["Active"]} />
-                                            <i className="fa-solid fa-chevron-down" style={{ color: T.textFaint, fontSize: 11, transition: "transform 0.2s", transform: openModules[mod.id] ? "rotate(180deg)" : "rotate(0deg)" }}></i>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Features */}
-                                {openModules[mod.id] && (
-                                    <div>
-                                        {mod.features.length === 0 ? (
-                                            <div style={{ padding: "18px 20px", textAlign: "center" }}>
-                                                <p style={{ color: T.textFaint, fontSize: 12, margin: 0 }}>No features in this module yet</p>
-                                            </div>
-                                        ) : mod.features.map(feat => (
-                                            <FeatureRow
-                                                key={feat.id}
-                                                feat={feat}
-                                                modId={mod.id}
-                                                isOpen={!!openFeatures[feat.id]}
-                                                onToggle={() => toggleFeature(feat.id)}
-                                                onAddTC={addTCHandler}
-                                                onEdit={(e) => openEditFeatureModal(e, feat, mod.id)}
-                                                onDelete={(e) => openDeleteFeatureModal(e, feat)}
-                                            />
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
+                        {filteredFeatures.map(feat => (
+                            <FeatureCard
+                                key={feat.id}
+                                feat={feat}
+                                isOpen={!!openFeatures[feat.id]}
+                                onToggle={() => toggleFeature(feat.id)}
+                                onAddTC={addTCHandler}
+                                onEdit={(e) => openEditFeatureModal(e, feat)}
+                                onDelete={(e) => openDeleteFeatureModal(e, feat)}
+                            />
                         ))}
                     </div>
                 </div>
@@ -786,8 +872,15 @@ export default function FeaturesLibrary() {
                                 <input className="fl-input" type="text" placeholder="e.g., Two-Factor Authentication" value={featureForm.name} onChange={e => setFeatureForm(f => ({ ...f, name: e.target.value }))} />
                             </Field>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                                <Field label="Feature Code" required>
-                                    <input className="fl-input" type="text" placeholder="e.g., FEAT-004" value={featureForm.code} onChange={e => setFeatureForm(f => ({ ...f, code: e.target.value }))} />
+                                <Field label="Feature Code">
+                                    <div style={{
+                                        display: "flex", alignItems: "center", gap: 8,
+                                        padding: "9px 13px", background: T.surfaceAlt,
+                                        border: `1px solid ${T.border}`, borderRadius: 8,
+                                    }}>
+                                        <span style={{ fontSize: 13, fontWeight: 700, color: T.purple, fontFamily: T.mono }}>{featureForm.code}</span>
+                                        <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>Auto-generated</span>
+                                    </div>
                                 </Field>
                                 <Field label="User Story">
                                     <input className="fl-input" type="text" placeholder="e.g., US-015" value={featureForm.user_story} onChange={e => setFeatureForm(f => ({ ...f, user_story: e.target.value }))} />
@@ -869,6 +962,13 @@ export default function FeaturesLibrary() {
                                 <p style={{ fontSize: 13, fontWeight: 600, color: T.text, margin: "0 0 2px" }}>{deleteFeatureTarget?.feature_name || deleteFeatureTarget?.name}</p>
                                 <p style={{ fontSize: 12, color: T.textMuted, margin: 0, fontFamily: T.mono }}>{deleteFeatureTarget?.feature_code || deleteFeatureTarget?.code}</p>
                             </div>
+                            {/* Module context in delete dialog */}
+                            <div style={{ background: T.blueTint, border: `1px solid rgba(37,99,235,0.15)`, borderRadius: 8, padding: "10px 14px", marginBottom: deleteFeatureTarget?.testCasesCount > 0 ? 10 : 16 }}>
+                                <p style={{ fontSize: 12, color: "#1D4ED8", margin: 0, display: "flex", alignItems: "center", gap: 6 }}>
+                                    <i className="fa-solid fa-puzzle-piece" style={{ fontSize: 11 }}></i>
+                                    Module: <strong>{deleteFeatureTarget?.moduleName}</strong>
+                                </p>
+                            </div>
                             {deleteFeatureTarget?.testCasesCount > 0 && (
                                 <div style={{ background: T.amberTint, border: `1px solid rgba(217,119,6,0.2)`, borderRadius: 8, padding: "10px 14px", marginBottom: 16 }}>
                                     <p style={{ fontSize: 12, color: "#92400E", margin: 0 }}>
@@ -896,8 +996,15 @@ export default function FeaturesLibrary() {
                         </div>
                         <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                                <Field label="Test Case ID" required>
-                                    <input className="fl-input" type="text" placeholder="e.g., TC-001" value={form.id} onChange={e => setForm(f => ({ ...f, id: e.target.value }))} />
+                                <Field label="Test Case ID">
+                                    <div style={{
+                                        display: "flex", alignItems: "center", gap: 8,
+                                        padding: "9px 13px", background: T.surfaceAlt,
+                                        border: `1px solid ${T.border}`, borderRadius: 8,
+                                    }}>
+                                        <span style={{ fontSize: 13, fontWeight: 700, color: T.purple, fontFamily: T.mono }}>{form.id}</span>
+                                        <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>Auto-generated</span>
+                                    </div>
                                 </Field>
                                 <Field label="Priority" required>
                                     <Dropdown options={PRIORITY_WITH_PH} selected={form.priority} onChange={v => setForm(f => ({ ...f, priority: v }))} placeholder="Select Priority" />
@@ -978,7 +1085,7 @@ export default function FeaturesLibrary() {
                                 </div>
                             </div>
                             <div style={{ background: T.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 8, padding: "12px 14px", marginBottom: 18 }}>
-                                <p style={{ fontSize: 12, fontWeight: 600, color: T.text, margin: "0 0 2px", fontFamily: T.mono }}>{deleteModal.tc?.id}</p>
+                                <p style={{ fontSize: 12, fontWeight: 600, color: T.text, margin: "0 0 2px", fontFamily: T.mono }}>{deleteModal.tc?.tcId}</p>
                                 <p style={{ fontSize: 12, color: T.textMuted, margin: 0 }}>{deleteModal.tc?.name}</p>
                             </div>
                             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
