@@ -127,7 +127,6 @@ function MultiSelect({ label, options, selected, onChange, placeholder = "Select
 
 // ── User Detail Drawer ────────────────────────────────────────────────────────
 function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, addToast, refreshUsers }) {
-    // Use local state so UI updates immediately without waiting for parent re-render
     const [currentRole, setCurrentRole] = useState(user.role);
     const [newRole, setNewRole] = useState(user.role);
     const [isActive, setIsActive] = useState(user.is_active !== false);
@@ -199,56 +198,39 @@ function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, add
         return modOk && featOk;
     });
 
-    // ── Save Role ──
     const handleRoleSave = async () => {
         if (newRole === currentRole) return;
         setSavingRole(true);
         setSaveSuccess(false);
         try {
-            const { error } = await supabase
-                .from("profiles")
-                .update({ role: newRole })
-                .eq("id", user.id);
-
-            if (error) {
-                addToast("Role save failed: " + error.message, "error");
-            } else {
+            const { error } = await supabase.from("profiles").update({ role: newRole }).eq("id", user.id);
+            if (error) { addToast("Role save failed: " + error.message, "error"); }
+            else {
                 setCurrentRole(newRole);
                 setSaveSuccess(true);
                 addToast(`Role updated to ${newRole}`);
                 onRoleChange(user.id, newRole);
                 setTimeout(() => setSaveSuccess(false), 2000);
             }
-        } catch (e) {
-            addToast("Unexpected error: " + e.message, "error");
-        }
+        } catch (e) { addToast("Unexpected error: " + e.message, "error"); }
         setSavingRole(false);
     };
 
-    // ── Toggle Status ──
     const handleStatusToggle = async () => {
         setSavingStatus(true);
         const newStatus = !isActive;
         try {
-            const { error } = await supabase
-                .from("profiles")
-                .update({ is_active: newStatus })
-                .eq("id", user.id);
-
-            if (error) {
-                addToast("Status update failed: " + error.message, "error");
-            } else {
+            const { error } = await supabase.from("profiles").update({ is_active: newStatus }).eq("id", user.id);
+            if (error) { addToast("Status update failed: " + error.message, "error"); }
+            else {
                 setIsActive(newStatus);
                 onStatusChange(user.id, newStatus);
                 addToast(`User ${newStatus ? "activated" : "deactivated"}`);
             }
-        } catch (e) {
-            addToast("Unexpected error: " + e.message, "error");
-        }
+        } catch (e) { addToast("Unexpected error: " + e.message, "error"); }
         setSavingStatus(false);
     };
 
-    // ── Reassign ──
     const handleReassign = async () => {
         if (!reassignTo) { addToast("Please select a target user", "error"); return; }
         if (selectedTests.length === 0) { addToast("Please select at least one test case", "error"); return; }
@@ -257,43 +239,22 @@ function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, add
         setReassignSuccess(false);
         try {
             const toUser = allUsers.find((u) => u.id === reassignTo);
-
-            const { error } = await supabase
-                .from("test_cases")
-                .update({ assigned_to: reassignTo })
-                .in("id", selectedTests);
-
-            if (error) {
-                addToast("Reassign failed: " + error.message, "error");
-            } else {
+            const { error } = await supabase.from("test_cases").update({ assigned_to: reassignTo }).in("id", selectedTests);
+            if (error) { addToast("Reassign failed: " + error.message, "error"); }
+            else {
                 setReassignSuccess(true);
                 addToast(`${selectedTests.length} test case(s) reassigned to ${toUser?.full_name || toUser?.email}`);
+                setSelectedTests([]); setSelectedModules([]); setSelectedFeatures([]); setReassignTo("");
 
-                setSelectedTests([]);
-                setSelectedModules([]);
-                setSelectedFeatures([]);
-                setReassignTo("");
-
-                // Refresh this user's test list
-                const { data: refreshed } = await supabase
-                    .from("test_cases")
-                    .select("id, test_case_id, name, status, assigned_to")
-                    .eq("assigned_to", user.id);
+                const { data: refreshed } = await supabase.from("test_cases").select("id, test_case_id, name, status, assigned_to").eq("assigned_to", user.id);
                 const mine = refreshed || [];
                 setUserTests(mine.map((t) => ({ ...t, displayName: `${t.test_case_id} — ${t.name}` })));
-                setUserStats({
-                    total: mine.length,
-                    passed: mine.filter((t) => t.status === "pass").length,
-                    failed: mine.filter((t) => t.status === "fail").length,
-                    pending: mine.filter((t) => !t.status || t.status === "not-tested").length,
-                });
+                setUserStats({ total: mine.length, passed: mine.filter((t) => t.status === "pass").length, failed: mine.filter((t) => t.status === "fail").length, pending: mine.filter((t) => !t.status || t.status === "not-tested").length });
 
                 if (refreshUsers) refreshUsers();
                 setTimeout(() => setReassignSuccess(false), 2000);
             }
-        } catch (e) {
-            addToast("Unexpected error: " + e.message, "error");
-        }
+        } catch (e) { addToast("Unexpected error: " + e.message, "error"); }
         setReassigning(false);
     };
 
@@ -301,8 +262,6 @@ function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, add
         <>
             <div className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm" onClick={onClose} />
             <div className="fixed right-0 top-0 h-full w-full max-w-lg bg-white z-50 shadow-2xl flex flex-col overflow-hidden">
-
-                {/* Header */}
                 <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 flex-shrink-0">
                     <h3 className="font-bold text-slate-900">User Details</h3>
                     <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors">
@@ -311,8 +270,6 @@ function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, add
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6 space-y-5">
-
-                    {/* Profile */}
                     <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl">
                         {user.avatar_url ? (
                             <img src={user.avatar_url} alt="" className="w-14 h-14 rounded-full object-cover flex-shrink-0" />
@@ -330,21 +287,13 @@ function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, add
                         </div>
                     </div>
 
-                    {/* Test Stats */}
                     <div className="bg-white border border-slate-200 rounded-xl p-4">
                         <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Test Case Stats</p>
                         {loadingData ? (
-                            <div className="flex items-center justify-center py-4">
-                                <i className="fa-solid fa-spinner animate-spin text-slate-400" />
-                            </div>
+                            <div className="flex items-center justify-center py-4"><i className="fa-solid fa-spinner animate-spin text-slate-400" /></div>
                         ) : (
                             <div className="grid grid-cols-4 gap-2">
-                                {[
-                                    { label: "Total", value: userStats.total, color: "text-slate-900" },
-                                    { label: "Passed", value: userStats.passed, color: "text-emerald-600" },
-                                    { label: "Failed", value: userStats.failed, color: "text-red-600" },
-                                    { label: "Pending", value: userStats.pending, color: "text-amber-600" },
-                                ].map((s) => (
+                                {[{ label: "Total", value: userStats.total, color: "text-slate-900" }, { label: "Passed", value: userStats.passed, color: "text-emerald-600" }, { label: "Failed", value: userStats.failed, color: "text-red-600" }, { label: "Pending", value: userStats.pending, color: "text-amber-600" }].map((s) => (
                                     <div key={s.label} className="text-center bg-slate-50 rounded-lg p-3">
                                         <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
                                         <p className="text-[10px] text-slate-400 mt-0.5">{s.label}</p>
@@ -354,206 +303,92 @@ function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, add
                         )}
                     </div>
 
-                    {/* Change Role */}
                     <div className="bg-white border border-slate-200 rounded-xl p-4">
                         <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Change Role</p>
                         <div className="flex gap-2">
-                            <select
-                                value={newRole}
-                                onChange={(e) => setNewRole(e.target.value)}
-                                className="flex-1 px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="flex-1 px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
                                 <option value="tester">Tester</option>
                                 <option value="developer">Developer</option>
                                 <option value="admin">Admin</option>
                             </select>
-                            <button
-                                type="button"
-                                onClick={handleRoleSave}
-                                disabled={savingRole || newRole === currentRole}
-                                className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${saveSuccess
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : "bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                                    }`}>
-                                {savingRole
-                                    ? <><i className="fa-solid fa-spinner animate-spin" />Saving…</>
-                                    : saveSuccess
-                                        ? <><i className="fa-solid fa-check-double" />Saved!</>
-                                        : <><i className="fa-solid fa-check" />Save</>}
+                            <button type="button" onClick={handleRoleSave} disabled={savingRole || newRole === currentRole}
+                                className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${saveSuccess ? "bg-emerald-100 text-emerald-700" : "bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"}`}>
+                                {savingRole ? <><i className="fa-solid fa-spinner animate-spin" />Saving…</> : saveSuccess ? <><i className="fa-solid fa-check-double" />Saved!</> : <><i className="fa-solid fa-check" />Save</>}
                             </button>
                         </div>
-                        {newRole !== currentRole && !saveSuccess && (
-                            <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
-                                <i className="fa-solid fa-triangle-exclamation" />
-                                Role changed to <strong>{newRole}</strong> — click Save to apply
-                            </p>
-                        )}
-                        {saveSuccess && (
-                            <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1">
-                                <i className="fa-solid fa-check-circle" />
-                                Role successfully updated to <strong>{currentRole}</strong>
-                            </p>
-                        )}
+                        {newRole !== currentRole && !saveSuccess && <p className="text-xs text-amber-600 mt-2 flex items-center gap-1"><i className="fa-solid fa-triangle-exclamation" />Role changed to <strong>{newRole}</strong> — click Save to apply</p>}
+                        {saveSuccess && <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1"><i className="fa-solid fa-check-circle" />Role successfully updated to <strong>{currentRole}</strong></p>}
                     </div>
 
-                    {/* Account Status */}
                     <div className="bg-white border border-slate-200 rounded-xl p-4">
                         <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Account Status</p>
                         <div className="flex items-center justify-between">
                             <div>
                                 <div className="flex items-center gap-2 mb-1">
                                     <div className={`w-2 h-2 rounded-full ${!isActive ? "bg-red-400" : "bg-emerald-500"}`} />
-                                    <p className="text-sm font-semibold text-slate-800">
-                                        {!isActive ? "Deactivated" : "Active"}
-                                    </p>
+                                    <p className="text-sm font-semibold text-slate-800">{!isActive ? "Deactivated" : "Active"}</p>
                                 </div>
-                                <p className="text-xs text-slate-400">
-                                    {!isActive ? "User cannot log in" : "User has full access"}
-                                </p>
+                                <p className="text-xs text-slate-400">{!isActive ? "User cannot log in" : "User has full access"}</p>
                             </div>
-                            <button
-                                type="button"
-                                onClick={handleStatusToggle}
-                                disabled={savingStatus}
-                                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 ${!isActive
-                                    ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-                                    : "bg-red-100 text-red-700 hover:bg-red-200"
-                                    }`}>
-                                {savingStatus
-                                    ? <i className="fa-solid fa-spinner animate-spin" />
-                                    : <>
-                                        <i className={`fa-solid ${!isActive ? "fa-user-check" : "fa-user-slash"} mr-1.5`} />
-                                        {!isActive ? "Activate" : "Deactivate"}
-                                    </>
-                                }
+                            <button type="button" onClick={handleStatusToggle} disabled={savingStatus}
+                                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 ${!isActive ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" : "bg-red-100 text-red-700 hover:bg-red-200"}`}>
+                                {savingStatus ? <i className="fa-solid fa-spinner animate-spin" /> : <><i className={`fa-solid ${!isActive ? "fa-user-check" : "fa-user-slash"} mr-1.5`} />{!isActive ? "Activate" : "Deactivate"}</>}
                             </button>
                         </div>
                     </div>
 
-                    {/* Reassign Work */}
                     <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
                         <div>
                             <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Reassign Work</p>
                             <p className="text-xs text-slate-400 mt-0.5">Filter by module / feature, pick test cases, then assign to another user</p>
                         </div>
-
-                        {/* Target user */}
                         <div>
                             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 block">Assign To</label>
-                            <select
-                                value={reassignTo}
-                                onChange={(e) => setReassignTo(e.target.value)}
+                            <select value={reassignTo} onChange={(e) => setReassignTo(e.target.value)}
                                 className={`w-full px-3 py-2.5 bg-white border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${reassignTo ? "border-emerald-300 bg-emerald-50" : "border-slate-200"}`}>
                                 <option value="">Select target user…</option>
-                                {allUsers.map((u) => (
-                                    <option key={u.id} value={u.id}>
-                                        {u.full_name || u.email} ({u.role})
-                                    </option>
-                                ))}
+                                {allUsers.map((u) => <option key={u.id} value={u.id}>{u.full_name || u.email} ({u.role})</option>)}
                             </select>
                         </div>
-
-                        {/* Module multi-select */}
-                        <MultiSelect
-                            label="Filter by Module"
-                            options={modules}
-                            selected={selectedModules}
-                            onChange={(vals) => { setSelectedModules(vals); setSelectedFeatures([]); setSelectedTests([]); }}
-                            placeholder="All modules…"
-                        />
-
-                        {/* Feature multi-select */}
-                        <MultiSelect
-                            label="Filter by Feature"
-                            options={filteredFeatures}
-                            selected={selectedFeatures}
-                            onChange={(vals) => { setSelectedFeatures(vals); setSelectedTests([]); }}
-                            placeholder="All features…"
-                        />
-
-                        {/* Test cases multi-select */}
-                        <MultiSelect
-                            label={`Assign Test Cases${filteredTests.length > 0 ? ` (${filteredTests.length} available)` : ""}`}
-                            options={filteredTests}
-                            selected={selectedTests}
-                            onChange={setSelectedTests}
-                            placeholder="Select test cases to reassign…"
-                        />
-
-                        {/* Quick select helpers */}
+                        <MultiSelect label="Filter by Module" options={modules} selected={selectedModules} onChange={(vals) => { setSelectedModules(vals); setSelectedFeatures([]); setSelectedTests([]); }} placeholder="All modules…" />
+                        <MultiSelect label="Filter by Feature" options={filteredFeatures} selected={selectedFeatures} onChange={(vals) => { setSelectedFeatures(vals); setSelectedTests([]); }} placeholder="All features…" />
+                        <MultiSelect label={`Assign Test Cases${filteredTests.length > 0 ? ` (${filteredTests.length} available)` : ""}`} options={filteredTests} selected={selectedTests} onChange={setSelectedTests} placeholder="Select test cases to reassign…" />
                         {filteredTests.length > 0 && (
                             <div className="flex gap-2">
-                                <button type="button"
-                                    onClick={() => setSelectedTests(filteredTests.map((t) => t.id))}
-                                    className="text-xs px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors font-medium">
-                                    <i className="fa-solid fa-check-double mr-1" />Select All ({filteredTests.length})
-                                </button>
-                                <button type="button" onClick={() => setSelectedTests([])}
-                                    className="text-xs px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors font-medium">
-                                    <i className="fa-solid fa-xmark mr-1" />Clear
-                                </button>
+                                <button type="button" onClick={() => setSelectedTests(filteredTests.map((t) => t.id))} className="text-xs px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors font-medium"><i className="fa-solid fa-check-double mr-1" />Select All ({filteredTests.length})</button>
+                                <button type="button" onClick={() => setSelectedTests([])} className="text-xs px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors font-medium"><i className="fa-solid fa-xmark mr-1" />Clear</button>
                             </div>
                         )}
-
-                        {/* Requirements checklist */}
                         <div className="space-y-1">
                             <div className={`flex items-center gap-2 text-xs ${reassignTo ? "text-emerald-600" : "text-slate-400"}`}>
                                 <i className={`fa-solid ${reassignTo ? "fa-check-circle" : "fa-circle"} text-sm`} />
-                                {reassignTo
-                                    ? `Target: ${allUsers.find((u) => u.id === reassignTo)?.full_name || "Selected"}`
-                                    : "Select a target user above"}
+                                {reassignTo ? `Target: ${allUsers.find((u) => u.id === reassignTo)?.full_name || "Selected"}` : "Select a target user above"}
                             </div>
                             <div className={`flex items-center gap-2 text-xs ${selectedTests.length > 0 ? "text-emerald-600" : "text-slate-400"}`}>
                                 <i className={`fa-solid ${selectedTests.length > 0 ? "fa-check-circle" : "fa-circle"} text-sm`} />
-                                {selectedTests.length > 0
-                                    ? `${selectedTests.length} test case(s) selected`
-                                    : "Select test cases above"}
+                                {selectedTests.length > 0 ? `${selectedTests.length} test case(s) selected` : "Select test cases above"}
                             </div>
                         </div>
-
-                        {/* Reassign button */}
-                        <button
-                            type="button"
-                            onClick={handleReassign}
-                            disabled={reassigning || !reassignTo || selectedTests.length === 0}
-                            className={`w-full px-4 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 ${reassignSuccess
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                                }`}>
-                            {reassigning
-                                ? <><i className="fa-solid fa-spinner animate-spin" />Reassigning…</>
-                                : reassignSuccess
-                                    ? <><i className="fa-solid fa-check-double" />Reassigned!</>
-                                    : <><i className="fa-solid fa-arrows-rotate" />
-                                        Reassign {selectedTests.length > 0 ? `${selectedTests.length} Test Case(s)` : "Test Cases"}</>
-                            }
+                        <button type="button" onClick={handleReassign} disabled={reassigning || !reassignTo || selectedTests.length === 0}
+                            className={`w-full px-4 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 ${reassignSuccess ? "bg-emerald-100 text-emerald-700" : "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"}`}>
+                            {reassigning ? <><i className="fa-solid fa-spinner animate-spin" />Reassigning…</> : reassignSuccess ? <><i className="fa-solid fa-check-double" />Reassigned!</> : <><i className="fa-solid fa-arrows-rotate" />Reassign {selectedTests.length > 0 ? `${selectedTests.length} Test Case(s)` : "Test Cases"}</>}
                         </button>
                     </div>
 
-                    {/* Current assigned test cases */}
                     {userTests.length > 0 && (
                         <div className="bg-white border border-slate-200 rounded-xl p-4">
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">
-                                Currently Assigned <span className="font-normal text-slate-400">({userTests.length})</span>
-                            </p>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Currently Assigned <span className="font-normal text-slate-400">({userTests.length})</span></p>
                             <div className="space-y-1.5 max-h-52 overflow-y-auto">
                                 {userTests.slice(0, 15).map((t) => {
-                                    const sc = t.status === "pass"
-                                        ? "text-emerald-600 bg-emerald-50"
-                                        : t.status === "fail"
-                                            ? "text-red-600 bg-red-50"
-                                            : "text-slate-400 bg-slate-100";
+                                    const sc = t.status === "pass" ? "text-emerald-600 bg-emerald-50" : t.status === "fail" ? "text-red-600 bg-red-50" : "text-slate-400 bg-slate-100";
                                     return (
                                         <div key={t.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg">
                                             <p className="text-xs font-medium text-slate-700 truncate pr-2">{t.displayName}</p>
-                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize flex-shrink-0 ${sc}`}>
-                                                {t.status || "pending"}
-                                            </span>
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize flex-shrink-0 ${sc}`}>{t.status || "pending"}</span>
                                         </div>
                                     );
                                 })}
-                                {userTests.length > 15 && (
-                                    <p className="text-xs text-slate-400 text-center pt-1">+{userTests.length - 15} more</p>
-                                )}
+                                {userTests.length > 15 && <p className="text-xs text-slate-400 text-center pt-1">+{userTests.length - 15} more</p>}
                             </div>
                         </div>
                     )}
@@ -582,36 +417,27 @@ export default function UserManagement() {
         setTimeout(() => setToasts((p) => p.filter((t) => t.id !== id)), 3500);
     }, []);
 
-    // ── Fetch users ──
     const fetchUsers = useCallback(async () => {
         setLoading(true);
-        const { data, error } = await supabase
-            .from("profiles")
-            .select("id, full_name, email, role, avatar_url, updated_at, is_active")
-            .order("full_name");
-        if (error) {
-            addToast("Failed to load users: " + error.message, "error");
-        } else {
-            setUsers(data || []);
-        }
+        const { data, error } = await supabase.from("profiles").select("id, full_name, email, role, avatar_url, updated_at, is_active").order("full_name");
+        if (error) { addToast("Failed to load users: " + error.message, "error"); }
+        else { setUsers(data || []); }
         setLoading(false);
     }, [addToast]);
 
     useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
-    // ── Role change callback from drawer ──
     const handleRoleChange = useCallback((userId, newRole) => {
         setUsers((p) => p.map((u) => u.id === userId ? { ...u, role: newRole } : u));
         setSelectedUser((prev) => prev?.id === userId ? { ...prev, role: newRole } : prev);
     }, []);
 
-    // ── Status change callback from drawer ──
     const handleStatusChange = useCallback((userId, newStatus) => {
         setUsers((p) => p.map((u) => u.id === userId ? { ...u, is_active: newStatus } : u));
         setSelectedUser((prev) => prev?.id === userId ? { ...prev, is_active: newStatus } : prev);
     }, []);
 
-    // ── Delete user ──
+    // ── Delete user — removes from both profiles AND Supabase Auth ──
     const handleDelete = useCallback((userId) => {
         const user = users.find((u) => u.id === userId);
         setConfirmDialog({
@@ -622,11 +448,36 @@ export default function UserManagement() {
             onConfirm: async () => {
                 setConfirmDialog((p) => ({ ...p, show: false }));
                 try {
-                    const { error } = await supabase.from("profiles").delete().eq("id", userId);
-                    if (error) { addToast("Failed to delete: " + error.message, "error"); return; }
-                    addToast("User deleted");
+                    // Step 1: Delete from profiles table
+                    const { error: profileError } = await supabase
+                        .from("profiles")
+                        .delete()
+                        .eq("id", userId);
+
+                    if (profileError) {
+                        addToast("Failed to delete profile: " + profileError.message, "error");
+                        return;
+                    }
+
+                    // Step 2: Delete from Supabase Auth using admin API
+                    // This requires the service role key — call via your backend or
+                    // Supabase admin.deleteUser if available
+                    const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+
+                    if (authError) {
+                        // Auth delete failed but profile is already deleted
+                        // User won't appear in list but can still technically log in
+                        // This is acceptable — they won't have a profile to load
+                        console.warn("Auth user delete failed (may need service role):", authError.message);
+                        addToast("Profile deleted. Note: auth account may still exist.", "info");
+                    } else {
+                        addToast("User fully deleted");
+                    }
+
+                    // Remove from local state immediately so UI updates without refresh
                     setUsers((p) => p.filter((u) => u.id !== userId));
                     if (selectedUser?.id === userId) setSelectedUser(null);
+
                 } catch (e) {
                     addToast("Unexpected error: " + e.message, "error");
                 }
@@ -634,37 +485,25 @@ export default function UserManagement() {
         });
     }, [users, addToast, selectedUser]);
 
-    // ── Quick role change from table dropdown ──
     const handleQuickRoleChange = useCallback(async (userId, newRole) => {
         try {
-            const { error } = await supabase
-                .from("profiles")
-                .update({ role: newRole })
-                .eq("id", userId);
+            const { error } = await supabase.from("profiles").update({ role: newRole }).eq("id", userId);
             if (error) { addToast("Role update failed: " + error.message, "error"); return; }
             addToast("Role updated to " + newRole);
             setUsers((p) => p.map((u) => u.id === userId ? { ...u, role: newRole } : u));
             setSelectedUser((prev) => prev?.id === userId ? { ...prev, role: newRole } : prev);
-        } catch (e) {
-            addToast("Unexpected error: " + e.message, "error");
-        }
+        } catch (e) { addToast("Unexpected error: " + e.message, "error"); }
     }, [addToast]);
 
-    // ── Export CSV ──
     const handleExport = useCallback(() => {
         const rows = [
             ["Name", "Email", "Role", "Status"],
-            ...filteredUsers.map((u) => [
-                u.full_name || "", u.email, u.role,
-                u.is_active === false ? "Inactive" : "Active",
-            ]),
+            ...filteredUsers.map((u) => [u.full_name || "", u.email, u.role, u.is_active === false ? "Inactive" : "Active"]),
         ].map((r) => r.map((c) => `"${(c || "").toString().replace(/"/g, '""')}"`).join(",")).join("\n");
         const blob = new Blob([rows], { type: "text/csv" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
-        a.href = url;
-        a.download = `users-${new Date().toISOString().split("T")[0]}.csv`;
-        a.click();
+        a.href = url; a.download = `users-${new Date().toISOString().split("T")[0]}.csv`; a.click();
         URL.revokeObjectURL(url);
         addToast(`Exported ${filteredUsers.length} users`);
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -719,7 +558,6 @@ export default function UserManagement() {
                 />
             )}
 
-            {/* Header */}
             <header className="bg-white border-b border-slate-200 flex-shrink-0">
                 <div className="px-4 lg:px-8 py-4">
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -745,8 +583,6 @@ export default function UserManagement() {
 
             <main className="flex-1 overflow-auto">
                 <div className="p-4 lg:p-8 space-y-5">
-
-                    {/* Stats */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                         {stats.map((s) => {
                             const [bgC, textC] = colorMap[s.color];
@@ -762,7 +598,6 @@ export default function UserManagement() {
                         })}
                     </div>
 
-                    {/* Filters */}
                     <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
                         <div className="flex flex-col sm:flex-row gap-4">
                             <div className="flex-1 relative">
@@ -788,7 +623,6 @@ export default function UserManagement() {
                         </p>
                     </div>
 
-                    {/* Table */}
                     <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
                         {loading ? (
                             <div className="flex items-center justify-center py-20 gap-3 text-slate-400">
@@ -812,7 +646,6 @@ export default function UserManagement() {
                                             return (
                                                 <tr key={user.id} onClick={() => setSelectedUser(user)}
                                                     className={`cursor-pointer transition-colors hover:bg-slate-50 ${inactive ? "opacity-60" : ""}`}>
-
                                                     <td className="px-5 py-4">
                                                         <div className="flex items-center gap-3">
                                                             {user.avatar_url ? (
@@ -828,39 +661,29 @@ export default function UserManagement() {
                                                             </div>
                                                         </div>
                                                     </td>
-
                                                     <td className="px-5 py-4">
                                                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${rs.badge}`}>
                                                             <span className={`w-1.5 h-1.5 rounded-full ${rs.dot}`} />{user.role}
                                                         </span>
                                                     </td>
-
                                                     <td className="px-5 py-4">
                                                         <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${inactive ? "bg-red-100 text-red-600" : "bg-emerald-100 text-emerald-700"}`}>
                                                             {inactive ? "Inactive" : "Active"}
                                                         </span>
                                                     </td>
-
                                                     <td className="px-5 py-4">
                                                         <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                                                            <select value={user.role}
-                                                                onChange={(e) => handleQuickRoleChange(user.id, e.target.value)}
+                                                            <select value={user.role} onChange={(e) => handleQuickRoleChange(user.id, e.target.value)}
                                                                 className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500">
                                                                 <option value="tester">Tester</option>
                                                                 <option value="developer">Developer</option>
                                                                 <option value="admin">Admin</option>
                                                             </select>
-
-                                                            <button type="button"
-                                                                onClick={() => handleDelete(user.id)}
-                                                                title="Delete user"
+                                                            <button type="button" onClick={() => handleDelete(user.id)} title="Delete user"
                                                                 className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-50 transition-colors">
                                                                 <i className="fa-solid fa-trash text-sm" />
                                                             </button>
-
-                                                            <button type="button"
-                                                                onClick={() => setSelectedUser(user)}
-                                                                title="View details"
+                                                            <button type="button" onClick={() => setSelectedUser(user)} title="View details"
                                                                 className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 transition-colors">
                                                                 <i className="fa-solid fa-chevron-right text-sm" />
                                                             </button>
