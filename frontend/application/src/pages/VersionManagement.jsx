@@ -280,7 +280,6 @@ const AssignModulesPage = memo(({ version, modules, onBack, onSuccess, showToast
 
     return (
         <div className="flex-1 flex flex-col min-h-screen bg-gray-50">
-            {/* Header */}
             <header className="bg-white border-b px-8 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                     <button onClick={onBack}
@@ -311,8 +310,6 @@ const AssignModulesPage = memo(({ version, modules, onBack, onSuccess, showToast
 
             <main className="flex-1 p-8">
                 <div className="max-w-4xl mx-auto space-y-6">
-
-                    {/* Summary bar */}
                     <div className="bg-white border border-green-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center">
@@ -341,7 +338,6 @@ const AssignModulesPage = memo(({ version, modules, onBack, onSuccess, showToast
                         </div>
                     </div>
 
-                    {/* Search + bulk actions */}
                     <div className="bg-white border border-gray-200 rounded-xl p-5">
                         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
                             <div className="relative flex-1 max-w-sm">
@@ -367,7 +363,6 @@ const AssignModulesPage = memo(({ version, modules, onBack, onSuccess, showToast
                         </div>
                     </div>
 
-                    {/* Module list */}
                     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                             <h3 className="font-semibold text-gray-900">
@@ -393,10 +388,7 @@ const AssignModulesPage = memo(({ version, modules, onBack, onSuccess, showToast
                                     return (
                                         <div key={mod.id} onClick={() => toggle(mod.id)}
                                             className={`flex items-center gap-4 px-6 py-4 cursor-pointer transition-all ${isSel ? "bg-green-50" : "hover:bg-gray-50"}`}>
-                                            {/* Row number */}
                                             <span className="text-xs text-gray-400 w-6 flex-shrink-0 font-mono">{idx + 1}</span>
-
-                                            {/* Checkbox */}
                                             <div className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border-2 transition-all ${isSel ? "bg-green-600 border-green-600" : "border-gray-300 bg-white"}`}>
                                                 {isSel && (
                                                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -404,13 +396,9 @@ const AssignModulesPage = memo(({ version, modules, onBack, onSuccess, showToast
                                                     </svg>
                                                 )}
                                             </div>
-
-                                            {/* Module icon */}
                                             <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${isSel ? "bg-green-100" : "bg-gray-100"}`}>
                                                 <i className={`fa-solid fa-cube text-sm ${isSel ? "text-green-600" : "text-gray-400"}`} />
                                             </div>
-
-                                            {/* Info */}
                                             <div className="flex-1 min-w-0">
                                                 <p className={`text-sm font-semibold ${isSel ? "text-green-900" : "text-gray-900"}`}>
                                                     {mod.module_name}
@@ -419,8 +407,6 @@ const AssignModulesPage = memo(({ version, modules, onBack, onSuccess, showToast
                                                     Code: <span className="font-mono">{mod.module_code}</span>
                                                 </p>
                                             </div>
-
-                                            {/* Status pill */}
                                             {isSel ? (
                                                 <span className="flex items-center gap-1.5 px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full flex-shrink-0">
                                                     <i className="fa-solid fa-check text-xs" /> Assigned
@@ -437,7 +423,6 @@ const AssignModulesPage = memo(({ version, modules, onBack, onSuccess, showToast
                         )}
                     </div>
 
-                    {/* Bottom save bar */}
                     <div className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
                         <p className="text-sm text-gray-600">
                             <span className="font-semibold text-green-700">{selected.length} module{selected.length !== 1 ? "s" : ""}</span> will be assigned to <span className="font-semibold">{version.version_number}</span>
@@ -489,9 +474,20 @@ const VersionCard = memo(({ v, onEdit, onArchive, onDelete, onViewDetails, onAss
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button onClick={() => onEdit(v)} className="p-2 text-gray-400 hover:text-green-700 transition-colors" title="Edit"><i className="fa-solid fa-pen-to-square" /></button>
-                    <button onClick={() => onArchive(v)} className="p-2 text-gray-400 hover:text-orange-500 transition-colors" title="Archive"><i className="fa-solid fa-archive" /></button>
-                    <button onClick={() => onDelete(v)} className="p-2 text-gray-400 hover:text-red-600 transition-colors" title="Delete"><i className="fa-solid fa-trash" /></button>
+                    <button onClick={() => onEdit(v)} className="p-2 text-gray-400 hover:text-green-700 transition-colors" title="Edit">
+                        <i className="fa-solid fa-pen-to-square" />
+                    </button>
+                    <button onClick={() => onArchive(v)} className="p-2 text-gray-400 hover:text-orange-500 transition-colors" title="Archive">
+                        <i className="fa-solid fa-archive" />
+                    </button>
+                    {/* ── Delete button — fully wired ── */}
+                    <button
+                        onClick={() => onDelete(v)}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                        title="Delete version"
+                    >
+                        <i className="fa-solid fa-trash" />
+                    </button>
                 </div>
             </div>
 
@@ -534,12 +530,10 @@ const VersionCard = memo(({ v, onEdit, onArchive, onDelete, onViewDetails, onAss
                 </button>
                 {v.status !== "archived" && (
                     <>
-                        {/* ✅ Renamed: Assign Tests → Assign Testers */}
                         <button onClick={() => onAssignTesters(v)}
                             className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors flex items-center gap-1.5">
                             <i className="fa-solid fa-users text-sm" /> Assign Testers
                         </button>
-                        {/* ✅ Assign Modules → opens full page */}
                         <button onClick={() => onAssignModules(v)}
                             className="px-4 py-2 border border-green-300 text-green-700 rounded-lg text-sm hover:bg-green-50 transition-colors flex items-center gap-1.5">
                             <i className="fa-solid fa-puzzle-piece" /> Assign Modules
@@ -575,10 +569,7 @@ export default function VersionManagement() {
     const [showModal, setShowModal] = useState(false);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [showAssignModal, setShowAssignModal] = useState(false);
-
-    // ✅ Full page instead of modal for assign modules
     const [assignModulesVersion, setAssignModulesVersion] = useState(null);
-
     const [selectedVersion, setSelectedVersion] = useState(null);
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState("");
@@ -675,7 +666,6 @@ export default function VersionManagement() {
 
     useEffect(() => { fetchVersions(); fetchUsers(); fetchModules(); }, [fetchVersions, fetchUsers, fetchModules]);
 
-    // Keep selectedVersion in sync when versions refresh
     useEffect(() => {
         if (selectedVersion) {
             const fresh = versions.find(v => v.id === selectedVersion.id);
@@ -738,7 +728,6 @@ export default function VersionManagement() {
     const handleViewDetails = useCallback((v) => { setSelectedVersion(v); setShowDetailsModal(true); }, []);
     const handleAssignTesters = useCallback((v) => { setSelectedVersion(v); setShowAssignModal(true); }, []);
 
-    // ✅ Opens full page instead of modal
     const handleAssignModules = useCallback((v) => {
         setShowDetailsModal(false);
         setAssignModulesVersion(v);
@@ -819,21 +808,41 @@ export default function VersionManagement() {
         showToast(`Report exported: ${v.version_number} 📊`);
     }, [showToast]);
 
+    // ── Delete: clean up related rows first, then delete the version ──────────
     const handleDeleteVersion = useCallback(async (v) => {
-        const ok = await showConfirm(`Permanently DELETE ${v.version_number}? This cannot be undone!`);
+        const ok = await showConfirm(
+            `Permanently DELETE "${v.version_number}"? This will also remove all linked modules and tester assignments. This cannot be undone!`
+        );
         if (!ok) return;
+
         try {
+            // 1. Delete child rows to avoid FK constraint errors
+            await supabase.from("version_modules").delete().eq("version_id", v.id);
+            await supabase.from("version_testers").delete().eq("version_id", v.id);
+
+            // 2. Delete the version itself
             const { error } = await supabase.from("versions").delete().eq("id", v.id);
             if (error) throw error;
-            await fetchVersions(); showToast(`${v.version_number} deleted 🗑️`);
-        } catch (err) { showToast(err.message, "error"); }
-    }, [showConfirm, fetchVersions, showToast]);
+
+            // 3. Close any open modals that were showing this version
+            if (selectedVersion?.id === v.id) {
+                setSelectedVersion(null);
+                setShowDetailsModal(false);
+                setShowModal(false);
+                setShowAssignModal(false);
+            }
+
+            await fetchVersions();
+            showToast(`"${v.version_number}" deleted successfully 🗑️`);
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }, [showConfirm, fetchVersions, showToast, selectedVersion]);
 
     const handleResetFilters = useCallback(() => { setSearch(""); setStatusFilter(""); setActiveTab("all"); }, []);
     const setTestersSel = useCallback((sel) => setFormData(prev => ({ ...prev, selectedTesters: sel })), []);
     const setStatus = useCallback((v) => setFormData(prev => ({ ...prev, status: v })), []);
 
-    // ✅ If assign modules page is open, render it full screen
     if (assignModulesVersion) {
         return (
             <>
@@ -939,11 +948,11 @@ export default function VersionManagement() {
                                 onArchive={handleArchiveVersion}
                                 onDelete={handleDeleteVersion}
                                 onViewDetails={handleViewDetails}
-                                onAssignTesters={handleAssignTesters}   // ✅ renamed
+                                onAssignTesters={handleAssignTesters}
                                 onViewIssues={handleViewIssues}
                                 onExport={handleExportReport}
                                 onRestore={handleRestoreVersion}
-                                onAssignModules={handleAssignModules}   // ✅ opens full page
+                                onAssignModules={handleAssignModules}
                             />
                         ))
                     )}

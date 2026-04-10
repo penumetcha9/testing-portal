@@ -645,11 +645,7 @@ const UserStoryMapping = () => {
     const [storyUUID, setStoryUUID] = useState(null);
     const [tabCounts, setTabCounts] = useState({ testcases: null, bugs: null, comments: null, attachments: null });
 
-    const [storyIdEditing, setStoryIdEditing] = useState(false);
-    const [storyIdDraft, setStoryIdDraft] = useState('');
-    const [storyIdError, setStoryIdError] = useState('');
-    const storyIdInputRef = useRef(null);
-
+    // ── Story ID is fully auto-generated — no manual editing state needed ──
     const [formData, setFormData] = useState({ ...EMPTY_FORM, storyId: isNew ? '' : urlStoryId });
 
     useEffect(() => {
@@ -663,6 +659,7 @@ const UserStoryMapping = () => {
         }
     }, [urlStoryId]);
 
+    // Auto-generate Story ID for new stories
     useEffect(() => {
         if (!isNew) return;
         (async () => {
@@ -763,38 +760,6 @@ const UserStoryMapping = () => {
         fetchCounts();
     }, [storyUUID, activeTab]);
 
-    const handleStoryIdEditStart = () => {
-        setStoryIdDraft(formData.storyId);
-        setStoryIdError('');
-        setStoryIdEditing(true);
-        setTimeout(() => storyIdInputRef.current?.select(), 50);
-    };
-
-    const handleStoryIdSave = async () => {
-        const trimmed = storyIdDraft.trim().toUpperCase();
-        if (!trimmed) { setStoryIdError('Story ID cannot be empty'); return; }
-        if (!/^US-\d+$/.test(trimmed)) { setStoryIdError('Format must be US-### (e.g. US-046)'); return; }
-        if (trimmed === formData.storyId) { setStoryIdEditing(false); return; }
-        const { data } = await supabase.from('user_stories').select('id').eq('story_id', trimmed).maybeSingle();
-        if (data) { setStoryIdError(`${trimmed} already exists`); return; }
-        setFormData(prev => ({ ...prev, storyId: trimmed }));
-        setStoryUUID(null);
-        setStoryIdEditing(false);
-        setStoryIdError('');
-    };
-
-    const handleStoryIdKeyDown = (e) => {
-        if (e.key === 'Enter') handleStoryIdSave();
-        if (e.key === 'Escape') { setStoryIdEditing(false); setStoryIdError(''); }
-    };
-
-    const handleAddNewStory = () => {
-        if (formData.storyTitle || formData.storySummary || formData.mainFlow) {
-            if (!window.confirm('Unsaved changes on the current story will be lost. Continue?')) return;
-        }
-        navigate('/stories/new');
-    };
-
     const handleBackToList = () => {
         if (formData.storyTitle || formData.storySummary) {
             if (!window.confirm('Unsaved changes will be lost. Continue?')) return;
@@ -816,13 +781,10 @@ const UserStoryMapping = () => {
     const toggleDefinitionOfDone = useCallback((id) => { setDefinitionOfDone(prev => prev.map(item => item.id === id ? { ...item, checked: !item.checked } : item)); }, []);
     const addAcceptanceCriteria = useCallback(() => { setAcceptanceCriteria(prev => { const newId = Math.max(...prev.map(ac => ac.id), 0) + 1; return [...prev, { id: newId, text: 'New acceptance criteria', checked: false }]; }); }, []);
 
-    // ── buildPayload — matched exactly to user_stories schema ─────────────────
     const buildPayload = (extraStatus) => {
         const now = new Date().toISOString();
-        // approved_at must be a full ISO timestamp or null (it's timestamptz)
         let approvedAt = null;
         if (formData.approvedAt) {
-            // if it's just a date string like "2026-04-09", convert to full ISO
             approvedAt = formData.approvedAt.includes('T')
                 ? formData.approvedAt
                 : `${formData.approvedAt}T00:00:00.000Z`;
@@ -879,9 +841,7 @@ const UserStoryMapping = () => {
             planned_sprint: formData.plannedSprint || null,
             planned_release: formData.plannedRelease || null,
             version_build: formData.versionBuild || null,
-            // jsonb column
             assigned_ba: formData.assignedBa.length > 0 ? formData.assignedBa : null,
-            // ARRAY columns
             assigned_frontend_developer: formData.assignedFrontendDeveloper.length > 0 ? formData.assignedFrontendDeveloper : null,
             assigned_backend_developer: formData.assignedBackendDeveloper.length > 0 ? formData.assignedBackendDeveloper : null,
             assigned_tester: formData.assignedTester.length > 0 ? formData.assignedTester : null,
@@ -942,12 +902,6 @@ const UserStoryMapping = () => {
         finally { setSaveLoading(false); }
     };
 
-    const handleDuplicate = () => {
-        const newId = `US-${String(parseInt(formData.storyId.split('-')[1]) + 1).padStart(3, '0')}`;
-        navigate(`/stories/${newId}`);
-        alert(`✅ Duplicated as ${newId}. Save to create.`);
-    };
-
     const storyTypeOpts = ['Feature Enhancement', 'New Feature', 'Bug Fix', 'Technical Debt'];
     const moduleIdOpts = ['MOD-001 - Dashboard', 'MOD-002 - User Management', 'MOD-003 - Reports', 'MOD-004 - Settings'];
     const businessDomainOpts = ['Operations', 'Finance', 'Sales', 'HR'];
@@ -980,109 +934,54 @@ const UserStoryMapping = () => {
                 .status-badge { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 500; }
                 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
                 .modal-content { background: white; border-radius: 0.5rem; padding: 2rem; max-width: 600px; width: 100%; max-height: 80vh; overflow-y: auto; }
-                .add-story-btn { position: relative; overflow: hidden; }
-                .add-story-btn::after { content: ''; position: absolute; inset: 0; background: rgba(255,255,255,0.15); opacity: 0; transition: opacity 0.15s; }
-                .add-story-btn:hover::after { opacity: 1; }
-                .story-id-edit-input:focus { outline: none; box-shadow: 0 0 0 2px rgba(99,102,241,0.25); }
             `}</style>
 
             <div className="flex min-h-screen">
                 <div className="flex-1 flex flex-col min-w-0">
+                    {/* ── HEADER ── */}
                     <header className="bg-card border-b border-border">
                         <div className="px-4 lg:px-8 py-4">
-                            <div className="flex items-center justify-between gap-4 flex-wrap">
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <button
-                                        onClick={handleBackToList}
-                                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0"
-                                        title="Back to User Stories list"
-                                    >
-                                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                                            <path d="M9 2L5 7L9 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                                        </svg>
-                                        <span className="hidden sm:inline">Stories</span>
-                                    </button>
-
-                                    <span className="text-muted-foreground text-sm hidden sm:inline">/</span>
-
-                                    <div className="min-w-0">
-                                        <div className="flex items-center gap-3 mb-1 flex-wrap">
-                                            <div className="flex items-center gap-1.5">
-                                                {storyIdEditing ? (
-                                                    <div className="flex flex-col gap-1">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <input
-                                                                ref={storyIdInputRef}
-                                                                value={storyIdDraft}
-                                                                onChange={e => { setStoryIdDraft(e.target.value.toUpperCase()); setStoryIdError(''); }}
-                                                                onKeyDown={handleStoryIdKeyDown}
-                                                                placeholder="US-###"
-                                                                className="story-id-edit-input px-2.5 py-1 text-xl font-bold border-2 border-indigo-400 rounded-lg bg-white text-foreground w-32"
-                                                                style={{ fontSize: '1.15rem' }}
-                                                            />
-                                                            <button onClick={handleStoryIdSave} className="flex items-center justify-center w-7 h-7 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors" title="Confirm">
-                                                                <i className="fa-solid fa-check" style={{ fontSize: 11 }}></i>
-                                                            </button>
-                                                            <button onClick={() => { setStoryIdEditing(false); setStoryIdError(''); }} className="flex items-center justify-center w-7 h-7 bg-gray-200 hover:bg-gray-300 text-gray-600 rounded-md transition-colors" title="Cancel">
-                                                                <i className="fa-solid fa-times" style={{ fontSize: 11 }}></i>
-                                                            </button>
-                                                        </div>
-                                                        {storyIdError && (
-                                                            <span className="text-xs text-red-500 flex items-center gap-1">
-                                                                <i className="fa-solid fa-circle-exclamation" style={{ fontSize: 10 }}></i>{storyIdError}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <button
-                                                        onClick={handleStoryIdEditStart}
-                                                        className="group flex items-center gap-1.5 hover:bg-indigo-50 rounded-lg px-1.5 py-0.5 transition-colors"
-                                                        title="Click to edit Story ID"
-                                                    >
-                                                        <h2 className="text-xl lg:text-2xl font-bold text-foreground">
-                                                            {isNew ? 'New Story' : `User Story: ${formData.storyId}`}
-                                                        </h2>
-                                                        {!isNew && <i className="fa-solid fa-pencil text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity" style={{ fontSize: 12 }}></i>}
-                                                    </button>
-                                                )}
-                                            </div>
-                                            {formData.currentStatus && (
-                                                <span className="status-badge bg-blue-500 bg-opacity-10 text-blue-600">
-                                                    <i className="fa-solid fa-circle text-xs"></i> {formData.currentStatus}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <p className="text-sm text-muted-foreground">{formData.storyTitle || 'No title yet'}</p>
-                                    </div>
-                                </div>
-
+                            <div className="flex items-center gap-4 flex-wrap">
+                                {/* Back button */}
                                 <button
-                                    onClick={handleAddNewStory}
-                                    className="add-story-btn flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-md hover:shadow-lg active:scale-95"
-                                    style={{
-                                        background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
-                                        border: 'none',
-                                        letterSpacing: '0.01em',
-                                        flexShrink: 0,
-                                    }}
-                                    title="Create a new user story"
+                                    onClick={handleBackToList}
+                                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0"
+                                    title="Back to User Stories list"
                                 >
-                                    <span style={{
-                                        width: 22, height: 22, borderRadius: 6,
-                                        background: 'rgba(255,255,255,0.22)',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        flexShrink: 0,
-                                    }}>
-                                        <i className="fa-solid fa-plus" style={{ fontSize: 11 }}></i>
-                                    </span>
-                                    Add User Story
+                                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                                        <path d="M9 2L5 7L9 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                    <span className="hidden sm:inline">Stories</span>
                                 </button>
+
+                                <span className="text-muted-foreground text-sm hidden sm:inline">/</span>
+
+                                {/* Title + Story ID badge — read-only, no edit controls */}
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-3 mb-1 flex-wrap">
+                                        <h2 className="text-xl lg:text-2xl font-bold text-foreground">
+                                            {isNew ? 'New Story' : `User Story: ${formData.storyId}`}
+                                        </h2>
+                                        {/* Auto-generated badge */}
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-50 border border-green-200 text-green-700 text-xs font-semibold rounded-full">
+                                            <i className="fa-solid fa-wand-magic-sparkles" style={{ fontSize: 9 }}></i>
+                                            Auto-generated
+                                        </span>
+                                        {formData.currentStatus && (
+                                            <span className="status-badge bg-blue-500 bg-opacity-10 text-blue-600">
+                                                <i className="fa-solid fa-circle text-xs"></i> {formData.currentStatus}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">{formData.storyTitle || 'No title yet'}</p>
+                                </div>
                             </div>
                         </div>
                     </header>
 
                     <main className="flex-1 overflow-auto">
                         <div className="p-4 lg:p-8">
+                            {/* Tabs */}
                             <div className="bg-card border border-border rounded-lg shadow-sm mb-6">
                                 <div className="flex items-center gap-1 px-4 border-b border-border overflow-x-auto">
                                     {tabs.map(tab => {
@@ -1104,28 +1003,29 @@ const UserStoryMapping = () => {
 
                                         <Section id="story-identification" title="Story Identification" icon="fa-fingerprint" iconColor="bg-primary" collapsedSections={collapsedSections} toggleSection={toggleSection}>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                                {/* Story ID — fully read-only, auto-generated */}
                                                 <div>
                                                     <label className={labelCls}>Story ID</label>
-                                                    <div className="relative">
-                                                        <input
-                                                            type="text"
-                                                            value={formData.storyId}
-                                                            readOnly
-                                                            className="w-full px-4 py-2.5 bg-muted border border-border rounded-lg text-sm pr-10 cursor-default"
-                                                        />
-                                                        <button
-                                                            onClick={handleStoryIdEditStart}
-                                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
-                                                            title="Edit Story ID"
-                                                        >
-                                                            <i className="fa-solid fa-pencil" style={{ fontSize: 11 }}></i>
-                                                        </button>
+                                                    <div className="flex items-center gap-2 px-4 py-2.5 bg-muted border border-border rounded-lg">
+                                                        <span className="font-mono text-sm font-bold text-primary tracking-wide flex-1">
+                                                            {formData.storyId || (
+                                                                <span className="flex items-center gap-1.5 text-muted-foreground font-normal">
+                                                                    <span className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin inline-block"></span>
+                                                                    Generating…
+                                                                </span>
+                                                            )}
+                                                        </span>
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-semibold rounded-full flex-shrink-0">
+                                                            <i className="fa-solid fa-lock" style={{ fontSize: 8 }}></i>
+                                                            Auto
+                                                        </span>
                                                     </div>
                                                     <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
-                                                        <i className="fa-solid fa-circle-info text-indigo-400" style={{ fontSize: 10 }}></i>
-                                                        Auto-generated · click <i className="fa-solid fa-pencil text-indigo-400 mx-0.5" style={{ fontSize: 9 }}></i> to change
+                                                        <i className="fa-solid fa-circle-info text-green-500" style={{ fontSize: 10 }}></i>
+                                                        Automatically assigned in sequence
                                                     </p>
                                                 </div>
+
                                                 <div><label className={labelCls}>Story Type</label><CustomSelect value={formData.storyType} onChange={v => handleInputChange('storyType', v)} options={storyTypeOpts} /></div>
                                                 <div className="sm:col-span-2"><label className={labelCls}>Story Title <span className="text-destructive">*</span></label><input type="text" value={formData.storyTitle} onChange={e => handleInputChange('storyTitle', e.target.value)} placeholder="Enter story title..." className={inputCls} /></div>
                                                 <div className="sm:col-span-2"><label className={labelCls}>Story Summary</label><textarea rows="3" value={formData.storySummary} onChange={e => handleInputChange('storySummary', e.target.value)} className={inputCls} placeholder="Brief summary..." /></div>

@@ -114,7 +114,6 @@ function MyAssignments({ userId, loading: parentLoading }) {
 
     // Modules where user has assigned test cases
     async function fetchMyModules() {
-        // Get module_ids from test_cases assigned to user
         const { data: tcData, error: tcError } = await supabase
             .from("test_cases")
             .select("module_id")
@@ -137,7 +136,6 @@ function MyAssignments({ userId, loading: parentLoading }) {
 
     // Versions where user has assigned test cases
     async function fetchMyVersions() {
-        // Get version_ids from test_cases assigned to user
         const { data: tcData, error: tcError } = await supabase
             .from("test_cases")
             .select("version_id")
@@ -169,7 +167,6 @@ function MyAssignments({ userId, loading: parentLoading }) {
 
         const featureIds = [...new Set(tcData.map(tc => tc.feature_id).filter(Boolean))];
         if (featureIds.length === 0) {
-            // Also try direct assign_to match
             const { data: directData, error: directError } = await supabase
                 .from("features")
                 .select("id, feature_name, status, priority, modules ( module_name )")
@@ -203,30 +200,15 @@ function MyAssignments({ userId, loading: parentLoading }) {
         features: myFeatures.length === 0,
     };
 
-    const navMap = {
-        testcases: "/test-execution",
-        modules: "/modules",
-        versions: "/versions",
-        features: "/features",
-    };
-
     return (
         <div className="bg-card border border-border rounded-lg shadow-sm">
-            {/* Header */}
-            <div className="p-6 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                    <h3 className="text-lg font-bold text-foreground mb-1 flex items-center gap-2">
-                        <i className="fa-solid fa-user-check text-primary" />
-                        My Assignments
-                    </h3>
-                    <p className="text-sm text-muted-foreground">Items assigned to you across the project</p>
-                </div>
-                <button
-                    onClick={() => navigate(navMap[activeTab])}
-                    className="self-start sm:self-auto text-primary font-medium text-sm flex items-center gap-2 hover:opacity-80 transition-opacity"
-                >
-                    View All <i className="fa-solid fa-arrow-right" />
-                </button>
+            {/* Header — View All removed */}
+            <div className="p-6 border-b border-border">
+                <h3 className="text-lg font-bold text-foreground mb-1 flex items-center gap-2">
+                    <i className="fa-solid fa-user-check text-primary" />
+                    My Assignments
+                </h3>
+                <p className="text-sm text-muted-foreground">Items assigned to you across the project</p>
             </div>
 
             {/* Summary counters */}
@@ -290,10 +272,10 @@ function MyAssignments({ userId, loading: parentLoading }) {
                                     <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                                         {tc.priority && (
                                             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${tc.priority === "High" || tc.priority === "Critical"
-                                                    ? "bg-red-100 text-red-600"
-                                                    : tc.priority === "Medium"
-                                                        ? "bg-yellow-100 text-yellow-600"
-                                                        : "bg-gray-100 text-gray-500"
+                                                ? "bg-red-100 text-red-600"
+                                                : tc.priority === "Medium"
+                                                    ? "bg-yellow-100 text-yellow-600"
+                                                    : "bg-gray-100 text-gray-500"
                                                 }`}>{tc.priority}</span>
                                         )}
                                         <AssignmentBadge status={tc.status} />
@@ -374,10 +356,10 @@ function MyAssignments({ userId, loading: parentLoading }) {
                                                 <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                                                     {f.priority && (
                                                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${f.priority === "High" || f.priority === "Critical"
-                                                                ? "bg-red-100 text-red-600"
-                                                                : f.priority === "Medium"
-                                                                    ? "bg-yellow-100 text-yellow-600"
-                                                                    : "bg-gray-100 text-gray-500"
+                                                            ? "bg-red-100 text-red-600"
+                                                            : f.priority === "Medium"
+                                                                ? "bg-yellow-100 text-yellow-600"
+                                                                : "bg-gray-100 text-gray-500"
                                                             }`}>{f.priority}</span>
                                                     )}
                                                     {f.status && <AssignmentBadge status={f.status} />}
@@ -685,15 +667,17 @@ export default function Dashboard() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
                         <StatCard loading={loading} icon="fa-vials" iconBg="bg-primary/10" iconColor="text-primary"
                             label="Total Test Cases" value={stats.total} sub="All versions" subColor="text-muted-foreground" />
-                        <StatCard loading={loading} icon="fa-check-circle" iconBg="bg-green-500/10" iconColor="text-green-500"
-                            label="Passed" value={stats.passed} sub={`${stats.passRate}% pass rate`} subColor="text-green-500" />
+                        {/* Passed — green colour removed */}
+                        <StatCard loading={loading} icon="fa-check-circle" iconBg="bg-muted" iconColor="text-muted-foreground"
+                            label="Passed" value={stats.passed} sub={`${stats.passRate}% pass rate`} subColor="text-muted-foreground" />
                         <StatCard loading={loading} icon="fa-times-circle" iconBg="bg-destructive/10" iconColor="text-destructive"
                             label="Failed" value={stats.failed} sub="Needs attention" subColor="text-destructive" />
                         <StatCard loading={loading} icon="fa-clock" iconBg="bg-accent/10" iconColor="text-accent"
                             label="Pending" value={stats.pending} sub="In progress" subColor="text-accent" />
                         <StatCard loading={loading} icon="fa-play-circle" iconBg="bg-secondary/10" iconColor="text-secondary"
                             label="Executions" value={stats.executions} sub="Total runs" subColor="text-muted-foreground" />
-                        <StatCard loading={loading} icon="fa-gauge-high" iconBg="bg-purple-500/10" iconColor="text-purple-500"
+                        {/* Pass Rate — purple colour removed */}
+                        <StatCard loading={loading} icon="fa-gauge-high" iconBg="bg-muted" iconColor="text-muted-foreground"
                             label="Pass Rate" value={`${stats.passRate}%`} sub="Overall quality" subColor={stats.passRate >= 80 ? "text-green-500" : "text-destructive"} />
                     </div>
 
