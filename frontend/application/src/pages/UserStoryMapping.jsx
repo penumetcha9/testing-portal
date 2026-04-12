@@ -225,9 +225,7 @@ const Section = ({ id, title, icon, iconColor, collapsedSections, toggleSection,
     </div>
 );
 
-// ── FIXED TestCasesTab ────────────────────────────────────────────────────────
 const TestCasesTab = ({ storyId, storyUUID }) => {
-    const navigate = useNavigate();
     const [testCases, setTestCases] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -238,257 +236,58 @@ const TestCasesTab = ({ storyId, storyUUID }) => {
     }, [storyUUID, storyId]);
 
     const fetchTestCases = async () => {
-        setLoading(true);
-        setError(null);
+        setLoading(true); setError(null);
         try {
+            const cols = 'id, test_case_id, name, description, priority, status, test_type, assigned_to, created_at, user_story_id, user_story_ids';
+            const seen = new Set();
             const combined = [];
-            const seenIds = new Set();
 
             const addUnique = (rows) => {
                 (rows || []).forEach(tc => {
-                    if (!seenIds.has(tc.id)) {
-                        seenIds.add(tc.id);
-                        combined.push(tc);
-                    }
+                    if (!seen.has(tc.id)) { seen.add(tc.id); combined.push(tc); }
                 });
             };
 
-            const selectCols = 'id, test_case_id, name, description, priority, status, test_type, assigned_to, created_at, user_story_id, story_id';
-
-            // 1. Fetch by UUID (user_story_id foreign key)
+            // 1. Fetch by user_story_id (single UUID — set from UserStoryMapping page)
             if (storyUUID) {
-                const { data, error: e1 } = await supabase
+                const { data } = await supabase
                     .from('test_cases')
-                    .select(selectCols)
+                    .select(cols)
                     .eq('user_story_id', storyUUID)
                     .order('created_at', { ascending: false });
-                if (e1) console.warn('UUID fetch error:', e1.message);
-                else addUnique(data);
+                addUnique(data);
             }
 
-            // 2. Fetch by string story_id (e.g. "US-001") — deduplicate
-            if (storyId) {
-                const { data, error: e2 } = await supabase
+            // 2. Fetch by user_story_ids (array — set from FeaturesLibrary)
+            if (storyUUID) {
+                const { data } = await supabase
                     .from('test_cases')
-                    .select(selectCols)
-                    .eq('story_id', storyId)
+                    .select(cols)
+                    .contains('user_story_ids', [storyUUID])
                     .order('created_at', { ascending: false });
-                if (e2) console.warn('story_id fetch error:', e2.message);
-                else addUnique(data);
-            }
-
-            // 3. Fallback: if storyUUID not yet hydrated, resolve it from user_stories
-            if (!storyUUID && storyId) {
-                const { data: storyRow } = await supabase
-                    .from('user_stories')
-                    .select('id')
-                    .eq('story_id', storyId)
-                    .single();
-                if (storyRow?.id) {
-                    const { data, error: e3 } = await supabase
-                        .from('test_cases')
-                        .select(selectCols)
-                        .eq('user_story_id', storyRow.id)
-                        .order('created_at', { ascending: false });
-                    if (!e3) addUnique(data);
-                }
+                addUnique(data);
             }
 
             setTestCases(combined);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
+        } catch (err) { setError(err.message); } finally { setLoading(false); }
     };
 
-    const statusConfig = {
-        'Pass': { bg: '#dcfce7', color: '#15803d', dot: '#22c55e' },
-        'Passed': { bg: '#dcfce7', color: '#15803d', dot: '#22c55e' },
-        'Fail': { bg: '#fee2e2', color: '#b91c1c', dot: '#ef4444' },
-        'Failed': { bg: '#fee2e2', color: '#b91c1c', dot: '#ef4444' },
-        'In Progress': { bg: '#dbeafe', color: '#1d4ed8', dot: '#3b82f6' },
-        'Blocked': { bg: '#ffedd5', color: '#c2410c', dot: '#f97316' },
-        'Pending': { bg: '#fef9c3', color: '#854d0e', dot: '#eab308' },
-        'Not Run': { bg: '#f3f4f6', color: '#374151', dot: '#9ca3af' },
-    };
+    const statusColor = (s) => ({ 'Pass': 'bg-green-100 text-green-700', 'Fail': 'bg-red-100 text-red-700', 'Not Run': 'bg-gray-100 text-gray-600', 'In Progress': 'bg-blue-100 text-blue-700', 'Blocked': 'bg-orange-100 text-orange-700' }[s] || 'bg-gray-100 text-gray-600');
+    const priorityColor = (p) => ({ 'Critical': 'text-red-600', 'High': 'text-orange-500', 'Medium': 'text-yellow-600', 'Low': 'text-green-600' }[p] || 'text-gray-500');
 
-    const priorityConfig = {
-        'Critical': { color: '#dc2626' },
-        'High': { color: '#ea580c' },
-        'Medium': { color: '#ca8a04' },
-        'Low': { color: '#16a34a' },
-    };
-
-    const testTypeIcon = (type) => ({
-        'Functional': 'fa-gears',
-        'Integration': 'fa-link',
-        'Regression': 'fa-rotate',
-        'Smoke': 'fa-fire',
-        'UAT': 'fa-user-check',
-        'Performance': 'fa-gauge-high',
-        'Security': 'fa-shield-halved',
-        'Exploratory': 'fa-compass',
-    }[type] || 'fa-vial');
-
-    const statusStats = testCases.reduce((acc, tc) => {
-        const key = tc.status || 'Not Run';
-        acc[key] = (acc[key] || 0) + 1;
-        return acc;
-    }, {});
-
-    if (loading) return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '64px 0', gap: 12 }}>
-            <div style={{ width: 32, height: 32, border: '3px solid #22c55e', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
-            <p style={{ fontSize: 13, color: '#6b7280' }}>Loading test cases…</p>
-            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        </div>
-    );
-
-    if (error) return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, color: '#dc2626', fontSize: 13 }}>
-            <i className="fa-solid fa-circle-exclamation"></i> {error}
-        </div>
-    );
+    if (loading) return <div className="flex items-center justify-center py-16"><div className="flex flex-col items-center gap-3"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div><p className="text-sm text-muted-foreground">Loading test cases…</p></div></div>;
+    if (error) return <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"><i className="fa-solid fa-circle-exclamation"></i>{error}</div>;
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-
-            {/* ── Header bar ── */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 36, height: 36, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <i className="fa-solid fa-list-check" style={{ color: '#16a34a', fontSize: 15 }}></i>
-                    </div>
-                    <div>
-                        <p style={{ fontSize: 15, fontWeight: 600, color: '#111827', margin: 0 }}>
-                            {testCases.length} test case{testCases.length !== 1 ? 's' : ''} linked
-                        </p>
-                        <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>Story: {storyId}</p>
-                    </div>
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                        onClick={fetchTestCases}
-                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, color: '#374151', cursor: 'pointer', fontWeight: 500 }}
-                    >
-                        <i className="fa-solid fa-rotate-right" style={{ fontSize: 12 }}></i> Refresh
-                    </button>
-                    <button
-                        onClick={() => navigate('/test-execution')}
-                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: '#15803d', border: 'none', borderRadius: 8, fontSize: 13, color: '#fff', cursor: 'pointer', fontWeight: 500 }}
-                    >
-                        <i className="fa-solid fa-flask" style={{ fontSize: 12 }}></i> Test Execution
-                    </button>
-                </div>
-            </div>
-
-            {/* ── Status summary pills ── */}
-            {testCases.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    {Object.entries(statusStats).map(([status, count]) => {
-                        const cfg = statusConfig[status] || { bg: '#f3f4f6', color: '#374151', dot: '#9ca3af' };
-                        return (
-                            <span key={status} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', background: cfg.bg, borderRadius: 99, fontSize: 12, fontWeight: 600, color: cfg.color }}>
-                                <span style={{ width: 7, height: 7, borderRadius: '50%', background: cfg.dot, flexShrink: 0, display: 'inline-block' }}></span>
-                                {status}&nbsp;<span style={{ fontWeight: 700 }}>{count}</span>
-                            </span>
-                        );
-                    })}
-                </div>
-            )}
-
-            {/* ── Empty state ── */}
+        <div className="space-y-4">
+            <div className="flex items-center justify-between"><div className="flex items-center gap-2"><span className="text-sm font-semibold text-foreground">{testCases.length} test case{testCases.length !== 1 ? 's' : ''} linked</span><span className="px-2 py-0.5 bg-primary bg-opacity-10 text-primary text-xs font-semibold rounded-full">{storyId}</span></div></div>
             {testCases.length === 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '56px 0', gap: 12, border: '2px dashed #e5e7eb', borderRadius: 14 }}>
-                    <div style={{ width: 56, height: 56, background: '#f3f4f6', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <i className="fa-solid fa-list-check" style={{ fontSize: 24, color: '#d1d5db' }}></i>
-                    </div>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: '#6b7280', margin: 0 }}>No test cases linked to {storyId}</p>
-                    <p style={{ fontSize: 12, color: '#9ca3af', margin: 0 }}>Link test cases from the Test Execution page</p>
-                    <button
-                        onClick={() => navigate('/test-execution')}
-                        style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 18px', background: '#15803d', border: 'none', borderRadius: 8, fontSize: 13, color: '#fff', cursor: 'pointer', fontWeight: 500 }}
-                    >
-                        <i className="fa-solid fa-arrow-right" style={{ fontSize: 11 }}></i> Go to Test Execution
-                    </button>
-                </div>
+                <div className="flex flex-col items-center justify-center py-16 gap-3"><div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center"><i className="fa-solid fa-list-check text-2xl text-muted-foreground"></i></div><p className="text-sm font-medium text-muted-foreground">No test cases linked to {storyId}</p></div>
             ) : (
-                /* ── Test case cards ── */
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {testCases.map((tc, idx) => {
-                        const statusCfg = statusConfig[tc.status] || { bg: '#f3f4f6', color: '#374151', dot: '#9ca3af' };
-                        const priCfg = priorityConfig[tc.priority] || { color: '#6b7280' };
-                        return (
-                            <div
-                                key={tc.id}
-                                style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '14px 18px', display: 'flex', alignItems: 'flex-start', gap: 14, transition: 'border-color 0.15s, box-shadow 0.15s' }}
-                                onMouseEnter={e => { e.currentTarget.style.borderColor = '#86efac'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(34,197,94,0.08)'; }}
-                                onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.boxShadow = 'none'; }}
-                            >
-                                {/* Index number */}
-                                <div style={{ width: 28, height: 28, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 11, fontWeight: 700, color: '#15803d' }}>
-                                    {idx + 1}
-                                </div>
-
-                                {/* Main content */}
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            {/* TC ID + Title */}
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-                                                <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: '#15803d', background: '#f0fdf4', padding: '2px 8px', borderRadius: 5, border: '1px solid #bbf7d0', flexShrink: 0 }}>
-                                                    {tc.test_case_id || '—'}
-                                                </span>
-                                                <span style={{ fontSize: 14, fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                    {tc.name || 'Untitled'}
-                                                </span>
-                                            </div>
-
-                                            {/* Description */}
-                                            {tc.description && (
-                                                <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 8px', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                                    {tc.description}
-                                                </p>
-                                            )}
-
-                                            {/* Meta row */}
-                                            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-                                                {tc.test_type && (
-                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#6b7280' }}>
-                                                        <i className={`fa-solid ${testTypeIcon(tc.test_type)}`} style={{ fontSize: 10, color: '#9ca3af' }}></i>
-                                                        {tc.test_type}
-                                                    </span>
-                                                )}
-                                                {tc.priority && (
-                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: priCfg.color }}>
-                                                        <i className="fa-solid fa-arrow-up" style={{ fontSize: 9 }}></i>
-                                                        {tc.priority}
-                                                    </span>
-                                                )}
-                                                {tc.assigned_to && (
-                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#6b7280' }}>
-                                                        <i className="fa-solid fa-user" style={{ fontSize: 9, color: '#9ca3af' }}></i>
-                                                        {tc.assigned_to}
-                                                    </span>
-                                                )}
-                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#9ca3af' }}>
-                                                    <i className="fa-solid fa-calendar" style={{ fontSize: 9 }}></i>
-                                                    {tc.created_at ? new Date(tc.created_at).toLocaleDateString() : '—'}
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        {/* Status badge */}
-                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', background: statusCfg.bg, borderRadius: 99, fontSize: 12, fontWeight: 600, color: statusCfg.color, flexShrink: 0, whiteSpace: 'nowrap' }}>
-                                            <span style={{ width: 7, height: 7, borderRadius: '50%', background: statusCfg.dot, display: 'inline-block' }}></span>
-                                            {tc.status || 'Not Run'}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
+                <div className="overflow-x-auto rounded-lg border border-border">
+                    <table className="w-full text-sm"><thead><tr className="bg-muted border-b border-border">{['Test Case ID', 'Name', 'Type', 'Priority', 'Status', 'Assigned To'].map(h => (<th key={h} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>))}</tr></thead>
+                        <tbody className="divide-y divide-border">{testCases.map(tc => (<tr key={tc.id} className="hover:bg-muted transition-colors"><td className="px-4 py-3 font-mono text-xs text-primary font-semibold">{tc.test_case_id || '—'}</td><td className="px-4 py-3 font-medium text-foreground max-w-xs"><div className="truncate" title={tc.name}>{tc.name || '—'}</div>{tc.description && <div className="text-xs text-muted-foreground truncate mt-0.5" title={tc.description}>{tc.description}</div>}</td><td className="px-4 py-3 text-muted-foreground">{tc.test_type || '—'}</td><td className="px-4 py-3"><span className={`font-semibold text-xs ${priorityColor(tc.priority)}`}>{tc.priority || '—'}</span></td><td className="px-4 py-3"><span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${statusColor(tc.status)}`}>{tc.status || '—'}</span></td><td className="px-4 py-3 text-muted-foreground text-xs">{tc.assigned_to || 'Unassigned'}</td></tr>))}</tbody>
+                    </table>
                 </div>
             )}
         </div>
@@ -858,30 +657,6 @@ const EMPTY_FORM = {
     createdBy: '', approvedBy: '', approvedAt: '', createdAt: '', updatedAt: ''
 };
 
-// ── Shared fetch helper ───────────────────────────────────────────────────────
-const fetchStoryById = async (storyId) => {
-    const { data } = await supabase
-        .from('user_stories')
-        .select(`id, story_title, story_type, story_summary, current_status, criticality,
-            module, feature, module_id, parent_story_id, sequence,
-            business_context, problem_statement, expected_outcome, business_domain,
-            process_area, transaction_type, application, user_role, screen_page,
-            as_a, i_want, so_that, preconditions, main_flow, alternate_flow,
-            exception_flow, postconditions, business_rules, validation_rules,
-            field_behavior, calculation_logic, api_impacted, db_tables_impacted,
-            integration_impacted, reports_impacted, configuration_impacted,
-            security_rbac_impact, audit_trail_required, performance_impact,
-            test_scenario_count, blocked, blocked_reason, acceptance_criteria,
-            definition_of_done, story_points, estimate_hours, planned_sprint,
-            planned_release, version_build, assigned_ba, assigned_frontend_developer,
-            assigned_backend_developer, assigned_tester, linked_features,
-            approval_status, development_status, qa_status, release_status,
-            approved_by, approved_at, created_by, created_at, updated_at`)
-        .eq('story_id', storyId)
-        .single();
-    return data;
-};
-
 const UserStoryMapping = () => {
     const { storyId: urlStoryId } = useParams();
     const navigate = useNavigate();
@@ -896,10 +671,51 @@ const UserStoryMapping = () => {
     const [showRelatedBugs, setShowRelatedBugs] = useState(false);
     const [showChangeRequests, setShowChangeRequests] = useState(false);
     const [saveLoading, setSaveLoading] = useState(false);
-    const [saveSuccess, setSaveSuccess] = useState('');
     const [storyUUID, setStoryUUID] = useState(null);
     const [tabCounts, setTabCounts] = useState({ testcases: null, bugs: null, comments: null, attachments: null });
-    const [formData, setFormData] = useState({ ...EMPTY_FORM });
+
+    // ── Saved state & toast ──────────────────────────────────────────────────
+    const [isSaved, setIsSaved] = useState(!isNew); // existing stories start as "saved"
+    const [toast, setToast] = useState(null); // { message, type: 'success'|'error' }
+    const showToast = useCallback((message, type = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 3500);
+    }, []);
+
+    // ── Unsaved changes confirm modal ────────────────────────────────────────
+    const [unsavedModal, setUnsavedModal] = useState({ show: false, onConfirm: null });
+
+    const confirmLeave = useCallback((onConfirm) => {
+        if (isSaved) { onConfirm(); return; }
+        setUnsavedModal({ show: true, onConfirm });
+    }, [isSaved]);
+
+    const [storyIdEditing, setStoryIdEditing] = useState(false);
+    const [storyIdDraft, setStoryIdDraft] = useState('');
+    const [storyIdError, setStoryIdError] = useState('');
+    const storyIdInputRef = useRef(null);
+
+    const [formData, setFormData] = useState({ ...EMPTY_FORM, storyId: isNew ? '' : urlStoryId });
+
+    useEffect(() => {
+        if (!isNew && urlStoryId) {
+            setFormData(prev => ({ ...EMPTY_FORM, storyId: urlStoryId }));
+            setStoryUUID(null);
+            setActiveTab('details');
+            setCollapsedSections({});
+            setLastSaved('never');
+            setTabCounts({ testcases: null, bugs: null, comments: null, attachments: null });
+        }
+    }, [urlStoryId]);
+
+    useEffect(() => {
+        if (!isNew) return;
+        (async () => {
+            const { data } = await supabase.from('user_stories').select('story_id').order('story_id', { ascending: true });
+            const existingIds = (data || []).map(s => s.story_id);
+            setFormData(prev => ({ ...prev, storyId: generateNextStoryId(existingIds) }));
+        })();
+    }, [isNew]);
 
     const [acceptanceCriteria, setAcceptanceCriteria] = useState([]);
     const [definitionOfDone, setDefinitionOfDone] = useState([
@@ -914,109 +730,6 @@ const UserStoryMapping = () => {
     const [profilesLoading, setProfilesLoading] = useState(true);
     const [features, setFeatures] = useState([]);
     const [featuresLoading, setFeaturesLoading] = useState(true);
-
-    // ── Auto-generate Story ID for new stories ────────────────────────────────
-    useEffect(() => {
-        if (!isNew) return;
-        (async () => {
-            const { data } = await supabase.from('user_stories').select('story_id').order('story_id', { ascending: true });
-            const existingIds = (data || []).map(s => s.story_id);
-            setFormData(prev => ({ ...EMPTY_FORM, storyId: generateNextStoryId(existingIds) }));
-        })();
-    }, [isNew]);
-
-    // ── Fetch story data whenever urlStoryId changes (existing stories) ───────
-    useEffect(() => {
-        if (isNew || !urlStoryId) return;
-
-        setActiveTab('details');
-        setCollapsedSections({});
-        setLastSaved('never');
-        setTabCounts({ testcases: null, bugs: null, comments: null, attachments: null });
-        setStoryUUID(null);
-
-        (async () => {
-            const data = await fetchStoryById(urlStoryId);
-            if (!data) return;
-
-            setStoryUUID(data.id);
-
-            if (Array.isArray(data.acceptance_criteria) && data.acceptance_criteria.length > 0) {
-                setAcceptanceCriteria(data.acceptance_criteria);
-            } else {
-                setAcceptanceCriteria([]);
-            }
-            if (Array.isArray(data.definition_of_done) && data.definition_of_done.length > 0) {
-                setDefinitionOfDone(data.definition_of_done);
-            }
-
-            setFormData({
-                ...EMPTY_FORM,
-                storyId: urlStoryId,
-                storyTitle: data.story_title ?? '',
-                storyType: data.story_type ?? '',
-                storySummary: data.story_summary ?? '',
-                currentStatus: data.current_status ?? '',
-                criticality: data.criticality ?? '',
-                module: data.module ?? '',
-                feature: data.feature ?? '',
-                moduleId: data.module_id ?? '',
-                parentStoryId: data.parent_story_id ?? '',
-                sequence: data.sequence ?? '',
-                businessContext: data.business_context ?? '',
-                problemStatement: data.problem_statement ?? '',
-                expectedOutcome: data.expected_outcome ?? '',
-                businessDomain: data.business_domain ?? '',
-                processArea: data.process_area ?? '',
-                transactionType: data.transaction_type ?? '',
-                application: data.application ?? '',
-                userRole: data.user_role ?? '',
-                screenPage: data.screen_page ?? '',
-                asA: data.as_a ?? '',
-                iWant: data.i_want ?? '',
-                soThat: data.so_that ?? '',
-                preconditions: data.preconditions ?? '',
-                mainFlow: data.main_flow ?? '',
-                alternateFlow: data.alternate_flow ?? '',
-                exceptionFlow: data.exception_flow ?? '',
-                postconditions: data.postconditions ?? '',
-                businessRules: data.business_rules ?? '',
-                validationRules: data.validation_rules ?? '',
-                fieldBehavior: data.field_behavior ?? '',
-                calculationLogic: data.calculation_logic ?? '',
-                apiImpacted: data.api_impacted ?? '',
-                dbTablesImpacted: data.db_tables_impacted ?? '',
-                integrationImpacted: data.integration_impacted ?? '',
-                reportsImpacted: data.reports_impacted ?? '',
-                configurationImpacted: data.configuration_impacted ?? '',
-                securityRBACImpact: data.security_rbac_impact ?? '',
-                auditTrailRequired: data.audit_trail_required ?? '',
-                performanceImpact: data.performance_impact ?? '',
-                testScenarioCount: data.test_scenario_count ?? '',
-                blocked: data.blocked ?? false,
-                blockedReason: data.blocked_reason ?? '',
-                storyPoints: data.story_points ?? '',
-                estimateHours: data.estimate_hours ?? '',
-                plannedSprint: data.planned_sprint ?? '',
-                plannedRelease: data.planned_release ?? '',
-                versionBuild: data.version_build ?? '',
-                assignedBa: Array.isArray(data.assigned_ba) ? data.assigned_ba : (data.assigned_ba ? [data.assigned_ba] : []),
-                assignedFrontendDeveloper: Array.isArray(data.assigned_frontend_developer) ? data.assigned_frontend_developer : (data.assigned_frontend_developer ? [data.assigned_frontend_developer] : []),
-                assignedBackendDeveloper: Array.isArray(data.assigned_backend_developer) ? data.assigned_backend_developer : (data.assigned_backend_developer ? [data.assigned_backend_developer] : []),
-                assignedTester: Array.isArray(data.assigned_tester) ? data.assigned_tester : (data.assigned_tester ? [data.assigned_tester] : []),
-                linkedFeatures: Array.isArray(data.linked_features) ? data.linked_features : [],
-                approvalStatus: data.approval_status ?? 'Pending',
-                developmentStatus: data.development_status ?? 'Not Started',
-                qaStatus: data.qa_status ?? 'Not Started',
-                releaseStatus: data.release_status ?? 'Not Released',
-                approvedBy: data.approved_by ?? '',
-                approvedAt: data.approved_at ?? '',
-                createdBy: data.created_by ?? '',
-                createdAt: data.created_at ?? '',
-                updatedAt: data.updated_at ?? '',
-            });
-        })();
-    }, [urlStoryId]);
 
     useEffect(() => {
         const fetchProfiles = async () => {
@@ -1045,24 +758,134 @@ const UserStoryMapping = () => {
     }, []);
 
     useEffect(() => {
+        if (!formData.storyId) return;
+        const fetchStoryData = async () => {
+            const { data } = await supabase
+                .from('user_stories')
+                .select('*')
+                .eq('story_id', formData.storyId)
+                .single();
+            if (data) {
+                setStoryUUID(data.id);
+                setFormData(prev => ({
+                    ...prev,
+                    storyType: data.story_type ?? '',
+                    storyTitle: data.story_title ?? '',
+                    storySummary: data.story_summary ?? '',
+                    moduleId: data.module_id ?? '',
+                    parentStoryId: data.parent_story_id ?? '',
+                    sequence: data.sequence ?? '',
+                    businessContext: data.business_context ?? '',
+                    problemStatement: data.problem_statement ?? '',
+                    expectedOutcome: data.expected_outcome ?? '',
+                    businessDomain: data.business_domain ?? '',
+                    processArea: data.process_area ?? '',
+                    transactionType: data.transaction_type ?? '',
+                    criticality: data.criticality ?? '',
+                    application: data.application ?? '',
+                    module: data.module ?? '',
+                    feature: data.feature ?? '',
+                    userRole: data.user_role ?? '',
+                    screenPage: data.screen_page ?? '',
+                    asA: data.as_a ?? '',
+                    iWant: data.i_want ?? '',
+                    soThat: data.so_that ?? '',
+                    preconditions: data.preconditions ?? '',
+                    mainFlow: data.main_flow ?? '',
+                    alternateFlow: data.alternate_flow ?? '',
+                    exceptionFlow: data.exception_flow ?? '',
+                    postconditions: data.postconditions ?? '',
+                    businessRules: data.business_rules ?? '',
+                    validationRules: data.validation_rules ?? '',
+                    fieldBehavior: data.field_behavior ?? '',
+                    calculationLogic: data.calculation_logic ?? '',
+                    apiImpacted: data.api_impacted ?? '',
+                    dbTablesImpacted: data.db_tables_impacted ?? '',
+                    integrationImpacted: data.integration_impacted ?? '',
+                    reportsImpacted: data.reports_impacted ?? '',
+                    configurationImpacted: data.configuration_impacted ?? '',
+                    securityRBACImpact: data.security_rbac_impact ?? '',
+                    auditTrailRequired: data.audit_trail_required ?? '',
+                    performanceImpact: data.performance_impact ?? '',
+                    testScenarioCount: data.test_scenario_count ?? '',
+                    currentStatus: data.current_status ?? '',
+                    blocked: data.blocked ?? false,
+                    blockedReason: data.blocked_reason ?? '',
+                    storyPoints: data.story_points ?? '',
+                    estimateHours: data.estimate_hours ?? '',
+                    plannedSprint: data.planned_sprint ?? '',
+                    plannedRelease: data.planned_release ?? '',
+                    versionBuild: data.version_build ?? '',
+                    assignedBa: Array.isArray(data.assigned_ba) ? data.assigned_ba : (data.assigned_ba ? [data.assigned_ba] : []),
+                    assignedFrontendDeveloper: Array.isArray(data.assigned_frontend_developer) ? data.assigned_frontend_developer : (data.assigned_frontend_developer ? [data.assigned_frontend_developer] : []),
+                    assignedBackendDeveloper: Array.isArray(data.assigned_backend_developer) ? data.assigned_backend_developer : (data.assigned_backend_developer ? [data.assigned_backend_developer] : []),
+                    assignedTester: Array.isArray(data.assigned_tester) ? data.assigned_tester : (data.assigned_tester ? [data.assigned_tester] : []),
+                    linkedFeatures: Array.isArray(data.linked_features) ? data.linked_features : [],
+                    approvalStatus: data.approval_status ?? 'Pending',
+                    developmentStatus: data.development_status ?? 'Not Started',
+                    qaStatus: data.qa_status ?? 'Not Started',
+                    releaseStatus: data.release_status ?? 'Not Released',
+                    approvedBy: data.approved_by ?? '',
+                    approvedAt: data.approved_at ?? '',
+                    createdBy: data.created_by ?? '',
+                    createdAt: data.created_at ?? '',
+                    updatedAt: data.updated_at ?? '',
+                }));
+            }
+        };
+        fetchStoryData();
+    }, [formData.storyId]);
+
+    useEffect(() => {
         if (!storyUUID) return;
         const fetchCounts = async () => {
-            const [tc, bg, cm, at] = await Promise.all([
+            const [tc1, tc2, bg, cm, at] = await Promise.all([
                 supabase.from('test_cases').select('id', { count: 'exact', head: true }).eq('user_story_id', storyUUID),
+                supabase.from('test_cases').select('id', { count: 'exact', head: true }).contains('user_story_ids', [storyUUID]),
                 supabase.from('bugs').select('id', { count: 'exact', head: true }).eq('story_id', storyUUID),
                 supabase.from('comments').select('id', { count: 'exact', head: true }).eq('story_id', storyUUID),
                 supabase.from('attachments').select('id', { count: 'exact', head: true }).eq('story_id', storyUUID),
             ]);
-            setTabCounts({ testcases: tc.count, bugs: bg.count, comments: cm.count, attachments: at.count });
+            // Deduplicate count by fetching actual IDs
+            const { data: ids1 } = await supabase.from('test_cases').select('id').eq('user_story_id', storyUUID);
+            const { data: ids2 } = await supabase.from('test_cases').select('id').contains('user_story_ids', [storyUUID]);
+            const uniqueTcCount = new Set([...(ids1 || []).map(r => r.id), ...(ids2 || []).map(r => r.id)]).size;
+            setTabCounts({ testcases: uniqueTcCount, bugs: bg.count, comments: cm.count, attachments: at.count });
         };
         fetchCounts();
     }, [storyUUID, activeTab]);
 
+    const handleStoryIdEditStart = () => {
+        setStoryIdDraft(formData.storyId);
+        setStoryIdError('');
+        setStoryIdEditing(true);
+        setTimeout(() => storyIdInputRef.current?.select(), 50);
+    };
+
+    const handleStoryIdSave = async () => {
+        const trimmed = storyIdDraft.trim().toUpperCase();
+        if (!trimmed) { setStoryIdError('Story ID cannot be empty'); return; }
+        if (!/^US-\d+$/.test(trimmed)) { setStoryIdError('Format must be US-### (e.g. US-046)'); return; }
+        if (trimmed === formData.storyId) { setStoryIdEditing(false); return; }
+        const { data } = await supabase.from('user_stories').select('id').eq('story_id', trimmed).maybeSingle();
+        if (data) { setStoryIdError(`${trimmed} already exists`); return; }
+        setFormData(prev => ({ ...prev, storyId: trimmed }));
+        setStoryUUID(null);
+        setStoryIdEditing(false);
+        setStoryIdError('');
+    };
+
+    const handleStoryIdKeyDown = (e) => {
+        if (e.key === 'Enter') handleStoryIdSave();
+        if (e.key === 'Escape') { setStoryIdEditing(false); setStoryIdError(''); }
+    };
+
+    const handleAddNewStory = () => {
+        confirmLeave(() => navigate('/stories/new'));
+    };
+
     const handleBackToList = () => {
-        if (formData.storyTitle || formData.storySummary) {
-            if (!window.confirm('Unsaved changes will be lost. Continue?')) return;
-        }
-        navigate('/stories');
+        confirmLeave(() => navigate('/stories'));
     };
 
     const tabs = [
@@ -1074,15 +897,21 @@ const UserStoryMapping = () => {
     ];
 
     const toggleSection = useCallback((sectionId) => { setCollapsedSections(prev => ({ ...prev, [sectionId]: !prev[sectionId] })); }, []);
-    const handleInputChange = useCallback((field, value) => { setFormData(prev => ({ ...prev, [field]: value })); }, []);
+    const handleInputChange = useCallback((field, value) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+        setIsSaved(false); // mark dirty on any change
+    }, []);
     const toggleAcceptanceCriteria = useCallback((id) => { setAcceptanceCriteria(prev => prev.map(item => item.id === id ? { ...item, checked: !item.checked } : item)); }, []);
     const toggleDefinitionOfDone = useCallback((id) => { setDefinitionOfDone(prev => prev.map(item => item.id === id ? { ...item, checked: !item.checked } : item)); }, []);
     const addAcceptanceCriteria = useCallback(() => { setAcceptanceCriteria(prev => { const newId = Math.max(...prev.map(ac => ac.id), 0) + 1; return [...prev, { id: newId, text: 'New acceptance criteria', checked: false }]; }); }, []);
 
+    // ── buildPayload — matched exactly to user_stories schema ─────────────────
     const buildPayload = (extraStatus) => {
         const now = new Date().toISOString();
+        // approved_at must be a full ISO timestamp or null (it's timestamptz)
         let approvedAt = null;
         if (formData.approvedAt) {
+            // if it's just a date string like "2026-04-09", convert to full ISO
             approvedAt = formData.approvedAt.includes('T')
                 ? formData.approvedAt
                 : `${formData.approvedAt}T00:00:00.000Z`;
@@ -1139,7 +968,9 @@ const UserStoryMapping = () => {
             planned_sprint: formData.plannedSprint || null,
             planned_release: formData.plannedRelease || null,
             version_build: formData.versionBuild || null,
+            // jsonb column
             assigned_ba: formData.assignedBa.length > 0 ? formData.assignedBa : null,
+            // ARRAY columns
             assigned_frontend_developer: formData.assignedFrontendDeveloper.length > 0 ? formData.assignedFrontendDeveloper : null,
             assigned_backend_developer: formData.assignedBackendDeveloper.length > 0 ? formData.assignedBackendDeveloper : null,
             assigned_tester: formData.assignedTester.length > 0 ? formData.assignedTester : null,
@@ -1174,102 +1005,38 @@ const UserStoryMapping = () => {
     const handleSaveDraft = async () => {
         setSaveLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('user_stories')
-                .upsert([buildPayload('Draft')], { onConflict: 'story_id' })
-                .select('id')
-                .single();
+            const { data, error } = await supabase.from('user_stories').upsert([buildPayload('Draft')], { onConflict: 'story_id' }).select('id').single();
             if (error) throw error;
-
             const savedUUID = data?.id;
-            if (savedUUID) {
-                setStoryUUID(savedUUID);
-                await syncFeatures(savedUUID, formData.storyId, formData.linkedFeatures);
-            }
-
+            if (savedUUID) { setStoryUUID(savedUUID); await syncFeatures(savedUUID, formData.storyId, formData.linkedFeatures); }
             setLastSaved(new Date().toLocaleString());
-
-            if (isNew) {
-                navigate(`/stories/${formData.storyId}`, { replace: true });
-                return;
-            }
-
-            const refreshed = await fetchStoryById(formData.storyId);
-            if (refreshed) {
-                setStoryUUID(refreshed.id);
-                setFormData(prev => ({
-                    ...prev,
-                    storyTitle: refreshed.story_title ?? prev.storyTitle,
-                    currentStatus: refreshed.current_status ?? prev.currentStatus,
-                    updatedAt: refreshed.updated_at ?? prev.updatedAt,
-                }));
-            }
-
-            setSaveSuccess('Draft saved!');
-            setTimeout(() => setSaveSuccess(''), 3000);
-        } catch (err) { alert(`❌ ${err.message}`); }
+            setIsSaved(true);
+            if (isNew) navigate(`/stories/${formData.storyId}`, { replace: true });
+            showToast('✅ Draft saved successfully!');
+        } catch (err) { showToast(`❌ ${err.message}`, 'error'); }
         finally { setSaveLoading(false); }
     };
 
     const handleSaveAndSubmit = async () => {
-        if (!formData.storyTitle) { alert('⚠️ Story Title is required'); return; }
+        if (!formData.storyTitle) { showToast('⚠️ Story Title is required', 'error'); return; }
         setSaveLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('user_stories')
-                .upsert([buildPayload('Submitted')], { onConflict: 'story_id' })
-                .select('id')
-                .single();
+            const { data, error } = await supabase.from('user_stories').upsert([buildPayload('Submitted')], { onConflict: 'story_id' }).select('id').single();
             if (error) throw error;
-
             const savedUUID = data?.id;
-            if (savedUUID) {
-                setStoryUUID(savedUUID);
-                await syncFeatures(savedUUID, formData.storyId, formData.linkedFeatures);
-            }
-
+            if (savedUUID) { setStoryUUID(savedUUID); await syncFeatures(savedUUID, formData.storyId, formData.linkedFeatures); }
             setLastSaved(new Date().toLocaleString());
-
-            if (isNew) {
-                navigate(`/stories/${formData.storyId}`, { replace: true });
-                return;
-            }
-
-            const refreshed = await fetchStoryById(formData.storyId);
-            if (refreshed) {
-                setStoryUUID(refreshed.id);
-                if (Array.isArray(refreshed.acceptance_criteria) && refreshed.acceptance_criteria.length > 0) {
-                    setAcceptanceCriteria(refreshed.acceptance_criteria);
-                }
-                if (Array.isArray(refreshed.definition_of_done) && refreshed.definition_of_done.length > 0) {
-                    setDefinitionOfDone(refreshed.definition_of_done);
-                }
-                setFormData(prev => ({
-                    ...prev,
-                    storyTitle: refreshed.story_title ?? prev.storyTitle,
-                    storyType: refreshed.story_type ?? prev.storyType,
-                    storySummary: refreshed.story_summary ?? prev.storySummary,
-                    currentStatus: refreshed.current_status ?? 'Submitted',
-                    criticality: refreshed.criticality ?? prev.criticality,
-                    module: refreshed.module ?? prev.module,
-                    feature: refreshed.feature ?? prev.feature,
-                    moduleId: refreshed.module_id ?? prev.moduleId,
-                    plannedRelease: refreshed.planned_release ?? prev.plannedRelease,
-                    versionBuild: refreshed.version_build ?? prev.versionBuild,
-                    storyPoints: refreshed.story_points ?? prev.storyPoints,
-                    estimateHours: refreshed.estimate_hours ?? prev.estimateHours,
-                    approvalStatus: refreshed.approval_status ?? prev.approvalStatus,
-                    developmentStatus: refreshed.development_status ?? prev.developmentStatus,
-                    qaStatus: refreshed.qa_status ?? prev.qaStatus,
-                    releaseStatus: refreshed.release_status ?? prev.releaseStatus,
-                    updatedAt: refreshed.updated_at ?? prev.updatedAt,
-                }));
-            }
-
-            setSaveSuccess('Story submitted successfully!');
-            setTimeout(() => setSaveSuccess(''), 3000);
-        } catch (err) { alert(`❌ ${err.message}`); }
+            setIsSaved(true);
+            if (isNew) navigate(`/stories/${formData.storyId}`, { replace: true });
+            showToast('✅ Story submitted successfully!');
+        } catch (err) { showToast(`❌ ${err.message}`, 'error'); }
         finally { setSaveLoading(false); }
+    };
+
+    const handleDuplicate = () => {
+        const newId = `US-${String(parseInt(formData.storyId.split('-')[1]) + 1).padStart(3, '0')}`;
+        navigate(`/stories/${newId}`);
+        alert(`✅ Duplicated as ${newId}. Save to create.`);
     };
 
     const storyTypeOpts = ['Feature Enhancement', 'New Feature', 'Bug Fix', 'Technical Debt'];
@@ -1296,72 +1063,162 @@ const UserStoryMapping = () => {
         <>
             <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
             <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+            {/* ── Toast notification ── */}
+            {toast && (
+                <div style={{
+                    position: 'fixed', top: 20, right: 20, zIndex: 9999,
+                    padding: '14px 20px', borderRadius: 12,
+                    background: toast.type === 'error' ? '#DC2626' : '#16a34a',
+                    color: '#fff', fontSize: 14, fontWeight: 600,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    animation: 'slideIn 0.25s ease',
+                }}>
+                    <i className={`fa-solid ${toast.type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-check'}`} />
+                    {toast.message}
+                </div>
+            )}
+
+            {/* ── Unsaved changes modal ── */}
+            {unsavedModal.show && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                    <div style={{ background: '#fff', borderRadius: 16, padding: 28, maxWidth: 400, width: '100%', boxShadow: '0 20px 48px rgba(0,0,0,0.18)' }}>
+                        <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                            <i className="fa-solid fa-triangle-exclamation" style={{ color: '#D97706', fontSize: 20 }} />
+                        </div>
+                        <h3 style={{ fontSize: 16, fontWeight: 700, textAlign: 'center', marginBottom: 8, color: '#111827' }}>Unsaved Changes</h3>
+                        <p style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', marginBottom: 24, lineHeight: 1.5 }}>
+                            You have unsaved changes that will be lost if you leave. Do you want to continue without saving?
+                        </p>
+                        <div style={{ display: 'flex', gap: 10 }}>
+                            <button
+                                onClick={() => setUnsavedModal({ show: false, onConfirm: null })}
+                                style={{ flex: 1, padding: '10px 0', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', color: '#374151' }}>
+                                Stay & Save
+                            </button>
+                            <button
+                                onClick={() => { unsavedModal.onConfirm(); setUnsavedModal({ show: false, onConfirm: null }); }}
+                                style={{ flex: 1, padding: '10px 0', background: '#DC2626', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#fff' }}>
+                                Leave Anyway
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <style>{`
                 ::-webkit-scrollbar { display: none; }
                 body { font-family: 'Roboto', sans-serif; }
+                @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
                 .section-header { cursor: pointer; transition: all 0.2s; }
                 .section-header:hover { background-color: #F8FAFC; }
                 .status-badge { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 500; }
                 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
                 .modal-content { background: white; border-radius: 0.5rem; padding: 2rem; max-width: 600px; width: 100%; max-height: 80vh; overflow-y: auto; }
+                .add-story-btn { position: relative; overflow: hidden; }
+                .add-story-btn::after { content: ''; position: absolute; inset: 0; background: rgba(255,255,255,0.15); opacity: 0; transition: opacity 0.15s; }
+                .add-story-btn:hover::after { opacity: 1; }
+                .story-id-edit-input:focus { outline: none; box-shadow: 0 0 0 2px rgba(99,102,241,0.25); }
             `}</style>
 
             <div className="flex min-h-screen">
                 <div className="flex-1 flex flex-col min-w-0">
-
-                    {/* ── Success Toast ── */}
-                    {saveSuccess && (
-                        <div className="fixed top-4 right-4 z-50 flex items-center gap-3 px-5 py-3 bg-green-600 text-white rounded-xl shadow-lg text-sm font-medium" style={{ animation: 'fadeIn 0.2s ease' }}>
-                            <i className="fa-solid fa-circle-check"></i>
-                            {saveSuccess}
-                        </div>
-                    )}
-
-                    {/* ── HEADER ── */}
                     <header className="bg-card border-b border-border">
                         <div className="px-4 lg:px-8 py-4">
-                            <div className="flex items-center gap-4 flex-wrap">
-                                <button
-                                    onClick={handleBackToList}
-                                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0"
-                                    title="Back to User Stories list"
-                                >
-                                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                                        <path d="M9 2L5 7L9 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                    <span className="hidden sm:inline">Stories</span>
-                                </button>
+                            <div className="flex items-center justify-between gap-4 flex-wrap">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <button
+                                        onClick={handleBackToList}
+                                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0"
+                                        title="Back to User Stories list"
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                                            <path d="M9 2L5 7L9 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
+                                        <span className="hidden sm:inline">Stories</span>
+                                    </button>
 
-                                <span className="text-muted-foreground text-sm hidden sm:inline">/</span>
+                                    <span className="text-muted-foreground text-sm hidden sm:inline">/</span>
 
-                                <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-3 mb-1 flex-wrap">
-                                        <h2 className="text-xl lg:text-2xl font-bold text-foreground">
-                                            {isNew ? 'New Story' : `User Story: ${formData.storyId}`}
-                                        </h2>
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-50 border border-green-200 text-green-700 text-xs font-semibold rounded-full">
-                                            <i className="fa-solid fa-wand-magic-sparkles" style={{ fontSize: 9 }}></i>
-                                            Auto-generated
-                                        </span>
-                                        {formData.currentStatus && (
-                                            <span className="status-badge bg-blue-500 bg-opacity-10 text-blue-600">
-                                                <i className="fa-solid fa-circle text-xs"></i> {formData.currentStatus}
-                                            </span>
-                                        )}
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-3 mb-1 flex-wrap">
+                                            <div className="flex items-center gap-1.5">
+                                                {storyIdEditing ? (
+                                                    <div className="flex flex-col gap-1">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <input
+                                                                ref={storyIdInputRef}
+                                                                value={storyIdDraft}
+                                                                onChange={e => { setStoryIdDraft(e.target.value.toUpperCase()); setStoryIdError(''); }}
+                                                                onKeyDown={handleStoryIdKeyDown}
+                                                                placeholder="US-###"
+                                                                className="story-id-edit-input px-2.5 py-1 text-xl font-bold border-2 border-indigo-400 rounded-lg bg-white text-foreground w-32"
+                                                                style={{ fontSize: '1.15rem' }}
+                                                            />
+                                                            <button onClick={handleStoryIdSave} className="flex items-center justify-center w-7 h-7 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors" title="Confirm">
+                                                                <i className="fa-solid fa-check" style={{ fontSize: 11 }}></i>
+                                                            </button>
+                                                            <button onClick={() => { setStoryIdEditing(false); setStoryIdError(''); }} className="flex items-center justify-center w-7 h-7 bg-gray-200 hover:bg-gray-300 text-gray-600 rounded-md transition-colors" title="Cancel">
+                                                                <i className="fa-solid fa-times" style={{ fontSize: 11 }}></i>
+                                                            </button>
+                                                        </div>
+                                                        {storyIdError && (
+                                                            <span className="text-xs text-red-500 flex items-center gap-1">
+                                                                <i className="fa-solid fa-circle-exclamation" style={{ fontSize: 10 }}></i>{storyIdError}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        onClick={handleStoryIdEditStart}
+                                                        className="group flex items-center gap-1.5 hover:bg-indigo-50 rounded-lg px-1.5 py-0.5 transition-colors"
+                                                        title="Click to edit Story ID"
+                                                    >
+                                                        <h2 className="text-xl lg:text-2xl font-bold text-foreground">
+                                                            {isNew ? 'New Story' : `User Story: ${formData.storyId}`}
+                                                        </h2>
+                                                        {!isNew && <i className="fa-solid fa-pencil text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity" style={{ fontSize: 12 }}></i>}
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {formData.currentStatus && (
+                                                <span className="status-badge bg-blue-500 bg-opacity-10 text-blue-600">
+                                                    <i className="fa-solid fa-circle text-xs"></i> {formData.currentStatus}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-sm text-muted-foreground">{formData.storyTitle || 'No title yet'}</p>
                                     </div>
-                                    <p className="text-sm text-muted-foreground">
-                                        {formData.storyTitle
-                                            ? formData.storyTitle
-                                            : <span className="italic opacity-50">No title yet — fill in Story Title below</span>}
-                                    </p>
                                 </div>
+
+                                <button
+                                    onClick={handleAddNewStory}
+                                    className="add-story-btn flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-md hover:shadow-lg active:scale-95"
+                                    style={{
+                                        background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                                        border: 'none',
+                                        letterSpacing: '0.01em',
+                                        flexShrink: 0,
+                                    }}
+                                    title="Create a new user story"
+                                >
+                                    <span style={{
+                                        width: 22, height: 22, borderRadius: 6,
+                                        background: 'rgba(255,255,255,0.22)',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        flexShrink: 0,
+                                    }}>
+                                        <i className="fa-solid fa-plus" style={{ fontSize: 11 }}></i>
+                                    </span>
+                                    Add User Story
+                                </button>
                             </div>
                         </div>
                     </header>
 
                     <main className="flex-1 overflow-auto">
                         <div className="p-4 lg:p-8">
-                            {/* Tabs */}
                             <div className="bg-card border border-border rounded-lg shadow-sm mb-6">
                                 <div className="flex items-center gap-1 px-4 border-b border-border overflow-x-auto">
                                     {tabs.map(tab => {
@@ -1385,26 +1242,26 @@ const UserStoryMapping = () => {
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                                 <div>
                                                     <label className={labelCls}>Story ID</label>
-                                                    <div className="flex items-center gap-2 px-4 py-2.5 bg-muted border border-border rounded-lg">
-                                                        <span className="font-mono text-sm font-bold text-primary tracking-wide flex-1">
-                                                            {formData.storyId || (
-                                                                <span className="flex items-center gap-1.5 text-muted-foreground font-normal">
-                                                                    <span className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin inline-block"></span>
-                                                                    Generating…
-                                                                </span>
-                                                            )}
-                                                        </span>
-                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-semibold rounded-full flex-shrink-0">
-                                                            <i className="fa-solid fa-lock" style={{ fontSize: 8 }}></i>
-                                                            Auto
-                                                        </span>
+                                                    <div className="relative">
+                                                        <input
+                                                            type="text"
+                                                            value={formData.storyId}
+                                                            readOnly
+                                                            className="w-full px-4 py-2.5 bg-muted border border-border rounded-lg text-sm pr-10 cursor-default"
+                                                        />
+                                                        <button
+                                                            onClick={handleStoryIdEditStart}
+                                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                                            title="Edit Story ID"
+                                                        >
+                                                            <i className="fa-solid fa-pencil" style={{ fontSize: 11 }}></i>
+                                                        </button>
                                                     </div>
                                                     <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
-                                                        <i className="fa-solid fa-circle-info text-green-500" style={{ fontSize: 10 }}></i>
-                                                        Automatically assigned in sequence
+                                                        <i className="fa-solid fa-circle-info text-indigo-400" style={{ fontSize: 10 }}></i>
+                                                        Auto-generated · click <i className="fa-solid fa-pencil text-indigo-400 mx-0.5" style={{ fontSize: 9 }}></i> to change
                                                     </p>
                                                 </div>
-
                                                 <div><label className={labelCls}>Story Type</label><CustomSelect value={formData.storyType} onChange={v => handleInputChange('storyType', v)} options={storyTypeOpts} /></div>
                                                 <div className="sm:col-span-2"><label className={labelCls}>Story Title <span className="text-destructive">*</span></label><input type="text" value={formData.storyTitle} onChange={e => handleInputChange('storyTitle', e.target.value)} placeholder="Enter story title..." className={inputCls} /></div>
                                                 <div className="sm:col-span-2"><label className={labelCls}>Story Summary</label><textarea rows="3" value={formData.storySummary} onChange={e => handleInputChange('storySummary', e.target.value)} className={inputCls} placeholder="Brief summary..." /></div>
