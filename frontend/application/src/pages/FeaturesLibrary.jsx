@@ -93,6 +93,9 @@ const GLOBAL_STYLES = `
   input[type="number"]::-webkit-outer-spin-button,
   input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
   input[type="number"] { -moz-appearance: textfield; }
+
+  .fl-ms-item { transition: background 0.1s; cursor: pointer; }
+  .fl-ms-item:hover { background: #F4F6F3; }
 `;
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
@@ -144,7 +147,7 @@ const Chip = ({ label, style: s, mono }) => (
     </span>
 );
 
-// ─── Dropdown ──────────────────────────────────────────────────────────────────
+// ─── Single-select Dropdown ────────────────────────────────────────────────────
 const Dropdown = memo(({ options, selected, onChange, placeholder = "Select..." }) => {
     const [open, setOpen] = useState(false);
     const [hov, setHov] = useState(null);
@@ -226,13 +229,187 @@ const Dropdown = memo(({ options, selected, onChange, placeholder = "Select..." 
     );
 });
 
+// ─── Multi-select Dropdown ─────────────────────────────────────────────────────
+const MultiSelectDropdown = memo(({ options, selected = [], onChange, placeholder = "Select..." }) => {
+    const [open, setOpen] = useState(false);
+    const [search, setSearch] = useState("");
+    const ref = useRef(null);
+    const searchRef = useRef(null);
+
+    useEffect(() => {
+        const h = (e) => { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setSearch(""); } };
+        document.addEventListener("mousedown", h);
+        return () => document.removeEventListener("mousedown", h);
+    }, []);
+
+    useEffect(() => {
+        if (open && searchRef.current) searchRef.current.focus();
+    }, [open]);
+
+    const filtered = useMemo(() => {
+        if (!search.trim()) return options;
+        const q = search.toLowerCase();
+        return options.filter(o => o.name.toLowerCase().includes(q) || (o.code || "").toLowerCase().includes(q));
+    }, [options, search]);
+
+    const toggle = useCallback((id) => {
+        onChange(selected.includes(id) ? selected.filter(s => s !== id) : [...selected, id]);
+    }, [selected, onChange]);
+
+    const selectedLabels = useMemo(() =>
+        selected.map(id => options.find(o => o.id === id)).filter(Boolean),
+        [selected, options]
+    );
+
+    return (
+        <div ref={ref} style={{ position: "relative", userSelect: "none" }}>
+            {/* Trigger */}
+            <div
+                onClick={() => setOpen(p => !p)}
+                style={{
+                    minHeight: 40, padding: selected.length ? "6px 36px 6px 8px" : "9px 36px 9px 13px",
+                    background: open ? T.surface : "#FAFBF9",
+                    border: `1px solid ${open ? T.green : T.border}`,
+                    borderRadius: 8, cursor: "pointer",
+                    boxShadow: open ? `0 0 0 3px rgba(29,61,47,0.08)` : "none",
+                    transition: "all 0.15s", position: "relative",
+                    display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4,
+                }}
+            >
+                {selectedLabels.length === 0 && (
+                    <span style={{ fontSize: 13, color: T.textFaint, fontFamily: T.sans }}>{placeholder}</span>
+                )}
+                {selectedLabels.map(opt => (
+                    <span
+                        key={opt.id}
+                        style={{
+                            display: "inline-flex", alignItems: "center", gap: 4,
+                            background: T.purpleTint, color: T.purple,
+                            borderRadius: 5, padding: "2px 6px 2px 7px",
+                            fontSize: 11, fontWeight: 600, fontFamily: T.mono,
+                        }}
+                    >
+                        {opt.code || opt.name}
+                        <span
+                            onClick={(e) => { e.stopPropagation(); toggle(opt.id); }}
+                            style={{
+                                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                width: 14, height: 14, borderRadius: 3,
+                                background: "rgba(124,58,237,0.15)", cursor: "pointer",
+                                fontSize: 9, color: T.purple, fontFamily: T.sans, lineHeight: 1,
+                            }}
+                        >✕</span>
+                    </span>
+                ))}
+                {/* Chevron */}
+                <span style={{
+                    position: "absolute", right: 10, top: "50%", transform: `translateY(-50%) rotate(${open ? 180 : 0}deg)`,
+                    transition: "transform 0.2s", color: open ? T.green : T.textFaint, display: "flex",
+                }}>
+                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                        <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                </span>
+            </div>
+
+            {/* Dropdown panel */}
+            {open && (
+                <div style={{
+                    position: "absolute", top: "calc(100% + 5px)", left: 0, right: 0,
+                    zIndex: 9999, background: T.surface, border: `1px solid ${T.border}`,
+                    borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
+                    animation: "ddIn 0.16s cubic-bezier(.4,0,.2,1)", overflow: "hidden",
+                }}>
+                    {/* Search */}
+                    <div style={{ padding: "8px 8px 4px", borderBottom: `1px solid ${T.borderLight}` }}>
+                        <div style={{ position: "relative" }}>
+                            <input
+                                ref={searchRef}
+                                type="text"
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                placeholder="Search user stories…"
+                                onClick={e => e.stopPropagation()}
+                                style={{
+                                    width: "100%", padding: "7px 10px 7px 30px",
+                                    background: T.surfaceAlt, border: `1px solid ${T.border}`,
+                                    borderRadius: 7, fontSize: 12, color: T.text,
+                                    fontFamily: T.sans, outline: "none",
+                                }}
+                            />
+                            <i className="fa-solid fa-search" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: T.textFaint, fontSize: 11 }}></i>
+                        </div>
+                    </div>
+
+                    {/* Options */}
+                    <div style={{ maxHeight: 220, overflowY: "auto", padding: 4 }}>
+                        {filtered.length === 0 && (
+                            <div style={{ padding: "10px 12px", fontSize: 12, color: T.textFaint, fontFamily: T.sans, textAlign: "center" }}>No stories found</div>
+                        )}
+                        {filtered.map(opt => {
+                            const sel = selected.includes(opt.id);
+                            return (
+                                <div
+                                    key={opt.id}
+                                    className="fl-ms-item"
+                                    onClick={() => toggle(opt.id)}
+                                    style={{
+                                        padding: "8px 10px", borderRadius: 7,
+                                        display: "flex", alignItems: "center", gap: 9,
+                                        background: sel ? T.greenLight : "transparent",
+                                    }}
+                                >
+                                    {/* Checkbox */}
+                                    <div style={{
+                                        width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                                        border: `1.5px solid ${sel ? T.green : T.border}`,
+                                        background: sel ? T.green : T.surface,
+                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                        transition: "all 0.13s",
+                                    }}>
+                                        {sel && (
+                                            <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
+                                                <path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                        )}
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                            {opt.code && (
+                                                <span style={{ fontSize: 10, fontWeight: 700, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "1px 6px", borderRadius: 4, flexShrink: 0 }}>{opt.code}</span>
+                                            )}
+                                            <span style={{ fontSize: 12, fontWeight: sel ? 600 : 400, color: sel ? T.green : T.text, fontFamily: T.sans, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{opt.name}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* Footer */}
+                    {selected.length > 0 && (
+                        <div style={{ padding: "6px 10px", borderTop: `1px solid ${T.borderLight}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <span style={{ fontSize: 11, color: T.textMuted, fontFamily: T.sans }}>{selected.length} selected</span>
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onChange([]); }}
+                                style={{ background: "none", border: "none", color: T.red, fontSize: 11, cursor: "pointer", fontFamily: T.sans }}
+                            >Clear all</button>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+});
+
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const PRIORITY_OPTIONS = [{ id: "High", name: "High" }, { id: "Medium", name: "Medium" }, { id: "Low", name: "Low" }];
 const STATUS_OPTIONS = [{ id: "Active", name: "Active" }, { id: "Draft", name: "Draft" }, { id: "Archived", name: "Archived" }];
 const FILTER_STATUS_OPT = [{ id: "", name: "All Status" }, { id: "Active", name: "Active" }, { id: "Draft", name: "Draft" }, { id: "Archived", name: "Archived" }];
 const PRIORITY_WITH_PH = [{ id: "", name: "Select Priority" }, ...PRIORITY_OPTIONS];
 
-const emptyForm = { id: "", name: "", description: "", preconditions: "", steps: "", expected: "", assignee: "", status: "Active", priority: "", tags: "" };
+const emptyForm = { id: "", name: "", description: "", preconditions: "", steps: "", expected: "", assignee: "", status: "Active", priority: "", tags: "", userStoryIds: [] };
 const emptyFeatureForm = { moduleId: "", name: "", code: "", user_story: "", description: "", assign_to: "" };
 const emptyEditFeatureForm = { id: "", moduleId: "", name: "", code: "", user_story: "", description: "", assign_to: "" };
 
@@ -242,7 +419,6 @@ const generateUUID = () =>
         return v.toString(16);
     });
 
-// Derives the next TC-NNN id from an existing flat list of test cases
 const generateNextTcId = (allTestCases) => {
     let max = 0;
     for (const tc of allTestCases) {
@@ -252,7 +428,6 @@ const generateNextTcId = (allTestCases) => {
     return `TC-${String(max + 1).padStart(3, "0")}`;
 };
 
-// Derives the next FEAT-NNN code from an existing flat list of features
 const generateNextFeatCode = (allFeatures) => {
     let max = 0;
     for (const f of allFeatures) {
@@ -326,23 +501,13 @@ const TestCaseRow = memo(({ tc, onEdit, onDelete }) => (
     </tr>
 ));
 
-// ─── Feature Card (PRIMARY level) ─────────────────────────────────────────────
+// ─── Feature Card ──────────────────────────────────────────────────────────────
 const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEdit, onDelete }) => (
     <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, overflow: "hidden" }}>
-
-        {/* ── Feature header row ── */}
-        <div
-            className="fl-feat-card-row"
-            style={{ padding: "14px 20px", cursor: "pointer", background: T.surface }}
-            onClick={onToggle}
-        >
+        <div className="fl-feat-card-row" style={{ padding: "14px 20px", cursor: "pointer", background: T.surface }} onClick={onToggle}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                {/* Left: icon + meta */}
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
-                    <div style={{
-                        width: 36, height: 36, borderRadius: 9, flexShrink: 0,
-                        background: T.greenLight, display: "flex", alignItems: "center", justifyContent: "center",
-                    }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 9, flexShrink: 0, background: T.greenLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <i className="fa-solid fa-list-check" style={{ color: T.green, fontSize: 14 }}></i>
                     </div>
                     <div style={{ minWidth: 0, flex: 1 }}>
@@ -368,8 +533,6 @@ const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEdit, onDelete })
                         </div>
                     </div>
                 </div>
-
-                {/* Right: actions */}
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                     <button className="fl-btn-primary" onClick={(e) => { e.stopPropagation(); onAddTC(e, feat.moduleId, feat.id); }}>
                         <i className="fa-solid fa-plus" style={{ fontSize: 10 }}></i> Test Case
@@ -380,30 +543,18 @@ const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEdit, onDelete })
                     <button className="fl-btn-danger-sm" onClick={onDelete} title="Delete Feature">
                         <i className="fa-solid fa-trash" style={{ fontSize: 11 }}></i>
                     </button>
-                    <i className={`fa-solid fa-chevron-right fl-chevron${isOpen ? " open" : ""}`}
-                        style={{ color: T.textFaint, fontSize: 10 }}></i>
+                    <i className={`fa-solid fa-chevron-right fl-chevron${isOpen ? " open" : ""}`} style={{ color: T.textFaint, fontSize: 10 }}></i>
                 </div>
             </div>
         </div>
 
-        {/* ── Module badge — always visible ── */}
-        <div style={{
-            background: T.surfaceAlt,
-            borderTop: `1px solid ${T.borderLight}`,
-            padding: "8px 20px",
-            display: "flex", alignItems: "center", gap: 10,
-        }}>
-            <span style={{
-                fontSize: 10, fontWeight: 700, color: T.textFaint,
-                textTransform: "uppercase", letterSpacing: "0.07em",
-                fontFamily: T.sans, flexShrink: 0,
-            }}>Module</span>
+        <div style={{ background: T.surfaceAlt, borderTop: `1px solid ${T.borderLight}`, padding: "8px 20px", display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: T.textFaint, textTransform: "uppercase", letterSpacing: "0.07em", fontFamily: T.sans, flexShrink: 0 }}>Module</span>
             <div style={{ width: 5, height: 5, borderRadius: "50%", background: T.blue, flexShrink: 0 }} />
             <span style={{ fontSize: 12, fontWeight: 600, color: T.textMid, fontFamily: T.sans }}>{feat.moduleName}</span>
             <Chip label={feat.moduleCode} style={{ background: T.blueTint, color: T.blue }} mono />
         </div>
 
-        {/* ── Test cases (expanded) ── */}
         {isOpen && feat.testCases.length > 0 && (
             <div style={{ borderTop: `1px solid ${T.borderLight}` }}>
                 <div style={{ overflowX: "auto" }}>
@@ -475,7 +626,6 @@ const BTN_DANGER = {
     cursor: "pointer", fontFamily: T.sans,
 };
 
-// ─── Form field helpers ────────────────────────────────────────────────────────
 const Field = ({ label, required, children }) => (
     <div>
         <label className="fl-label">{label}{required && <span style={{ color: T.red, marginLeft: 3 }}>*</span>}</label>
@@ -487,6 +637,7 @@ const Field = ({ label, required, children }) => (
 export default function FeaturesLibrary() {
     const [modules, setModules] = useState([]);
     const [users, setUsers] = useState([]);
+    const [userStories, setUserStories] = useState([]);
     const [openFeatures, setOpenFeatures] = useState({});
     const [searchQuery, setSearchQuery] = useState("");
     const [filterStatus, setFilterStatus] = useState("");
@@ -498,7 +649,6 @@ export default function FeaturesLibrary() {
     const [deleteModal, setDeleteModal] = useState({ open: false, tc: null, featureId: null, moduleId: null });
     const [addFeatureModal, setAddFeatureModal] = useState(false);
     const [featureForm, setFeatureForm] = useState(emptyFeatureForm);
-
     const [editFeatureModal, setEditFeatureModal] = useState(false);
     const [editFeatureForm, setEditFeatureForm] = useState(emptyEditFeatureForm);
     const [deleteFeatureModal, setDeleteFeatureModal] = useState(false);
@@ -543,18 +693,16 @@ export default function FeaturesLibrary() {
             }
             const enriched = (modulesData || []).map(mod => {
                 const mf = featsByModule[mod.id] || [];
-                const ef = mf.map(feat => {
-                    return {
-                        ...feat,
-                        name: feat.feature_name || feat.name,
-                        code: feat.feature_code || feat.code,
-                        moduleId: mod.id,
-                        moduleName: mod.module_name || mod.name,
-                        moduleCode: mod.module_code,
-                        testCasesCount: (tcsByFeature[feat.id] || []).length,
-                        testCases: tcsByFeature[feat.id] || [],
-                    };
-                });
+                const ef = mf.map(feat => ({
+                    ...feat,
+                    name: feat.feature_name || feat.name,
+                    code: feat.feature_code || feat.code,
+                    moduleId: mod.id,
+                    moduleName: mod.module_name || mod.name,
+                    moduleCode: mod.module_code,
+                    testCasesCount: (tcsByFeature[feat.id] || []).length,
+                    testCases: tcsByFeature[feat.id] || [],
+                }));
                 return {
                     ...mod,
                     name: mod.module_name || mod.name,
@@ -576,16 +724,32 @@ export default function FeaturesLibrary() {
         } catch (err) { console.error(err); }
     }, []);
 
-    useEffect(() => { Promise.all([fetchModulesWithFeatures(), fetchUsers()]); }, [fetchModulesWithFeatures, fetchUsers]);
+    // ── FIXED: correct column names from user_stories table ───────────────────
+    const fetchUserStories = useCallback(async () => {
+        try {
+            const { data, error } = await supabase
+                .from("user_stories")
+                .select("id, story_id, story_title")
+                .order("story_id", { ascending: true });
+            if (error) { console.warn("User stories:", error.message); return; }
+            setUserStories(
+                (data || []).map(s => ({
+                    id: s.id,
+                    code: s.story_id,
+                    name: s.story_title || s.story_id,
+                }))
+            );
+        } catch (err) { console.error(err); }
+    }, []);
 
-    // ── Flat features list (primary view) ──────────────────────────────────────
+    useEffect(() => {
+        Promise.all([fetchModulesWithFeatures(), fetchUsers(), fetchUserStories()]);
+    }, [fetchModulesWithFeatures, fetchUsers, fetchUserStories]);
+
     const flatFeatures = useMemo(() =>
         modules.flatMap(mod => mod.features.map(feat => {
             const assignedUser = users.find(u => u.id === feat.assign_to);
-            return {
-                ...feat,
-                assign_to_name: assignedUser ? assignedUser.name : (feat.assign_to || null),
-            };
+            return { ...feat, assign_to_name: assignedUser ? assignedUser.name : (feat.assign_to || null) };
         })),
         [modules, users]
     );
@@ -598,12 +762,9 @@ export default function FeaturesLibrary() {
     const testerOptions = useMemo(() => [{ id: "", name: "Select Tester" }, ...users.map(u => ({ id: u.name, name: u.name }))], [users]);
     const moduleOptions = useMemo(() => [{ id: "", name: "Choose Module" }, ...modules.map(m => ({ id: m.id, name: m.name }))], [modules]);
 
-    // ── Filtered flat features ──────────────────────────────────────────────────
     const filteredFeatures = useMemo(() => {
         let list = flatFeatures;
-        if (filterStatus) {
-            list = list.filter(f => (f.status || "Active").toLowerCase() === filterStatus.toLowerCase());
-        }
+        if (filterStatus) list = list.filter(f => (f.status || "Active").toLowerCase() === filterStatus.toLowerCase());
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
             list = list.filter(f =>
@@ -640,19 +801,23 @@ export default function FeaturesLibrary() {
         setForm({ ...emptyForm, id: nextId });
         setAddModal({ open: true, featureId, moduleId });
     }, [modules]);
+
     const openEditModal = useCallback((e, moduleId, featureId, tc) => {
         e.stopPropagation();
-        setForm({ id: tc.tcId, name: tc.name, description: tc.description, preconditions: "", steps: "", expected: "", assignee: tc.assignee || "", status: tc.status, priority: tc.priority, tags: "" });
+        setForm({ id: tc.tcId, name: tc.name, description: tc.description, preconditions: "", steps: "", expected: "", assignee: tc.assignee || "", status: tc.status, priority: tc.priority, tags: "", userStoryIds: tc.userStoryIds || [] });
         setEditModal({ open: true, tc, featureId, moduleId });
     }, []);
+
     const openDeleteModal = useCallback((e, moduleId, featureId, tc) => {
         e.stopPropagation(); setDeleteModal({ open: true, tc, featureId, moduleId });
     }, []);
+
     const openEditFeatureModal = useCallback((e, feat) => {
         e.stopPropagation();
         setEditFeatureForm({ id: feat.id, moduleId: feat.moduleId, name: feat.feature_name || feat.name || "", code: feat.feature_code || feat.code || "", user_story: feat.user_story || "", description: feat.description || "", assign_to: feat.assign_to || "" });
         setEditFeatureModal(true);
     }, []);
+
     const openDeleteFeatureModal = useCallback((e, feat) => {
         e.stopPropagation(); setDeleteFeatureTarget(feat); setDeleteFeatureModal(true);
     }, []);
@@ -663,19 +828,24 @@ export default function FeaturesLibrary() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) { alert("Must be logged in"); return; }
             const { error } = await supabase.from("test_cases").insert([{
-                id: generateUUID(), test_case_id: form.id, name: form.name,
+                id: generateUUID(),
+                test_case_id: form.id,
+                name: form.name,
                 description: form.description,
                 feature_id: addModal.featureId || null,
                 module_id: addModal.moduleId || null,
-                priority: form.priority, status: form.status,
+                priority: form.priority,
+                status: form.status,
                 created_by: user.id,
                 assigned_to: form.assignee || null,
-                created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+                user_story_ids: form.userStoryIds.length > 0 ? form.userStoryIds : null,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
             }]);
             if (error) throw error;
             setAddModal({ open: false }); fetchModulesWithFeatures();
         } catch (err) { alert(`Error: ${err.message}`); }
-    }, [form, addModal.featureId, fetchModulesWithFeatures]);
+    }, [form, addModal.featureId, addModal.moduleId, fetchModulesWithFeatures]);
 
     const handleEditTestCase = useCallback(async () => {
         if (!form.name || !form.priority) { alert("Name and Priority required"); return; }
@@ -776,7 +946,6 @@ export default function FeaturesLibrary() {
         <div className="fl-root" style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, background: T.bg }}>
             <style>{GLOBAL_STYLES}</style>
 
-            {/* ── Header ──────────────────────────────────────────────────────────── */}
             <header style={{ background: T.surface, borderBottom: `1px solid ${T.border}`, zIndex: 40, position: "sticky", top: 0 }}>
                 <div style={{ padding: "14px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
                     <div>
@@ -803,33 +972,21 @@ export default function FeaturesLibrary() {
                         </div>
                     )}
 
-                    {/* Stats */}
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 20 }}>
                         {stats.map(s => <StatCard key={s.label} stat={s} />)}
                     </div>
 
-                    {/* Filters */}
                     <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, marginBottom: 20, padding: "14px 18px" }}>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 180px 120px", gap: 12 }}>
                             <div style={{ position: "relative" }}>
-                                <input
-                                    className="fl-input"
-                                    type="text"
-                                    placeholder="Search features, modules, test case IDs…"
-                                    value={searchQuery}
-                                    onChange={e => setSearchQuery(e.target.value)}
-                                    style={{ paddingLeft: 36 }}
-                                />
+                                <input className="fl-input" type="text" placeholder="Search features, modules, test case IDs…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ paddingLeft: 36 }} />
                                 <i className="fa-solid fa-search" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: T.textFaint, fontSize: 12 }}></i>
                             </div>
                             <Dropdown options={FILTER_STATUS_OPT} selected={filterStatus} onChange={setFilterStatus} placeholder="All Status" />
-                            <button className="fl-btn-ghost" onClick={() => { setSearchQuery(""); setFilterStatus(""); }} style={{ justifyContent: "center" }}>
-                                Clear
-                            </button>
+                            <button className="fl-btn-ghost" onClick={() => { setSearchQuery(""); setFilterStatus(""); }} style={{ justifyContent: "center" }}>Clear</button>
                         </div>
                     </div>
 
-                    {/* Empty */}
                     {filteredFeatures.length === 0 && (
                         <div style={{ textAlign: "center", padding: "48px 0" }}>
                             <div style={{ width: 48, height: 48, background: T.surfaceAlt, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
@@ -839,7 +996,6 @@ export default function FeaturesLibrary() {
                         </div>
                     )}
 
-                    {/* ── Feature cards (primary level) ── */}
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                         {filteredFeatures.map(feat => (
                             <FeatureCard
@@ -856,7 +1012,7 @@ export default function FeaturesLibrary() {
                 </div>
             </main>
 
-            {/* ── Add Feature Modal ──────────────────────────────────────────────── */}
+            {/* ── Add Feature Modal ── */}
             {addFeatureModal && (
                 <div style={OVERLAY} onClick={() => setAddFeatureModal(false)}>
                     <div className="fl-modal-enter" style={modalBox()} onClick={e => e.stopPropagation()}>
@@ -873,11 +1029,7 @@ export default function FeaturesLibrary() {
                             </Field>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                                 <Field label="Feature Code">
-                                    <div style={{
-                                        display: "flex", alignItems: "center", gap: 8,
-                                        padding: "9px 13px", background: T.surfaceAlt,
-                                        border: `1px solid ${T.border}`, borderRadius: 8,
-                                    }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 13px", background: T.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 8 }}>
                                         <span style={{ fontSize: 13, fontWeight: 700, color: T.purple, fontFamily: T.mono }}>{featureForm.code}</span>
                                         <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>Auto-generated</span>
                                     </div>
@@ -901,7 +1053,7 @@ export default function FeaturesLibrary() {
                 </div>
             )}
 
-            {/* ── Edit Feature Modal ─────────────────────────────────────────────── */}
+            {/* ── Edit Feature Modal ── */}
             {editFeatureModal && (
                 <div style={OVERLAY} onClick={() => setEditFeatureModal(false)}>
                     <div className="fl-modal-enter" style={modalBox()} onClick={e => e.stopPropagation()}>
@@ -944,7 +1096,7 @@ export default function FeaturesLibrary() {
                 </div>
             )}
 
-            {/* ── Delete Feature Modal ───────────────────────────────────────────── */}
+            {/* ── Delete Feature Modal ── */}
             {deleteFeatureModal && (
                 <div style={OVERLAY} onClick={() => setDeleteFeatureModal(false)}>
                     <div className="fl-modal-enter" style={{ ...modalBox("440px"), maxHeight: "none" }} onClick={e => e.stopPropagation()}>
@@ -962,7 +1114,6 @@ export default function FeaturesLibrary() {
                                 <p style={{ fontSize: 13, fontWeight: 600, color: T.text, margin: "0 0 2px" }}>{deleteFeatureTarget?.feature_name || deleteFeatureTarget?.name}</p>
                                 <p style={{ fontSize: 12, color: T.textMuted, margin: 0, fontFamily: T.mono }}>{deleteFeatureTarget?.feature_code || deleteFeatureTarget?.code}</p>
                             </div>
-                            {/* Module context in delete dialog */}
                             <div style={{ background: T.blueTint, border: `1px solid rgba(37,99,235,0.15)`, borderRadius: 8, padding: "10px 14px", marginBottom: deleteFeatureTarget?.testCasesCount > 0 ? 10 : 16 }}>
                                 <p style={{ fontSize: 12, color: "#1D4ED8", margin: 0, display: "flex", alignItems: "center", gap: 6 }}>
                                     <i className="fa-solid fa-puzzle-piece" style={{ fontSize: 11 }}></i>
@@ -986,7 +1137,7 @@ export default function FeaturesLibrary() {
                 </div>
             )}
 
-            {/* ── Add Test Case Modal ────────────────────────────────────────────── */}
+            {/* ── Add Test Case Modal ── */}
             {addModal.open && (
                 <div style={OVERLAY} onClick={() => setAddModal({ open: false })}>
                     <div className="fl-modal-enter" style={modalBox("620px")} onClick={e => e.stopPropagation()}>
@@ -997,11 +1148,7 @@ export default function FeaturesLibrary() {
                         <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                                 <Field label="Test Case ID">
-                                    <div style={{
-                                        display: "flex", alignItems: "center", gap: 8,
-                                        padding: "9px 13px", background: T.surfaceAlt,
-                                        border: `1px solid ${T.border}`, borderRadius: 8,
-                                    }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 13px", background: T.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 8 }}>
                                         <span style={{ fontSize: 13, fontWeight: 700, color: T.purple, fontFamily: T.mono }}>{form.id}</span>
                                         <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>Auto-generated</span>
                                     </div>
@@ -1013,9 +1160,20 @@ export default function FeaturesLibrary() {
                             <Field label="Test Case Name" required>
                                 <input className="fl-input" type="text" placeholder="e.g., Valid login with correct credentials" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
                             </Field>
-                            <Field label="Description" required>
+                            <Field label="Description">
                                 <textarea className="fl-input" rows="3" placeholder="Brief description…" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "none" }} />
                             </Field>
+
+                            {/* ── User Stories multi-select ── */}
+                            <Field label="User Stories">
+                                <MultiSelectDropdown
+                                    options={userStories}
+                                    selected={form.userStoryIds}
+                                    onChange={ids => setForm(f => ({ ...f, userStoryIds: ids }))}
+                                    placeholder={userStories.length === 0 ? "No user stories available" : "Select user stories…"}
+                                />
+                            </Field>
+
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                                 <Field label="Assigned To">
                                     <Dropdown options={testerOptions} selected={form.assignee} onChange={v => setForm(f => ({ ...f, assignee: v }))} placeholder="Select Tester" />
@@ -1033,7 +1191,7 @@ export default function FeaturesLibrary() {
                 </div>
             )}
 
-            {/* ── Edit Test Case Modal ───────────────────────────────────────────── */}
+            {/* ── Edit Test Case Modal ── */}
             {editModal.open && (
                 <div style={OVERLAY} onClick={() => setEditModal({ open: false })}>
                     <div className="fl-modal-enter" style={modalBox("620px")} onClick={e => e.stopPropagation()}>
@@ -1070,7 +1228,7 @@ export default function FeaturesLibrary() {
                 </div>
             )}
 
-            {/* ── Delete Test Case Modal ─────────────────────────────────────────── */}
+            {/* ── Delete Test Case Modal ── */}
             {deleteModal.open && (
                 <div style={OVERLAY} onClick={() => setDeleteModal({ open: false })}>
                     <div className="fl-modal-enter" style={{ ...modalBox("420px"), maxHeight: "none" }} onClick={e => e.stopPropagation()}>

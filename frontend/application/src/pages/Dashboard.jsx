@@ -95,7 +95,6 @@ function MyAssignments({ userId, loading: parentLoading }) {
         setLoading(false);
     }
 
-    // Test cases where assigned_to = current user
     async function fetchMyTestCases() {
         const { data, error } = await supabase
             .from("test_cases")
@@ -112,7 +111,6 @@ function MyAssignments({ userId, loading: parentLoading }) {
         if (!error && data) setMyTestCases(data);
     }
 
-    // Modules where user has assigned test cases
     async function fetchMyModules() {
         const { data: tcData, error: tcError } = await supabase
             .from("test_cases")
@@ -134,7 +132,6 @@ function MyAssignments({ userId, loading: parentLoading }) {
         if (!error && data) setMyModules(data);
     }
 
-    // Versions where user has assigned test cases
     async function fetchMyVersions() {
         const { data: tcData, error: tcError } = await supabase
             .from("test_cases")
@@ -156,7 +153,6 @@ function MyAssignments({ userId, loading: parentLoading }) {
         if (!error && data) setMyVersions(data);
     }
 
-    // Features where assign_to = current user (column is assign_to in this table)
     async function fetchMyFeatures() {
         const { data: tcData, error: tcError } = await supabase
             .from("test_cases")
@@ -202,7 +198,6 @@ function MyAssignments({ userId, loading: parentLoading }) {
 
     return (
         <div className="bg-card border border-border rounded-lg shadow-sm">
-            {/* Header — View All removed */}
             <div className="p-6 border-b border-border">
                 <h3 className="text-lg font-bold text-foreground mb-1 flex items-center gap-2">
                     <i className="fa-solid fa-user-check text-primary" />
@@ -211,7 +206,6 @@ function MyAssignments({ userId, loading: parentLoading }) {
                 <p className="text-sm text-muted-foreground">Items assigned to you across the project</p>
             </div>
 
-            {/* Summary counters */}
             <div className="grid grid-cols-4 border-b border-border divide-x divide-border">
                 {tabs.map(tab => (
                     <button
@@ -234,7 +228,6 @@ function MyAssignments({ userId, loading: parentLoading }) {
                 ))}
             </div>
 
-            {/* Tab content */}
             <div className="p-6">
                 {loading ? (
                     <div className="space-y-3">
@@ -249,7 +242,6 @@ function MyAssignments({ userId, loading: parentLoading }) {
                     </div>
                 ) : (
 
-                    /* ── Test Cases ── */
                     activeTab === "testcases" ? (
                         <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                             {myTestCases.map(tc => (
@@ -285,7 +277,6 @@ function MyAssignments({ userId, loading: parentLoading }) {
                         </div>
                     ) :
 
-                        /* ── Modules ── */
                         activeTab === "modules" ? (
                             <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                                 {myModules.map(m => (
@@ -309,7 +300,6 @@ function MyAssignments({ userId, loading: parentLoading }) {
                             </div>
                         ) :
 
-                            /* ── Versions ── */
                             activeTab === "versions" ? (
                                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                                     {myVersions.map(v => (
@@ -335,7 +325,6 @@ function MyAssignments({ userId, loading: parentLoading }) {
                                 </div>
                             ) :
 
-                                /* ── Features ── */
                                 activeTab === "features" ? (
                                     <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                                         {myFeatures.map(f => (
@@ -378,15 +367,12 @@ function MyAssignments({ userId, loading: parentLoading }) {
 export default function Dashboard() {
     const navigate = useNavigate();
 
-    // ── State ──
     const [loading, setLoading] = useState(true);
     const [toasts, setToasts] = useState([]);
     const [currentUserId, setCurrentUserId] = useState(null);
 
-    // Stats
     const [stats, setStats] = useState({ total: 0, passed: 0, failed: 0, pending: 0, passRate: 0, executions: 0 });
 
-    // Sections
     const [versions, setVersions] = useState([]);
     const [modules, setModules] = useState([]);
     const [failedIssues, setFailedIssues] = useState([]);
@@ -401,14 +387,12 @@ export default function Dashboard() {
         setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
     }, []);
 
-    // ── Get current user id on mount ─────────────────────────────────────────
     useEffect(() => {
         supabase.auth.getUser().then(({ data: { user } }) => {
             if (user) setCurrentUserId(user.id);
         });
     }, []);
 
-    // ── Fetch all dashboard data ──────────────────────────────────────────────
     const fetchAll = useCallback(async () => {
         setLoading(true);
         try {
@@ -429,7 +413,6 @@ export default function Dashboard() {
 
     useEffect(() => { fetchAll(); }, [fetchAll]);
 
-    // ── 1. Stats Cards ────────────────────────────────────────────────────────
     async function fetchStats() {
         const [
             { count: total },
@@ -452,7 +435,6 @@ export default function Dashboard() {
         setStats({ total: t, passed: p, failed: f, pending, passRate, executions: execCount || 0 });
     }
 
-    // ── 2. Active Versions ────────────────────────────────────────────────────
     async function fetchVersionStats() {
         const { data, error } = await supabase
             .from("test_cases")
@@ -486,7 +468,6 @@ export default function Dashboard() {
         setVersions(versionsArr);
     }
 
-    // ── 3. Module Coverage ────────────────────────────────────────────────────
     async function fetchModules() {
         const { data, error } = await supabase
             .from("modules")
@@ -513,7 +494,6 @@ export default function Dashboard() {
         setModules(shaped);
     }
 
-    // ── 4. Recent Failed Issues ───────────────────────────────────────────────
     async function fetchFailedIssues() {
         const { data, error } = await supabase
             .from("issues")
@@ -543,7 +523,6 @@ export default function Dashboard() {
         })));
     }
 
-    // ── 5. Team Performance ───────────────────────────────────────────────────
     async function fetchTeamPerformance() {
         const { data: profilesData } = await supabase
             .from("profiles")
@@ -579,7 +558,6 @@ export default function Dashboard() {
         setTeamMembers(shaped);
     }
 
-    // ── 6. Recent Activity ────────────────────────────────────────────────────
     async function fetchRecentExecutions() {
         const { data, error } = await supabase
             .from("test_executions")
@@ -595,7 +573,6 @@ export default function Dashboard() {
         setRecentExecutions(data.map(e => ({ ...e, timeAgo: timeAgo(e.created_at) })));
     }
 
-    // ── 7. Testing Trends ─────────────────────────────────────────────────────
     async function fetchTrends() {
         const days = 7;
         const since = new Date();
@@ -636,7 +613,6 @@ export default function Dashboard() {
         });
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
     function timeAgo(ts) {
         if (!ts) return "";
         const diff = Date.now() - new Date(ts).getTime();
@@ -654,7 +630,6 @@ export default function Dashboard() {
         return { bg: "bg-accent/10", color: "text-accent", icon: "fa-clock" };
     };
 
-    // ── Render ────────────────────────────────────────────────────────────────
     return (
         <div className="flex-1 flex flex-col">
             <Toast toasts={toasts} />
@@ -667,7 +642,6 @@ export default function Dashboard() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
                         <StatCard loading={loading} icon="fa-vials" iconBg="bg-primary/10" iconColor="text-primary"
                             label="Total Test Cases" value={stats.total} sub="All versions" subColor="text-muted-foreground" />
-                        {/* Passed — green colour removed */}
                         <StatCard loading={loading} icon="fa-check-circle" iconBg="bg-muted" iconColor="text-muted-foreground"
                             label="Passed" value={stats.passed} sub={`${stats.passRate}% pass rate`} subColor="text-muted-foreground" />
                         <StatCard loading={loading} icon="fa-times-circle" iconBg="bg-destructive/10" iconColor="text-destructive"
@@ -676,7 +650,6 @@ export default function Dashboard() {
                             label="Pending" value={stats.pending} sub="In progress" subColor="text-accent" />
                         <StatCard loading={loading} icon="fa-play-circle" iconBg="bg-secondary/10" iconColor="text-secondary"
                             label="Executions" value={stats.executions} sub="Total runs" subColor="text-muted-foreground" />
-                        {/* Pass Rate — purple colour removed */}
                         <StatCard loading={loading} icon="fa-gauge-high" iconBg="bg-muted" iconColor="text-muted-foreground"
                             label="Pass Rate" value={`${stats.passRate}%`} sub="Overall quality" subColor={stats.passRate >= 80 ? "text-green-500" : "text-destructive"} />
                     </div>
@@ -990,8 +963,8 @@ export default function Dashboard() {
                                     <div className="grid grid-cols-3 gap-4 mb-6">
                                         {[
                                             { label: "Passed", values: trends.passed, color: "text-green-500" },
-                                            { label: "Failed", values: trends.failed, color: "text-destructive" },
-                                            { label: "Pending", values: trends.pending, color: "text-accent" },
+                                            { label: "Failed", values: trends.failed, color: "text-red-500" },
+                                            { label: "Pending", values: trends.pending, color: "text-orange-400" },
                                         ].map(s => (
                                             <div key={s.label} className="text-center p-3 bg-muted rounded-lg">
                                                 <p className={`text-2xl font-bold ${s.color}`}>{s.values.reduce((a, b) => a + b, 0)}</p>
@@ -1010,8 +983,8 @@ export default function Dashboard() {
                                                 <div key={label} className="flex-1 flex flex-col items-center gap-1">
                                                     <div className="w-full flex flex-col justify-end rounded overflow-hidden" style={{ height: "120px" }}>
                                                         <div title={`Passed: ${trends.passed[i]}`} style={{ height: `${total > 0 ? Math.round((trends.passed[i] / total) * height) : 0}%` }} className="bg-green-500 w-full transition-all" />
-                                                        <div title={`Failed: ${trends.failed[i]}`} style={{ height: `${total > 0 ? Math.round((trends.failed[i] / total) * height) : 0}%` }} className="bg-destructive w-full transition-all" />
-                                                        <div title={`Pending: ${trends.pending[i]}`} style={{ height: `${total > 0 ? Math.round((trends.pending[i] / total) * height) : 0}%` }} className="bg-accent w-full transition-all" />
+                                                        <div title={`Failed: ${trends.failed[i]}`} style={{ height: `${total > 0 ? Math.round((trends.failed[i] / total) * height) : 0}%` }} className="bg-red-500 w-full transition-all" />
+                                                        <div title={`Pending: ${trends.pending[i]}`} style={{ height: `${total > 0 ? Math.round((trends.pending[i] / total) * height) : 0}%` }} className="bg-orange-400 w-full transition-all" />
                                                     </div>
                                                     <span className="text-xs text-muted-foreground">{label}</span>
                                                 </div>
@@ -1019,7 +992,7 @@ export default function Dashboard() {
                                         })}
                                     </div>
                                     <div className="flex items-center gap-6 justify-center pt-2">
-                                        {[["bg-green-500", "Passed"], ["bg-destructive", "Failed"], ["bg-accent", "Pending"]].map(([color, label]) => (
+                                        {[["bg-green-500", "Passed"], ["bg-red-500", "Failed"], ["bg-orange-400", "Pending"]].map(([color, label]) => (
                                             <div key={label} className="flex items-center gap-2 text-xs text-muted-foreground">
                                                 <div className={`w-3 h-3 rounded-sm ${color}`} />{label}
                                             </div>

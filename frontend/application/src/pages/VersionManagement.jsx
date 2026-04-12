@@ -480,7 +480,6 @@ const VersionCard = memo(({ v, onEdit, onArchive, onDelete, onViewDetails, onAss
                     <button onClick={() => onArchive(v)} className="p-2 text-gray-400 hover:text-orange-500 transition-colors" title="Archive">
                         <i className="fa-solid fa-archive" />
                     </button>
-                    {/* ── Delete button — fully wired ── */}
                     <button
                         onClick={() => onDelete(v)}
                         className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
@@ -578,6 +577,9 @@ export default function VersionManagement() {
     const [formData, setFormData] = useState(EMPTY_FORM);
     const [toasts, setToasts] = useState([]);
 
+    // Ref to hold the id of the version being edited — immune to stale closures
+    const editingVersionIdRef = useRef(null);
+
     const showToast = useCallback((msg, type = "success") => {
         const id = Date.now();
         setToasts(prev => [...prev, { id, msg, type }]);
@@ -612,7 +614,14 @@ export default function VersionManagement() {
     }, []);
 
     const handleVersionTypeChange = useCallback((value) => {
-        setFormData(prev => ({ ...prev, version_type: value, version_number: value ? generateVersionNumber(value) : "" }));
+        setFormData(prev => ({
+            ...prev,
+            version_type: value,
+            // Only auto-generate version number if creating (no id stored in ref)
+            version_number: (!editingVersionIdRef.current && value)
+                ? generateVersionNumber(value)
+                : prev.version_number,
+        }));
     }, [generateVersionNumber]);
 
     const handleGenerateVersion = useCallback(() => {
@@ -666,13 +675,6 @@ export default function VersionManagement() {
 
     useEffect(() => { fetchVersions(); fetchUsers(); fetchModules(); }, [fetchVersions, fetchUsers, fetchModules]);
 
-    useEffect(() => {
-        if (selectedVersion) {
-            const fresh = versions.find(v => v.id === selectedVersion.id);
-            if (fresh) setSelectedVersion(fresh);
-        }
-    }, [versions]); // eslint-disable-line
-
     const tabs = useMemo(() => [
         { key: "all", label: "All Versions", count: versions.length },
         { key: "active", label: "Active", count: versions.filter(v => v.status === "active").length },
@@ -681,10 +683,12 @@ export default function VersionManagement() {
         { key: "archived", label: "Archived", count: versions.filter(v => v.status === "archived").length },
     ], [versions]);
 
+    // ── CHANGE 1: Added "Planning" stat card ──────────────────────────────────
     const stats = useMemo(() => [
         { label: "Total Versions", value: versions.length, color: "text-green-700" },
         { label: "Active", value: versions.filter(v => v.status === "active").length, color: "text-green-500" },
         { label: "In Testing", value: versions.filter(v => v.status === "testing").length, color: "text-blue-500" },
+        { label: "Planning", value: versions.filter(v => v.status === "planning").length, color: "text-purple-500" },
         { label: "Completed", value: versions.filter(v => v.status === "completed").length, color: "text-gray-500" },
         { label: "Archived", value: versions.filter(v => v.status === "archived").length, color: "text-gray-400" },
     ], [versions]);
@@ -734,23 +738,64 @@ export default function VersionManagement() {
     }, []);
 
     const handleEditVersion = useCallback((v) => {
-        setFormData({ version_number: v.version_number, build_number: v.build_number, release_date: v.release_date, status: v.status, version_type: v.version_type, description: v.description || "", selectedTesters: [] });
-        setSelectedVersion(v); setShowModal(true);
+        editingVersionIdRef.current = v.id; // store id in ref — never goes stale
+        setFormData({
+            version_number: v.version_number,
+            build_number: v.build_number,
+            release_date: v.release_date ? v.release_date.split("T")[0] : "",
+            status: v.status,
+            version_type: v.version_type,
+            description: v.description || "",
+            selectedTesters: [],
+        });
+        setSelectedVersion(v);
+        setShowModal(true);
     }, []);
 
-    const handleUpdateVersion = useCallback(async () => {
-        if (!selectedVersion) return;
+    const handleUpdateVersion = async (versionId, fields) => {
+        if (!versionId) { showToast("No version selected for update", "error"); return; }
+        if (!fields.version_number || !fields.build_number || !fields.release_date || !fields.version_type) {
+            showToast("Please fill all required fields", "warning"); return;
+        }
         try {
-            const { error } = await supabase.from("versions").update({
-                version_number: formData.version_number, build_number: formData.build_number,
-                release_date: formData.release_date, status: formData.status,
-                version_type: formData.version_type, description: formData.description,
-            }).eq("id", selectedVersion.id);
+            const { error } = await supabase
+                .from("versions")
+                .update({
+                    version_number: fields.version_number,
+                    build_number: fields.build_number,
+                    release_date: fields.release_date,
+                    status: fields.status,
+                    version_type: fields.version_type,
+                    description: fields.description,
+                })
+                .eq("id", versionId);
+
             if (error) throw error;
-            setShowModal(false); setSelectedVersion(null); resetForm(); await fetchVersions();
+
+            // Patch state directly with the values we just saved
+            setVersions(prev => prev.map(v =>
+                v.id === versionId
+                    ? {
+                        ...v,
+                        version_number: fields.version_number,
+                        build_number: fields.build_number,
+                        release_date: fields.release_date,
+                        status: fields.status,
+                        version_type: fields.version_type,
+                        description: fields.description,
+                    }
+                    : v
+            ));
+
+            editingVersionIdRef.current = null;
+            setShowModal(false);
+            setSelectedVersion(null);
+            resetForm();
             showToast("Version updated successfully!");
-        } catch (err) { showToast(err.message, "error"); }
-    }, [selectedVersion, formData, resetForm, fetchVersions, showToast]);
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    };
 
     const handleArchiveVersion = useCallback(async (v) => {
         const ok = await showConfirm(`Archive version ${v.version_number}? It will be moved to the archived tab.`);
@@ -808,7 +853,6 @@ export default function VersionManagement() {
         showToast(`Report exported: ${v.version_number} 📊`);
     }, [showToast]);
 
-    // ── Delete: clean up related rows first, then delete the version ──────────
     const handleDeleteVersion = useCallback(async (v) => {
         const ok = await showConfirm(
             `Permanently DELETE "${v.version_number}"? This will also remove all linked modules and tester assignments. This cannot be undone!`
@@ -816,15 +860,12 @@ export default function VersionManagement() {
         if (!ok) return;
 
         try {
-            // 1. Delete child rows to avoid FK constraint errors
             await supabase.from("version_modules").delete().eq("version_id", v.id);
             await supabase.from("version_testers").delete().eq("version_id", v.id);
 
-            // 2. Delete the version itself
             const { error } = await supabase.from("versions").delete().eq("id", v.id);
             if (error) throw error;
 
-            // 3. Close any open modals that were showing this version
             if (selectedVersion?.id === v.id) {
                 setSelectedVersion(null);
                 setShowDetailsModal(false);
@@ -891,7 +932,8 @@ export default function VersionManagement() {
                     </div>
                 )}
 
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                {/* ── CHANGE 1: 6 stat cards including Planning, grid updated to lg:grid-cols-6 ── */}
+                <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
                     {stats.map((s) => (
                         <div key={s.label} className="bg-white border rounded-lg p-6 shadow-sm">
                             <p className={`text-3xl font-bold ${s.color}`}>{s.value}</p>
@@ -961,32 +1003,41 @@ export default function VersionManagement() {
 
             {/* ── Create / Edit Modal ── */}
             {showModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => { setShowModal(false); setSelectedVersion(null); resetForm(); }}>
                     <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         <div className="p-6 border-b flex items-center justify-between sticky top-0 bg-white z-10">
                             <div>
                                 <h3 className="text-xl font-bold">{selectedVersion ? "Edit Version" : "Create New Version"}</h3>
                                 <p className="text-sm text-gray-500 mt-1">Add or update a version/build for NexTech RMS</p>
                             </div>
-                            <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-700 text-xl">
+                            <button onClick={() => { setShowModal(false); setSelectedVersion(null); resetForm(); }} className="text-gray-400 hover:text-gray-700 text-xl">
                                 <i className="fa-solid fa-times" />
                             </button>
                         </div>
                         <div className="p-6 space-y-4">
+
+                            {/* ── CHANGE 3: Version Type moved to top of form ── */}
+                            <div>
+                                <label className="block text-sm font-medium mb-1">
+                                    Version Type * <span className="text-gray-400 font-normal">(auto-generates version number)</span>
+                                </label>
+                                <SingleDropdown options={VERSION_TYPE_OPTIONS} selected={formData.version_type} onChange={handleVersionTypeChange} placeholder="Select Type" />
+                                <p className="text-xs text-green-600 mt-1"><i className="fa-solid fa-lightbulb" /> Selecting a type will auto-generate a version number</p>
+                            </div>
+
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium mb-1">Version Number *</label>
                                     <div className="flex gap-2">
                                         <input type="text" value={formData.version_number}
-                                            onChange={(e) => !formData.version_number && setFormData(prev => ({ ...prev, version_number: e.target.value }))}
-                                            placeholder="e.g., 5.2.1" readOnly={!!formData.version_number}
-                                            className={`flex-1 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 ${formData.version_number ? "bg-gray-100 text-gray-600 cursor-not-allowed" : ""}`} />
-                                        <button onClick={handleGenerateVersion} title="Generate version number"
+                                            onChange={(e) => setFormData(prev => ({ ...prev, version_number: e.target.value }))}
+                                            placeholder="e.g., 5.2.1"
+                                            className="flex-1 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300" />
+                                        <button onClick={handleGenerateVersion} title="Regenerate version number"
                                             className="px-3 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors">
                                             <i className="fa-solid fa-wand-magic-sparkles" />
                                         </button>
                                     </div>
-                                    {formData.version_number && <p className="text-xs text-gray-500 mt-1">Version number is locked after generation</p>}
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium mb-1">Build Number *</label>
@@ -1002,6 +1053,7 @@ export default function VersionManagement() {
                                     </div>
                                 </div>
                             </div>
+
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium mb-1">Release Date *</label>
@@ -1014,13 +1066,7 @@ export default function VersionManagement() {
                                     <SingleDropdown options={STATUS_OPTIONS} selected={formData.status} onChange={setStatus} placeholder="Select Status" />
                                 </div>
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">
-                                    Version Type * <span className="text-gray-400 font-normal">(auto-generates version number)</span>
-                                </label>
-                                <SingleDropdown options={VERSION_TYPE_OPTIONS} selected={formData.version_type} onChange={handleVersionTypeChange} placeholder="Select Type" />
-                                <p className="text-xs text-green-600 mt-1"><i className="fa-solid fa-lightbulb" /> Selecting a type will auto-generate a version number</p>
-                            </div>
+
                             <div>
                                 <label className="block text-sm font-medium mb-1">Description</label>
                                 <textarea rows={4} value={formData.description}
@@ -1028,6 +1074,7 @@ export default function VersionManagement() {
                                     placeholder="Enter version description and release notes..."
                                     className="w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 resize-none" />
                             </div>
+
                             <div>
                                 <label className="block text-sm font-medium mb-2">Assign Testers</label>
                                 <CustomDropdown options={users} selected={formData.selectedTesters} onChange={setTestersSel} placeholder="Select testers..." />
@@ -1046,12 +1093,18 @@ export default function VersionManagement() {
                                     </div>
                                 )}
                             </div>
+
                             <div className="flex gap-4 pt-4 border-t">
-                                <button onClick={selectedVersion ? handleUpdateVersion : handleCreateVersion}
+                                <button
+                                    onClick={() =>
+                                        selectedVersion
+                                            ? handleUpdateVersion(editingVersionIdRef.current, formData)
+                                            : handleCreateVersion()
+                                    }
                                     className="flex-1 px-6 py-3 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity">
                                     {selectedVersion ? "Update Version" : "Create Version"}
                                 </button>
-                                <button onClick={() => setShowModal(false)}
+                                <button onClick={() => { setShowModal(false); setSelectedVersion(null); resetForm(); }}
                                     className="flex-1 px-6 py-3 border rounded-lg font-medium hover:bg-gray-50 transition-colors">
                                     Cancel
                                 </button>
