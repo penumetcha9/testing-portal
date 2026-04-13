@@ -236,10 +236,7 @@ const AssignModulesPage = memo(({ version, modules, onBack, onSuccess, showToast
 
     useEffect(() => {
         async function load() {
-            const { data } = await supabase
-                .from("version_modules")
-                .select("module_id")
-                .eq("version_id", version.id);
+            const { data } = await supabase.from("version_modules").select("module_id").eq("version_id", version.id);
             setSelected(data?.map(r => r.module_id) || []);
             setLoading(false);
         }
@@ -282,32 +279,24 @@ const AssignModulesPage = memo(({ version, modules, onBack, onSuccess, showToast
         <div className="flex-1 flex flex-col min-h-screen bg-gray-50">
             <header className="bg-white border-b px-8 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                    <button onClick={onBack}
-                        className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors text-sm font-medium">
+                    <button onClick={onBack} className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors text-sm font-medium">
                         <i className="fa-solid fa-arrow-left" /> Back to Versions
                     </button>
                     <div className="w-px h-6 bg-gray-200" />
                     <div>
                         <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                            <i className="fa-solid fa-puzzle-piece text-green-700" />
-                            Assign Modules
+                            <i className="fa-solid fa-puzzle-piece text-green-700" /> Assign Modules
                         </h2>
-                        <p className="text-sm text-gray-500">
-                            {version.version_number} · Build {version.build_number}
-                        </p>
+                        <p className="text-sm text-gray-500">{version.version_number} · Build {version.build_number}</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
-                    <span className="text-sm text-gray-500">
-                        <span className="font-semibold text-green-700">{selected.length}</span> of {modules.length} selected
-                    </span>
-                    <button onClick={handleSave} disabled={saving}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 text-sm">
+                    <span className="text-sm text-gray-500"><span className="font-semibold text-green-700">{selected.length}</span> of {modules.length} selected</span>
+                    <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-5 py-2.5 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 text-sm">
                         {saving ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : <><i className="fa-solid fa-check" /> Save Assignments</>}
                     </button>
                 </div>
             </header>
-
             <main className="flex-1 p-8">
                 <div className="max-w-4xl mx-auto space-y-6">
                     <div className="bg-white border border-green-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -318,9 +307,7 @@ const AssignModulesPage = memo(({ version, modules, onBack, onSuccess, showToast
                             <div>
                                 <p className="font-bold text-gray-900 text-lg">{version.version_number}</p>
                                 <div className="flex items-center gap-3 mt-0.5">
-                                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_CONFIG[version.status]?.className}`}>
-                                        {STATUS_CONFIG[version.status]?.label}
-                                    </span>
+                                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_CONFIG[version.status]?.className}`}>{STATUS_CONFIG[version.status]?.label}</span>
                                     <span className="text-sm text-gray-500">Build {version.build_number}</span>
                                     <span className="text-sm text-gray-500">{version.version_type}</span>
                                 </div>
@@ -337,84 +324,47 @@ const AssignModulesPage = memo(({ version, modules, onBack, onSuccess, showToast
                             </div>
                         </div>
                     </div>
-
                     <div className="bg-white border border-gray-200 rounded-xl p-5">
                         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
                             <div className="relative flex-1 max-w-sm">
                                 <i className="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-                                <input
-                                    type="text"
-                                    value={search}
-                                    onChange={e => setSearch(e.target.value)}
-                                    placeholder="Search modules..."
-                                    className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300"
-                                />
+                                <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search modules..." className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300" />
                             </div>
                             <div className="flex items-center gap-2">
-                                <button onClick={selectAll}
-                                    className="px-4 py-2 text-sm font-medium text-green-700 border border-green-300 rounded-lg hover:bg-green-50 transition-colors">
-                                    Select All
-                                </button>
-                                <button onClick={clearAll}
-                                    className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                                    Clear All
-                                </button>
+                                <button onClick={selectAll} className="px-4 py-2 text-sm font-medium text-green-700 border border-green-300 rounded-lg hover:bg-green-50 transition-colors">Select All</button>
+                                <button onClick={clearAll} className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">Clear All</button>
                             </div>
                         </div>
                     </div>
-
                     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                            <h3 className="font-semibold text-gray-900">
-                                Available Modules
-                                {search && <span className="ml-2 text-sm text-gray-400 font-normal">({filtered.length} results)</span>}
-                            </h3>
+                            <h3 className="font-semibold text-gray-900">Available Modules{search && <span className="ml-2 text-sm text-gray-400 font-normal">({filtered.length} results)</span>}</h3>
                         </div>
-
                         {loading ? (
-                            <div className="p-12 text-center">
-                                <i className="fa-solid fa-spinner fa-spin text-green-700 text-3xl mb-3 block" />
-                                <p className="text-gray-500 text-sm">Loading modules…</p>
-                            </div>
+                            <div className="p-12 text-center"><i className="fa-solid fa-spinner fa-spin text-green-700 text-3xl mb-3 block" /><p className="text-gray-500 text-sm">Loading modules…</p></div>
                         ) : filtered.length === 0 ? (
-                            <div className="p-12 text-center">
-                                <i className="fa-solid fa-cube text-gray-300 text-3xl mb-3 block" />
-                                <p className="text-gray-500 text-sm">No modules found</p>
-                            </div>
+                            <div className="p-12 text-center"><i className="fa-solid fa-cube text-gray-300 text-3xl mb-3 block" /><p className="text-gray-500 text-sm">No modules found</p></div>
                         ) : (
                             <div className="divide-y divide-gray-50">
                                 {filtered.map((mod, idx) => {
                                     const isSel = selected.includes(mod.id);
                                     return (
-                                        <div key={mod.id} onClick={() => toggle(mod.id)}
-                                            className={`flex items-center gap-4 px-6 py-4 cursor-pointer transition-all ${isSel ? "bg-green-50" : "hover:bg-gray-50"}`}>
+                                        <div key={mod.id} onClick={() => toggle(mod.id)} className={`flex items-center gap-4 px-6 py-4 cursor-pointer transition-all ${isSel ? "bg-green-50" : "hover:bg-gray-50"}`}>
                                             <span className="text-xs text-gray-400 w-6 flex-shrink-0 font-mono">{idx + 1}</span>
                                             <div className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border-2 transition-all ${isSel ? "bg-green-600 border-green-600" : "border-gray-300 bg-white"}`}>
-                                                {isSel && (
-                                                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                                                        <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                                                    </svg>
-                                                )}
+                                                {isSel && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                                             </div>
                                             <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${isSel ? "bg-green-100" : "bg-gray-100"}`}>
                                                 <i className={`fa-solid fa-cube text-sm ${isSel ? "text-green-600" : "text-gray-400"}`} />
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <p className={`text-sm font-semibold ${isSel ? "text-green-900" : "text-gray-900"}`}>
-                                                    {mod.module_name}
-                                                </p>
-                                                <p className="text-xs text-gray-400 mt-0.5">
-                                                    Code: <span className="font-mono">{mod.module_code}</span>
-                                                </p>
+                                                <p className={`text-sm font-semibold ${isSel ? "text-green-900" : "text-gray-900"}`}>{mod.module_name}</p>
+                                                <p className="text-xs text-gray-400 mt-0.5">Code: <span className="font-mono">{mod.module_code}</span></p>
                                             </div>
                                             {isSel ? (
-                                                <span className="flex items-center gap-1.5 px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full flex-shrink-0">
-                                                    <i className="fa-solid fa-check text-xs" /> Assigned
-                                                </span>
+                                                <span className="flex items-center gap-1.5 px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full flex-shrink-0"><i className="fa-solid fa-check text-xs" /> Assigned</span>
                                             ) : (
-                                                <span className="px-3 py-1 bg-gray-100 text-gray-400 text-xs rounded-full flex-shrink-0">
-                                                    Not assigned
-                                                </span>
+                                                <span className="px-3 py-1 bg-gray-100 text-gray-400 text-xs rounded-full flex-shrink-0">Not assigned</span>
                                             )}
                                         </div>
                                     );
@@ -422,18 +372,11 @@ const AssignModulesPage = memo(({ version, modules, onBack, onSuccess, showToast
                             </div>
                         )}
                     </div>
-
                     <div className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
-                        <p className="text-sm text-gray-600">
-                            <span className="font-semibold text-green-700">{selected.length} module{selected.length !== 1 ? "s" : ""}</span> will be assigned to <span className="font-semibold">{version.version_number}</span>
-                        </p>
+                        <p className="text-sm text-gray-600"><span className="font-semibold text-green-700">{selected.length} module{selected.length !== 1 ? "s" : ""}</span> will be assigned to <span className="font-semibold">{version.version_number}</span></p>
                         <div className="flex items-center gap-3">
-                            <button onClick={onBack}
-                                className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-                                Cancel
-                            </button>
-                            <button onClick={handleSave} disabled={saving}
-                                className="flex items-center gap-2 px-6 py-2.5 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 text-sm">
+                            <button onClick={onBack} className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">Cancel</button>
+                            <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-6 py-2.5 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 text-sm">
                                 {saving ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : <><i className="fa-solid fa-check" /> Save Assignments</>}
                             </button>
                         </div>
@@ -457,14 +400,8 @@ const VersionCard = memo(({ v, onEdit, onArchive, onDelete, onViewDetails, onAss
                     <div>
                         <div className="flex items-center gap-3 mb-1">
                             <h3 className="text-xl font-bold">{v.version_number}</h3>
-                            <span className={`px-3 py-1 text-xs font-medium rounded-full ${STATUS_CONFIG[v.status].className}`}>
-                                {STATUS_CONFIG[v.status].label}
-                            </span>
-                            {v.critical_issues > 0 && (
-                                <span className="px-3 py-1 text-xs font-medium bg-red-100 text-red-600 rounded-full">
-                                    {v.critical_issues} Critical
-                                </span>
-                            )}
+                            <span className={`px-3 py-1 text-xs font-medium rounded-full ${STATUS_CONFIG[v.status].className}`}>{STATUS_CONFIG[v.status].label}</span>
+                            {v.critical_issues > 0 && <span className="px-3 py-1 text-xs font-medium bg-red-100 text-red-600 rounded-full">{v.critical_issues} Critical</span>}
                         </div>
                         <p className="text-sm text-gray-500 mb-2">Build {v.build_number} • {v.version_type}</p>
                         <div className="flex flex-wrap gap-4 text-sm text-gray-500">
@@ -473,18 +410,32 @@ const VersionCard = memo(({ v, onEdit, onArchive, onDelete, onViewDetails, onAss
                         </div>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
-                    <button onClick={() => onEdit(v)} className="p-2 text-gray-400 hover:text-green-700 transition-colors" title="Edit">
+
+                {/* ── Action icons ── */}
+                <div className="flex items-center gap-1">
+                    <button onClick={(e) => { e.stopPropagation(); onEdit(v); }}
+                        className="p-2 text-gray-400 hover:text-green-700 hover:bg-green-50 rounded-lg transition-all"
+                        title="Edit version">
                         <i className="fa-solid fa-pen-to-square" />
                     </button>
-                    <button onClick={() => onArchive(v)} className="p-2 text-gray-400 hover:text-orange-500 transition-colors" title="Archive">
-                        <i className="fa-solid fa-archive" />
-                    </button>
-                    <button
-                        onClick={() => onDelete(v)}
+
+                    {v.status !== "archived" ? (
+                        <button onClick={(e) => { e.stopPropagation(); onArchive(v); }}
+                            className="p-2 text-gray-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-all"
+                            title="Archive this version">
+                            <i className="fa-solid fa-box-archive" />
+                        </button>
+                    ) : (
+                        <button onClick={(e) => { e.stopPropagation(); onRestore(v); }}
+                            className="p-2 text-gray-400 hover:text-green-700 hover:bg-green-50 rounded-lg transition-all"
+                            title="Restore this version">
+                            <i className="fa-solid fa-rotate-left" />
+                        </button>
+                    )}
+
+                    <button onClick={(e) => { e.stopPropagation(); onDelete(v); }}
                         className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                        title="Delete version"
-                    >
+                        title="Delete version">
                         <i className="fa-solid fa-trash" />
                     </button>
                 </div>
@@ -510,49 +461,26 @@ const VersionCard = memo(({ v, onEdit, onArchive, onDelete, onViewDetails, onAss
             {v.linkedModules && v.linkedModules.length > 0 && (
                 <div className="mb-4 flex flex-wrap gap-2">
                     {v.linkedModules.slice(0, 4).map(m => (
-                        <span key={m.id} className="px-2 py-1 bg-green-50 border border-green-200 text-green-700 text-xs rounded-full font-medium">
-                            {m.module_name}
-                        </span>
+                        <span key={m.id} className="px-2 py-1 bg-green-50 border border-green-200 text-green-700 text-xs rounded-full font-medium">{m.module_name}</span>
                     ))}
-                    {v.linkedModules.length > 4 && (
-                        <span className="px-2 py-1 bg-gray-100 text-gray-500 text-xs rounded-full font-medium">
-                            +{v.linkedModules.length - 4} more
-                        </span>
-                    )}
+                    {v.linkedModules.length > 4 && <span className="px-2 py-1 bg-gray-100 text-gray-500 text-xs rounded-full font-medium">+{v.linkedModules.length - 4} more</span>}
                 </div>
             )}
 
             <div className="flex flex-wrap gap-2">
-                <button onClick={() => onViewDetails(v)}
-                    className="px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-                    View Details
-                </button>
+                <button onClick={() => onViewDetails(v)} className="px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">View Details</button>
                 {v.status !== "archived" && (
                     <>
-                        <button onClick={() => onAssignTesters(v)}
-                            className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors flex items-center gap-1.5">
+                        <button onClick={() => onAssignTesters(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors flex items-center gap-1.5">
                             <i className="fa-solid fa-users text-sm" /> Assign Testers
                         </button>
-                        <button onClick={() => onAssignModules(v)}
-                            className="px-4 py-2 border border-green-300 text-green-700 rounded-lg text-sm hover:bg-green-50 transition-colors flex items-center gap-1.5">
+                        <button onClick={() => onAssignModules(v)} className="px-4 py-2 border border-green-300 text-green-700 rounded-lg text-sm hover:bg-green-50 transition-colors flex items-center gap-1.5">
                             <i className="fa-solid fa-puzzle-piece" /> Assign Modules
                         </button>
-                        <button onClick={() => onViewIssues(v)}
-                            className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors">
-                            View Issues
-                        </button>
+                        <button onClick={() => onViewIssues(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors">View Issues</button>
                     </>
                 )}
-                <button onClick={() => onExport(v)}
-                    className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors">
-                    Export Report
-                </button>
-                {v.status === "archived" && (
-                    <button onClick={() => onRestore(v)}
-                        className="px-4 py-2 border border-green-600 text-green-600 rounded-lg text-sm hover:bg-green-50 transition-colors">
-                        Restore
-                    </button>
-                )}
+                <button onClick={() => onExport(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors">Export Report</button>
             </div>
         </div>
     </div>
@@ -576,8 +504,6 @@ export default function VersionManagement() {
     const [error, setError] = useState(null);
     const [formData, setFormData] = useState(EMPTY_FORM);
     const [toasts, setToasts] = useState([]);
-
-    // Ref to hold the id of the version being edited — immune to stale closures
     const editingVersionIdRef = useRef(null);
 
     const showToast = useCallback((msg, type = "success") => {
@@ -617,10 +543,7 @@ export default function VersionManagement() {
         setFormData(prev => ({
             ...prev,
             version_type: value,
-            // Only auto-generate version number if creating (no id stored in ref)
-            version_number: (!editingVersionIdRef.current && value)
-                ? generateVersionNumber(value)
-                : prev.version_number,
+            version_number: (!editingVersionIdRef.current && value) ? generateVersionNumber(value) : prev.version_number,
         }));
     }, [generateVersionNumber]);
 
@@ -638,20 +561,14 @@ export default function VersionManagement() {
     const fetchVersions = useCallback(async () => {
         try {
             setLoading(true);
-            const { data: versionData, error: versionError } = await supabase
-                .from("versions").select("*").order("created_date", { ascending: false });
+            const { data: versionData, error: versionError } = await supabase.from("versions").select("*").order("created_date", { ascending: false });
             if (versionError) throw versionError;
-
-            const { data: vmData } = await supabase
-                .from("version_modules")
-                .select("version_id, modules(id, module_name, module_code)");
-
+            const { data: vmData } = await supabase.from("version_modules").select("version_id, modules(id, module_name, module_code)");
             const modulesByVersion = {};
             (vmData || []).forEach(row => {
                 if (!modulesByVersion[row.version_id]) modulesByVersion[row.version_id] = [];
                 if (row.modules) modulesByVersion[row.version_id].push(row.modules);
             });
-
             setVersions((versionData || []).map(v => ({ ...v, linkedModules: modulesByVersion[v.id] || [] })));
         } catch (err) { console.error(err); setError(err.message); }
         finally { setLoading(false); }
@@ -683,7 +600,6 @@ export default function VersionManagement() {
         { key: "archived", label: "Archived", count: versions.filter(v => v.status === "archived").length },
     ], [versions]);
 
-    // ── CHANGE 1: Added "Planning" stat card ──────────────────────────────────
     const stats = useMemo(() => [
         { label: "Total Versions", value: versions.length, color: "text-green-700" },
         { label: "Active", value: versions.filter(v => v.status === "active").length, color: "text-green-500" },
@@ -731,24 +647,18 @@ export default function VersionManagement() {
 
     const handleViewDetails = useCallback((v) => { setSelectedVersion(v); setShowDetailsModal(true); }, []);
     const handleAssignTesters = useCallback((v) => { setSelectedVersion(v); setShowAssignModal(true); }, []);
-
-    const handleAssignModules = useCallback((v) => {
-        setShowDetailsModal(false);
-        setAssignModulesVersion(v);
-    }, []);
+    const handleAssignModules = useCallback((v) => { setShowDetailsModal(false); setAssignModulesVersion(v); }, []);
 
     const handleEditVersion = useCallback((v) => {
-        editingVersionIdRef.current = v.id; // store id in ref — never goes stale
+        editingVersionIdRef.current = v.id;
         setFormData({
-            version_number: v.version_number,
-            build_number: v.build_number,
+            version_number: v.version_number, build_number: v.build_number,
             release_date: v.release_date ? v.release_date.split("T")[0] : "",
-            status: v.status,
-            version_type: v.version_type,
-            description: v.description || "",
-            selectedTesters: [],
+            status: v.status, version_type: v.version_type,
+            description: v.description || "", selectedTesters: [],
         });
         setSelectedVersion(v);
+        setShowDetailsModal(false);
         setShowModal(true);
     }, []);
 
@@ -758,54 +668,36 @@ export default function VersionManagement() {
             showToast("Please fill all required fields", "warning"); return;
         }
         try {
-            const { error } = await supabase
-                .from("versions")
-                .update({
-                    version_number: fields.version_number,
-                    build_number: fields.build_number,
-                    release_date: fields.release_date,
-                    status: fields.status,
-                    version_type: fields.version_type,
-                    description: fields.description,
-                })
-                .eq("id", versionId);
-
+            const { error } = await supabase.from("versions").update({
+                version_number: fields.version_number, build_number: fields.build_number,
+                release_date: fields.release_date, status: fields.status,
+                version_type: fields.version_type, description: fields.description,
+            }).eq("id", versionId);
             if (error) throw error;
-
-            // Patch state directly with the values we just saved
-            setVersions(prev => prev.map(v =>
-                v.id === versionId
-                    ? {
-                        ...v,
-                        version_number: fields.version_number,
-                        build_number: fields.build_number,
-                        release_date: fields.release_date,
-                        status: fields.status,
-                        version_type: fields.version_type,
-                        description: fields.description,
-                    }
-                    : v
-            ));
-
+            setVersions(prev => prev.map(v => v.id === versionId ? { ...v, ...fields } : v));
             editingVersionIdRef.current = null;
-            setShowModal(false);
-            setSelectedVersion(null);
-            resetForm();
+            setShowModal(false); setSelectedVersion(null); resetForm();
             showToast("Version updated successfully!");
-        } catch (err) {
-            showToast(err.message, "error");
-        }
+        } catch (err) { showToast(err.message, "error"); }
     };
 
     const handleArchiveVersion = useCallback(async (v) => {
         const ok = await showConfirm(`Archive version ${v.version_number}? It will be moved to the archived tab.`);
         if (!ok) return;
         try {
-            const { error } = await supabase.from("versions").update({ status: "archived" }).eq("id", v.id);
+            const { error } = await supabase
+                .from("versions")
+                .update({ status: "archived" })
+                .eq("id", v.id);
             if (error) throw error;
-            await fetchVersions(); showToast(`${v.version_number} archived successfully 📦`);
-        } catch (err) { showToast(err.message, "error"); }
-    }, [showConfirm, fetchVersions, showToast]);
+            if (selectedVersion?.id === v.id) setShowDetailsModal(false);
+            await fetchVersions();
+            showToast(`${v.version_number} archived successfully 📦`);
+        } catch (err) {
+            console.error("Archive error:", err);
+            showToast(`Archive failed: ${err.message}`, "error");
+        }
+    }, [showConfirm, fetchVersions, showToast, selectedVersion]);
 
     const handleRestoreVersion = useCallback(async (v) => {
         const ok = await showConfirm(`Restore ${v.version_number} to Completed status?`);
@@ -813,9 +705,11 @@ export default function VersionManagement() {
         try {
             const { error } = await supabase.from("versions").update({ status: "completed" }).eq("id", v.id);
             if (error) throw error;
-            await fetchVersions(); showToast(`${v.version_number} restored!`);
+            if (selectedVersion?.id === v.id) setShowDetailsModal(false);
+            await fetchVersions();
+            showToast(`${v.version_number} restored!`);
         } catch (err) { showToast(err.message, "error"); }
-    }, [showConfirm, fetchVersions, showToast]);
+    }, [showConfirm, fetchVersions, showToast, selectedVersion]);
 
     const handleSaveAssignments = useCallback(async (assignments) => {
         if (!selectedVersion) return;
@@ -854,30 +748,17 @@ export default function VersionManagement() {
     }, [showToast]);
 
     const handleDeleteVersion = useCallback(async (v) => {
-        const ok = await showConfirm(
-            `Permanently DELETE "${v.version_number}"? This will also remove all linked modules and tester assignments. This cannot be undone!`
-        );
+        const ok = await showConfirm(`Permanently DELETE "${v.version_number}"? This will also remove all linked modules and tester assignments. This cannot be undone!`);
         if (!ok) return;
-
         try {
             await supabase.from("version_modules").delete().eq("version_id", v.id);
             await supabase.from("version_testers").delete().eq("version_id", v.id);
-
             const { error } = await supabase.from("versions").delete().eq("id", v.id);
             if (error) throw error;
-
-            if (selectedVersion?.id === v.id) {
-                setSelectedVersion(null);
-                setShowDetailsModal(false);
-                setShowModal(false);
-                setShowAssignModal(false);
-            }
-
+            if (selectedVersion?.id === v.id) { setSelectedVersion(null); setShowDetailsModal(false); setShowModal(false); setShowAssignModal(false); }
             await fetchVersions();
             showToast(`"${v.version_number}" deleted successfully 🗑️`);
-        } catch (err) {
-            showToast(err.message, "error");
-        }
+        } catch (err) { showToast(err.message, "error"); }
     }, [showConfirm, fetchVersions, showToast, selectedVersion]);
 
     const handleResetFilters = useCallback(() => { setSearch(""); setStatusFilter(""); setActiveTab("all"); }, []);
@@ -888,13 +769,7 @@ export default function VersionManagement() {
         return (
             <>
                 <Toast toasts={toasts} />
-                <AssignModulesPage
-                    version={assignModulesVersion}
-                    modules={modules}
-                    onBack={() => setAssignModulesVersion(null)}
-                    onSuccess={fetchVersions}
-                    showToast={showToast}
-                />
+                <AssignModulesPage version={assignModulesVersion} modules={modules} onBack={() => setAssignModulesVersion(null)} onSuccess={fetchVersions} showToast={showToast} />
             </>
         );
     }
@@ -932,7 +807,6 @@ export default function VersionManagement() {
                     </div>
                 )}
 
-                {/* ── CHANGE 1: 6 stat cards including Planning, grid updated to lg:grid-cols-6 ── */}
                 <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
                     {stats.map((s) => (
                         <div key={s.label} className="bg-white border rounded-lg p-6 shadow-sm">
@@ -950,18 +824,14 @@ export default function VersionManagement() {
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
                             <label className="block text-sm font-medium mb-1">Search Version</label>
-                            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Search by version or build number..."
-                                className="w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300" />
+                            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by version or build number..." className="w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300" />
                         </div>
                         <div>
                             <label className="block text-sm font-medium mb-1">Status</label>
                             <SingleDropdown options={STATUS_FILTER_OPTIONS} selected={statusFilter} onChange={setStatusFilter} placeholder="All Statuses" />
                         </div>
                         <div className="flex items-end">
-                            <button className="w-full px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:opacity-90">
-                                Apply Filters
-                            </button>
+                            <button className="w-full px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:opacity-90">Apply Filters</button>
                         </div>
                     </div>
                 </div>
@@ -1007,7 +877,7 @@ export default function VersionManagement() {
                     <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         <div className="p-6 border-b flex items-center justify-between sticky top-0 bg-white z-10">
                             <div>
-                                <h3 className="text-xl font-bold">{selectedVersion ? "Edit Version" : "Create New Version"}</h3>
+                                <h3 className="text-xl font-bold">{editingVersionIdRef.current ? "Edit Version" : "Create New Version"}</h3>
                                 <p className="text-sm text-gray-500 mt-1">Add or update a version/build for NexTech RMS</p>
                             </div>
                             <button onClick={() => { setShowModal(false); setSelectedVersion(null); resetForm(); }} className="text-gray-400 hover:text-gray-700 text-xl">
@@ -1015,66 +885,41 @@ export default function VersionManagement() {
                             </button>
                         </div>
                         <div className="p-6 space-y-4">
-
-                            {/* ── CHANGE 3: Version Type moved to top of form ── */}
                             <div>
-                                <label className="block text-sm font-medium mb-1">
-                                    Version Type * <span className="text-gray-400 font-normal">(auto-generates version number)</span>
-                                </label>
+                                <label className="block text-sm font-medium mb-1">Version Type * <span className="text-gray-400 font-normal">(auto-generates version number)</span></label>
                                 <SingleDropdown options={VERSION_TYPE_OPTIONS} selected={formData.version_type} onChange={handleVersionTypeChange} placeholder="Select Type" />
                                 <p className="text-xs text-green-600 mt-1"><i className="fa-solid fa-lightbulb" /> Selecting a type will auto-generate a version number</p>
                             </div>
-
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium mb-1">Version Number *</label>
                                     <div className="flex gap-2">
-                                        <input type="text" value={formData.version_number}
-                                            onChange={(e) => setFormData(prev => ({ ...prev, version_number: e.target.value }))}
-                                            placeholder="e.g., 5.2.1"
-                                            className="flex-1 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300" />
-                                        <button onClick={handleGenerateVersion} title="Regenerate version number"
-                                            className="px-3 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors">
-                                            <i className="fa-solid fa-wand-magic-sparkles" />
-                                        </button>
+                                        <input type="text" value={formData.version_number} onChange={(e) => setFormData(prev => ({ ...prev, version_number: e.target.value }))} placeholder="e.g., 5.2.1" className="flex-1 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300" />
+                                        <button onClick={handleGenerateVersion} title="Regenerate" className="px-3 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors"><i className="fa-solid fa-wand-magic-sparkles" /></button>
                                     </div>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium mb-1">Build Number *</label>
                                     <div className="flex gap-2">
-                                        <input type="text" value={formData.build_number}
-                                            onChange={(e) => setFormData(prev => ({ ...prev, build_number: e.target.value }))}
-                                            placeholder="e.g., 2024.12.001"
-                                            className="flex-1 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300" />
-                                        <button onClick={handleGenerateBuild} title="Generate build number"
-                                            className="px-3 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors">
-                                            <i className="fa-solid fa-wand-magic-sparkles" />
-                                        </button>
+                                        <input type="text" value={formData.build_number} onChange={(e) => setFormData(prev => ({ ...prev, build_number: e.target.value }))} placeholder="e.g., 2024.12.001" className="flex-1 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300" />
+                                        <button onClick={handleGenerateBuild} title="Generate build number" className="px-3 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors"><i className="fa-solid fa-wand-magic-sparkles" /></button>
                                     </div>
                                 </div>
                             </div>
-
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium mb-1">Release Date *</label>
-                                    <input type="date" value={formData.release_date}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, release_date: e.target.value }))}
-                                        className="w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300" />
+                                    <input type="date" value={formData.release_date} onChange={(e) => setFormData(prev => ({ ...prev, release_date: e.target.value }))} className="w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300" />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium mb-1">Status *</label>
                                     <SingleDropdown options={STATUS_OPTIONS} selected={formData.status} onChange={setStatus} placeholder="Select Status" />
                                 </div>
                             </div>
-
                             <div>
                                 <label className="block text-sm font-medium mb-1">Description</label>
-                                <textarea rows={4} value={formData.description}
-                                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                                    placeholder="Enter version description and release notes..."
-                                    className="w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 resize-none" />
+                                <textarea rows={4} value={formData.description} onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))} placeholder="Enter version description and release notes..." className="w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 resize-none" />
                             </div>
-
                             <div>
                                 <label className="block text-sm font-medium mb-2">Assign Testers</label>
                                 <CustomDropdown options={users} selected={formData.selectedTesters} onChange={setTestersSel} placeholder="Select testers..." />
@@ -1083,9 +928,7 @@ export default function VersionManagement() {
                                         {users.filter(u => formData.selectedTesters.includes(u.id)).map(user => (
                                             <div key={user.id} className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 border border-blue-200 rounded-full text-sm text-blue-700">
                                                 <span>{user.name}</span>
-                                                <button type="button"
-                                                    onClick={() => setFormData(prev => ({ ...prev, selectedTesters: prev.selectedTesters.filter(id => id !== user.id) }))}
-                                                    className="hover:text-blue-900 transition-colors">
+                                                <button type="button" onClick={() => setFormData(prev => ({ ...prev, selectedTesters: prev.selectedTesters.filter(id => id !== user.id) }))} className="hover:text-blue-900 transition-colors">
                                                     <i className="fa-solid fa-times text-xs" />
                                                 </button>
                                             </div>
@@ -1093,21 +936,13 @@ export default function VersionManagement() {
                                     </div>
                                 )}
                             </div>
-
                             <div className="flex gap-4 pt-4 border-t">
                                 <button
-                                    onClick={() =>
-                                        selectedVersion
-                                            ? handleUpdateVersion(editingVersionIdRef.current, formData)
-                                            : handleCreateVersion()
-                                    }
+                                    onClick={() => editingVersionIdRef.current ? handleUpdateVersion(editingVersionIdRef.current, formData) : handleCreateVersion()}
                                     className="flex-1 px-6 py-3 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity">
-                                    {selectedVersion ? "Update Version" : "Create Version"}
+                                    {editingVersionIdRef.current ? "Update Version" : "Create Version"}
                                 </button>
-                                <button onClick={() => { setShowModal(false); setSelectedVersion(null); resetForm(); }}
-                                    className="flex-1 px-6 py-3 border rounded-lg font-medium hover:bg-gray-50 transition-colors">
-                                    Cancel
-                                </button>
+                                <button onClick={() => { setShowModal(false); setSelectedVersion(null); resetForm(); }} className="flex-1 px-6 py-3 border rounded-lg font-medium hover:bg-gray-50 transition-colors">Cancel</button>
                             </div>
                         </div>
                     </div>
@@ -1187,13 +1022,10 @@ export default function VersionManagement() {
                                             <i className="fa-solid fa-puzzle-piece text-green-600 text-xs" />
                                         </div>
                                         <p className="text-sm font-semibold text-gray-800">Linked Modules</p>
-                                        <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full">
-                                            {selectedVersion.linkedModules?.length ?? 0}
-                                        </span>
+                                        <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full">{selectedVersion.linkedModules?.length ?? 0}</span>
                                     </div>
                                     {selectedVersion.status !== "archived" && (
-                                        <button onClick={() => handleAssignModules(selectedVersion)}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 border border-green-300 text-green-700 rounded-lg text-xs font-medium hover:bg-green-50 transition-colors">
+                                        <button onClick={() => handleAssignModules(selectedVersion)} className="flex items-center gap-1.5 px-3 py-1.5 border border-green-300 text-green-700 rounded-lg text-xs font-medium hover:bg-green-50 transition-colors">
                                             <i className="fa-solid fa-plus text-xs" /> Manage
                                         </button>
                                     )}
@@ -1203,10 +1035,7 @@ export default function VersionManagement() {
                                         <i className="fa-solid fa-puzzle-piece text-gray-300 text-2xl" />
                                         <p className="text-sm text-gray-400">No modules linked yet</p>
                                         {selectedVersion.status !== "archived" && (
-                                            <button onClick={() => handleAssignModules(selectedVersion)}
-                                                className="mt-1 px-4 py-1.5 bg-green-700 text-white rounded-lg text-xs font-medium hover:opacity-90 transition-opacity">
-                                                Assign Modules
-                                            </button>
+                                            <button onClick={() => handleAssignModules(selectedVersion)} className="mt-1 px-4 py-1.5 bg-green-700 text-white rounded-lg text-xs font-medium hover:opacity-90 transition-opacity">Assign Modules</button>
                                         )}
                                     </div>
                                 ) : (
@@ -1229,13 +1058,32 @@ export default function VersionManagement() {
                                 </div>
                             )}
 
-                            <div className="flex gap-3 pt-2 border-t">
+                            {/* ── Modal footer actions ── */}
+                            <div className="flex flex-wrap gap-3 pt-2 border-t">
                                 <button onClick={() => { setShowDetailsModal(false); handleEditVersion(selectedVersion); }}
-                                    className="flex-1 px-6 py-2.5 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
-                                    <i className="fa-solid fa-pen-to-square text-sm" /> Edit Version
+                                    className="flex items-center gap-2 px-5 py-2.5 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity text-sm">
+                                    <i className="fa-solid fa-pen-to-square text-sm" /> Edit
                                 </button>
+
+                                {selectedVersion.status !== "archived" ? (
+                                    <button onClick={() => handleArchiveVersion(selectedVersion)}
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-orange-50 border border-orange-300 text-orange-600 rounded-lg font-medium hover:bg-orange-100 transition-colors text-sm">
+                                        <i className="fa-solid fa-box-archive" /> Archive
+                                    </button>
+                                ) : (
+                                    <button onClick={() => handleRestoreVersion(selectedVersion)}
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-green-50 border border-green-300 text-green-700 rounded-lg font-medium hover:bg-green-100 transition-colors text-sm">
+                                        <i className="fa-solid fa-rotate-left" /> Restore
+                                    </button>
+                                )}
+
+                                <button onClick={() => handleDeleteVersion(selectedVersion)}
+                                    className="flex items-center gap-2 px-5 py-2.5 bg-red-50 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-100 transition-colors text-sm">
+                                    <i className="fa-solid fa-trash" /> Delete
+                                </button>
+
                                 <button onClick={() => setShowDetailsModal(false)}
-                                    className="flex-1 px-6 py-2.5 border rounded-lg font-medium hover:bg-gray-50 transition-colors">
+                                    className="flex items-center gap-2 px-5 py-2.5 border border-gray-200 rounded-lg font-medium hover:bg-gray-50 transition-colors text-sm ml-auto">
                                     Close
                                 </button>
                             </div>
@@ -1250,44 +1098,27 @@ export default function VersionManagement() {
                     <div className="bg-white rounded-lg shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
                         <div className="p-6 border-b flex items-center justify-between">
                             <div>
-                                <h3 className="text-xl font-bold flex items-center gap-2">
-                                    <i className="fa-solid fa-users text-green-700" /> Assign Testers
-                                </h3>
+                                <h3 className="text-xl font-bold flex items-center gap-2"><i className="fa-solid fa-users text-green-700" /> Assign Testers</h3>
                                 <p className="text-sm text-gray-500 mt-0.5">{selectedVersion.version_number}</p>
                             </div>
-                            <button onClick={() => setShowAssignModal(false)} className="text-gray-400 hover:text-gray-700 text-xl">
-                                <i className="fa-solid fa-times" />
-                            </button>
+                            <button onClick={() => setShowAssignModal(false)} className="text-gray-400 hover:text-gray-700 text-xl"><i className="fa-solid fa-times" /></button>
                         </div>
                         <div className="p-6 space-y-4">
-                            <p className="text-sm text-gray-600">
-                                Assign testers to <span className="font-semibold">{selectedVersion.version_number}</span>
-                            </p>
+                            <p className="text-sm text-gray-600">Assign testers to <span className="font-semibold">{selectedVersion.version_number}</span></p>
                             <CustomDropdown options={users} selected={formData.selectedTesters} onChange={setTestersSel} placeholder="Select testers to assign..." />
                             {formData.selectedTesters.length > 0 && (
                                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                                    <p className="text-sm font-medium text-green-900 mb-2">
-                                        <i className="fa-solid fa-check-circle mr-2" />
-                                        {formData.selectedTesters.length} tester{formData.selectedTesters.length !== 1 ? "s" : ""} selected
-                                    </p>
+                                    <p className="text-sm font-medium text-green-900 mb-2"><i className="fa-solid fa-check-circle mr-2" />{formData.selectedTesters.length} tester{formData.selectedTesters.length !== 1 ? "s" : ""} selected</p>
                                     <div className="flex flex-wrap gap-2">
                                         {users.filter(u => formData.selectedTesters.includes(u.id)).map(user => (
-                                            <span key={user.id} className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                                                {user.name}
-                                            </span>
+                                            <span key={user.id} className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">{user.name}</span>
                                         ))}
                                     </div>
                                 </div>
                             )}
                             <div className="flex gap-3 pt-4">
-                                <button onClick={() => handleSaveAssignments(formData.selectedTesters)}
-                                    className="flex-1 px-6 py-3 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity">
-                                    <i className="fa-solid fa-check mr-2" /> Save Assignments
-                                </button>
-                                <button onClick={() => { setShowAssignModal(false); setFormData(prev => ({ ...prev, selectedTesters: [] })); }}
-                                    className="flex-1 px-6 py-3 border rounded-lg font-medium hover:bg-gray-50 transition-colors">
-                                    Cancel
-                                </button>
+                                <button onClick={() => handleSaveAssignments(formData.selectedTesters)} className="flex-1 px-6 py-3 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity"><i className="fa-solid fa-check mr-2" /> Save Assignments</button>
+                                <button onClick={() => { setShowAssignModal(false); setFormData(prev => ({ ...prev, selectedTesters: [] })); }} className="flex-1 px-6 py-3 border rounded-lg font-medium hover:bg-gray-50 transition-colors">Cancel</button>
                             </div>
                         </div>
                     </div>

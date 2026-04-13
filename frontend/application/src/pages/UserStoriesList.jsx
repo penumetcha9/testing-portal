@@ -352,7 +352,7 @@ const UserStoriesList = () => {
                 <div style={{ background: '#fff', borderBottom: '1.5px solid #e2e8f0' }}>
                     <div style={{ maxWidth: 1400, margin: '0 auto', padding: '18px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                            <div style={{ width: 42, height: 42, background: 'linear-gradient(135deg,#22c55e,#16a34a)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(34,197,94,0.30)' }}>
+                            <div style={{ width: 42, height: 42, background: '#15803d', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(21,128,61,0.30)' }}>
                                 <i className="fa-solid fa-book-open" style={{ color: '#fff', fontSize: 17 }} />
                             </div>
                             <div>
@@ -362,9 +362,9 @@ const UserStoriesList = () => {
                         </div>
                         <button
                             onClick={handleNewStory}
-                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 22px', background: 'linear-gradient(135deg,#22c55e,#16a34a)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 14px rgba(34,197,94,0.30)', transition: 'all 0.15s' }}
-                            onMouseEnter={e => e.currentTarget.style.boxShadow = '0 6px 20px rgba(34,197,94,0.40)'}
-                            onMouseLeave={e => e.currentTarget.style.boxShadow = '0 4px 14px rgba(34,197,94,0.30)'}
+                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 22px', background: '#15803d', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 14px rgba(21,128,61,0.30)', transition: 'all 0.15s' }}
+                            onMouseEnter={e => e.currentTarget.style.boxShadow = '0 6px 20px rgba(21,128,61,0.40)'}
+                            onMouseLeave={e => e.currentTarget.style.boxShadow = '0 4px 14px rgba(21,128,61,0.30)'}
                         >
                             <i className="fa-solid fa-plus" style={{ fontSize: 12 }} />
                             New User Story

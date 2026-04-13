@@ -25,13 +25,13 @@ const GLOBAL_STYLES = `
   .fl-btn-ghost:hover { background: #EFF3EC; border-color: #B8C9AE; color: #1D3D2F; }
 
   .fl-btn-primary {
-    background: #1D3D2F; border: none; color: #fff;
+    background: #15803d; border: none; color: #fff;
     border-radius: 7px; font-size: 12px; font-weight: 600;
     cursor: pointer; padding: 6px 14px; display: inline-flex;
     align-items: center; gap: 5px; transition: all 0.13s;
     font-family: 'DM Sans', system-ui, sans-serif;
   }
-  .fl-btn-primary:hover { background: #2A5240; }
+  .fl-btn-primary:hover { background: #166534; }
 
   .fl-btn-danger-sm {
     background: rgba(220,38,38,0.07); border: 1px solid rgba(220,38,38,0.18);
@@ -491,6 +491,23 @@ const TestCaseRow = memo(({ tc, onEdit, onDelete }) => (
                 : <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>—</span>
             }
         </td>
+        {/* ── FIX: show linked user stories ── */}
+        <td style={{ padding: "10px 16px" }}>
+            {tc.userStoryIds && tc.userStoryIds.length > 0 ? (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                    {tc.userStoryCodes && tc.userStoryCodes.length > 0
+                        ? tc.userStoryCodes.map((code, i) => (
+                            <span key={i} style={{ fontSize: 10, fontWeight: 700, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "1px 6px", borderRadius: 4 }}>{code}</span>
+                        ))
+                        : tc.userStoryIds.map((id, i) => (
+                            <span key={i} style={{ fontSize: 10, fontWeight: 700, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "1px 6px", borderRadius: 4 }}>US</span>
+                        ))
+                    }
+                </div>
+            ) : (
+                <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>—</span>
+            )}
+        </td>
         <td style={{ padding: "10px 16px", whiteSpace: "nowrap", fontSize: 11, color: T.textMuted, fontFamily: T.mono }}>{tc.updated}</td>
         <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
@@ -561,7 +578,8 @@ const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEdit, onDelete })
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
                         <thead>
                             <tr style={{ background: T.surfaceAlt, borderBottom: `1px solid ${T.border}` }}>
-                                {["ID", "Name", "Priority", "Status", "Assignee", "Updated", ""].map(h => (
+                                {/* ── FIX: added User Stories column header ── */}
+                                {["ID", "Name", "Priority", "Status", "Assignee", "User Stories", "Updated", ""].map(h => (
                                     <th key={h} style={{ padding: "8px 16px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.07em", fontFamily: T.sans }}>{h}</th>
                                 ))}
                             </tr>
@@ -616,7 +634,7 @@ const BTN_CANCEL = {
     cursor: "pointer", fontFamily: T.sans,
 };
 const BTN_PRIMARY = {
-    padding: "9px 20px", background: T.green, border: "none",
+    padding: "9px 20px", background: "#15803d", border: "none",
     color: "#fff", borderRadius: 8, fontWeight: 600, fontSize: 13,
     cursor: "pointer", fontFamily: T.sans,
 };
@@ -661,15 +679,25 @@ export default function FeaturesLibrary() {
             const [
                 { data: modulesData, error: modulesError },
                 { data: featuresData, error: featuresError },
+                // ── FIX: also fetch user_story_ids from test_cases ──
                 { data: testCasesData, error: testCasesError },
+                { data: storiesData, error: storiesError },
             ] = await Promise.all([
                 supabase.from("modules").select("*").order("module_code", { ascending: false }),
                 supabase.from("features").select("*"),
-                supabase.from("test_cases").select("id, test_case_id, name, description, priority, status, updated_at, feature_id, module_id, assigned_to"),
+                supabase.from("test_cases").select("id, test_case_id, name, description, priority, status, updated_at, feature_id, module_id, assigned_to, user_story_ids"),
+                supabase.from("user_stories").select("id, story_id, story_title"),
             ]);
             if (modulesError) throw modulesError;
             if (featuresError) console.warn("Features:", featuresError.message);
             if (testCasesError) console.warn("Test cases:", testCasesError.message);
+            if (storiesError) console.warn("User stories:", storiesError.message);
+
+            // ── Build a UUID → story_id code lookup map ──
+            const storyCodeMap = {};
+            for (const s of (storiesData || [])) {
+                storyCodeMap[s.id] = s.story_id;
+            }
 
             const feats = featuresData || [];
             const tcs = testCasesData || [];
@@ -677,6 +705,9 @@ export default function FeaturesLibrary() {
             for (const tc of tcs) {
                 if (!tc.feature_id) continue;
                 if (!tcsByFeature[tc.feature_id]) tcsByFeature[tc.feature_id] = [];
+                // ── FIX: include user_story_ids and resolve to codes ──
+                const userStoryIds = Array.isArray(tc.user_story_ids) ? tc.user_story_ids : [];
+                const userStoryCodes = userStoryIds.map(uid => storyCodeMap[uid]).filter(Boolean);
                 tcsByFeature[tc.feature_id].push({
                     id: tc.id,
                     tcId: tc.test_case_id || tc.id,
@@ -684,6 +715,8 @@ export default function FeaturesLibrary() {
                     priority: tc.priority, status: tc.status,
                     assignee: tc.assigned_to || null,
                     updated: new Date(tc.updated_at).toLocaleDateString(),
+                    userStoryIds,
+                    userStoryCodes,
                 });
             }
             const featsByModule = {};
@@ -724,7 +757,6 @@ export default function FeaturesLibrary() {
         } catch (err) { console.error(err); }
     }, []);
 
-    // ── FIXED: correct column names from user_stories table ───────────────────
     const fetchUserStories = useCallback(async () => {
         try {
             const { data, error } = await supabase
@@ -772,7 +804,12 @@ export default function FeaturesLibrary() {
                 f.code.toLowerCase().includes(q) ||
                 (f.moduleName || "").toLowerCase().includes(q) ||
                 (f.moduleCode || "").toLowerCase().includes(q) ||
-                f.testCases.some(tc => (tc.tcId || tc.id).toLowerCase().includes(q) || tc.name.toLowerCase().includes(q))
+                f.testCases.some(tc =>
+                    (tc.tcId || tc.id).toLowerCase().includes(q) ||
+                    tc.name.toLowerCase().includes(q) ||
+                    // ── FIX: also search by linked story codes ──
+                    (tc.userStoryCodes || []).some(code => code.toLowerCase().includes(q))
+                )
             );
         }
         return list;
@@ -804,7 +841,18 @@ export default function FeaturesLibrary() {
 
     const openEditModal = useCallback((e, moduleId, featureId, tc) => {
         e.stopPropagation();
-        setForm({ id: tc.tcId, name: tc.name, description: tc.description, preconditions: "", steps: "", expected: "", assignee: tc.assignee || "", status: tc.status, priority: tc.priority, tags: "", userStoryIds: tc.userStoryIds || [] });
+        setForm({
+            id: tc.tcId,
+            name: tc.name,
+            description: tc.description,
+            preconditions: "", steps: "", expected: "",
+            assignee: tc.assignee || "",
+            status: tc.status,
+            priority: tc.priority,
+            tags: "",
+            // ── FIX: preserve userStoryIds on edit ──
+            userStoryIds: tc.userStoryIds || [],
+        });
         setEditModal({ open: true, tc, featureId, moduleId });
     }, []);
 
@@ -838,6 +886,7 @@ export default function FeaturesLibrary() {
                 status: form.status,
                 created_by: user.id,
                 assigned_to: form.assignee || null,
+                // ── FIX: save user_story_ids as uuid array ──
                 user_story_ids: form.userStoryIds.length > 0 ? form.userStoryIds : null,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
@@ -851,8 +900,12 @@ export default function FeaturesLibrary() {
         if (!form.name || !form.priority) { alert("Name and Priority required"); return; }
         try {
             const { error } = await supabase.from("test_cases").update({
-                name: form.name, description: form.description,
-                priority: form.priority, status: form.status,
+                name: form.name,
+                description: form.description,
+                priority: form.priority,
+                status: form.status,
+                // ── FIX: also update user_story_ids on edit ──
+                user_story_ids: form.userStoryIds.length > 0 ? form.userStoryIds : null,
                 updated_at: new Date().toISOString(),
             }).eq("id", editModal.tc.id);
             if (error) throw error;
@@ -918,7 +971,10 @@ export default function FeaturesLibrary() {
                 Module: feat.moduleName, "Module Code": feat.moduleCode,
                 Feature: feat.name, "Feature Code": feat.code,
                 "TC ID": tc.tcId, "TC Name": tc.name,
-                Priority: tc.priority, Status: tc.status, Type: "TEST_CASE",
+                Priority: tc.priority, Status: tc.status,
+                // ── FIX: include linked stories in CSV export ──
+                "User Stories": (tc.userStoryCodes || []).join("; "),
+                Type: "TEST_CASE",
             }));
         });
         const headers = Object.keys(rows.reduce((acc, r) => ({ ...acc, ...r }), {}));
@@ -979,7 +1035,7 @@ export default function FeaturesLibrary() {
                     <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, marginBottom: 20, padding: "14px 18px" }}>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 180px 120px", gap: 12 }}>
                             <div style={{ position: "relative" }}>
-                                <input className="fl-input" type="text" placeholder="Search features, modules, test case IDs…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ paddingLeft: 36 }} />
+                                <input className="fl-input" type="text" placeholder="Search features, modules, test case IDs, story codes…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ paddingLeft: 36 }} />
                                 <i className="fa-solid fa-search" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: T.textFaint, fontSize: 12 }}></i>
                             </div>
                             <Dropdown options={FILTER_STATUS_OPT} selected={filterStatus} onChange={setFilterStatus} placeholder="All Status" />
@@ -1214,6 +1270,17 @@ export default function FeaturesLibrary() {
                             <Field label="Description">
                                 <textarea className="fl-input" rows="3" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "none" }} />
                             </Field>
+
+                            {/* ── FIX: added User Stories to edit modal too ── */}
+                            <Field label="User Stories">
+                                <MultiSelectDropdown
+                                    options={userStories}
+                                    selected={form.userStoryIds}
+                                    onChange={ids => setForm(f => ({ ...f, userStoryIds: ids }))}
+                                    placeholder={userStories.length === 0 ? "No user stories available" : "Select user stories…"}
+                                />
+                            </Field>
+
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                                 <Field label="Status" required>
                                     <Dropdown options={STATUS_OPTIONS} selected={form.status} onChange={v => setForm(f => ({ ...f, status: v }))} placeholder="Select Status" />

@@ -1011,8 +1011,8 @@ const UserStoryMapping = () => {
             if (savedUUID) { setStoryUUID(savedUUID); await syncFeatures(savedUUID, formData.storyId, formData.linkedFeatures); }
             setLastSaved(new Date().toLocaleString());
             setIsSaved(true);
-            if (isNew) navigate(`/stories/${formData.storyId}`, { replace: true });
             showToast('✅ Draft saved successfully!');
+            setTimeout(() => navigate('/stories'), 1000);
         } catch (err) { showToast(`❌ ${err.message}`, 'error'); }
         finally { setSaveLoading(false); }
     };
@@ -1027,8 +1027,8 @@ const UserStoryMapping = () => {
             if (savedUUID) { setStoryUUID(savedUUID); await syncFeatures(savedUUID, formData.storyId, formData.linkedFeatures); }
             setLastSaved(new Date().toLocaleString());
             setIsSaved(true);
-            if (isNew) navigate(`/stories/${formData.storyId}`, { replace: true });
             showToast('✅ Story submitted successfully!');
+            setTimeout(() => navigate('/stories'), 1000);
         } catch (err) { showToast(`❌ ${err.message}`, 'error'); }
         finally { setSaveLoading(false); }
     };
@@ -1192,27 +1192,7 @@ const UserStoryMapping = () => {
                                     </div>
                                 </div>
 
-                                <button
-                                    onClick={handleAddNewStory}
-                                    className="add-story-btn flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-md hover:shadow-lg active:scale-95"
-                                    style={{
-                                        background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
-                                        border: 'none',
-                                        letterSpacing: '0.01em',
-                                        flexShrink: 0,
-                                    }}
-                                    title="Create a new user story"
-                                >
-                                    <span style={{
-                                        width: 22, height: 22, borderRadius: 6,
-                                        background: 'rgba(255,255,255,0.22)',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        flexShrink: 0,
-                                    }}>
-                                        <i className="fa-solid fa-plus" style={{ fontSize: 11 }}></i>
-                                    </span>
-                                    Add User Story
-                                </button>
+
                             </div>
                         </div>
                     </header>
@@ -1479,10 +1459,10 @@ const UserStoryMapping = () => {
                             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground"><i className="fa-solid fa-clock"></i><span>Last saved: {lastSaved}</span></div>
                                 <div className="flex items-center gap-3">
-                                    <button onClick={handleSaveDraft} disabled={saveLoading} className="px-6 py-2.5 bg-card border border-border text-foreground rounded-lg text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50">
+                                    <button onClick={handleSaveDraft} disabled={saveLoading} className="px-6 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50" style={{ background: '#15803d', color: '#fff', border: 'none' }} onMouseEnter={e => e.currentTarget.style.background = '#166534'} onMouseLeave={e => e.currentTarget.style.background = '#15803d'}>
                                         <i className="fa-solid fa-floppy-disk mr-2"></i>{saveLoading ? 'Saving...' : 'Save Draft'}
                                     </button>
-                                    <button onClick={handleSaveAndSubmit} disabled={saveLoading} className="px-6 py-2.5 bg-card border border-border text-foreground rounded-lg text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50">
+                                    <button onClick={handleSaveAndSubmit} disabled={saveLoading} className="px-6 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50" style={{ background: '#15803d', color: '#fff', border: 'none' }} onMouseEnter={e => e.currentTarget.style.background = '#166534'} onMouseLeave={e => e.currentTarget.style.background = '#15803d'}>
                                         <i className="fa-solid fa-check mr-2"></i>{saveLoading ? 'Submitting...' : 'Save & Submit'}
                                     </button>
                                 </div>
