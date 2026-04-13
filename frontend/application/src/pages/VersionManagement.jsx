@@ -596,6 +596,7 @@ export default function VersionManagement() {
         { key: "all", label: "All Versions", count: versions.length },
         { key: "active", label: "Active", count: versions.filter(v => v.status === "active").length },
         { key: "testing", label: "In Testing", count: versions.filter(v => v.status === "testing").length },
+        { key: "planning", label: "Planning", count: versions.filter(v => v.status === "planning").length },  // ← add this
         { key: "completed", label: "Completed", count: versions.filter(v => v.status === "completed").length },
         { key: "archived", label: "Archived", count: versions.filter(v => v.status === "archived").length },
     ], [versions]);

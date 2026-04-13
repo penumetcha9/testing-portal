@@ -60,6 +60,11 @@ function AssignmentBadge({ status }) {
         "In Progress": "bg-blue-500/10 text-blue-600",
         Active: "bg-emerald-500/10 text-emerald-600",
         Inactive: "bg-gray-200 text-gray-500",
+        active: "bg-emerald-500/10 text-emerald-600",
+        testing: "bg-blue-500/10 text-blue-600",
+        planning: "bg-purple-500/10 text-purple-600",
+        completed: "bg-gray-200 text-gray-600",
+        archived: "bg-gray-100 text-gray-400",
     };
     return (
         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${map[status] || "bg-muted text-muted-foreground"}`}>
@@ -69,7 +74,7 @@ function AssignmentBadge({ status }) {
 }
 
 // ── My Assignments Section ───────────────────────────────────────────────────
-function MyAssignments({ userId, loading: parentLoading }) {
+function MyAssignments({ userId }) {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [myModules, setMyModules] = useState([]);
@@ -85,7 +90,6 @@ function MyAssignments({ userId, loading: parentLoading }) {
 
     async function fetchMyAssignments() {
         setLoading(true);
-        console.log("MyAssignments — logged in userId:", userId);
         await Promise.all([
             fetchMyTestCases(),
             fetchMyModules(),
@@ -147,7 +151,7 @@ function MyAssignments({ userId, loading: parentLoading }) {
             .from("versions")
             .select("id, version_number, status, release_date, description")
             .in("id", versionIds)
-            .order("created_at", { ascending: false });
+            .order("created_date", { ascending: false });
 
         if (error) console.error("fetchMyVersions error:", error);
         if (!error && data) setMyVersions(data);
@@ -162,24 +166,29 @@ function MyAssignments({ userId, loading: parentLoading }) {
         if (tcError || !tcData) return;
 
         const featureIds = [...new Set(tcData.map(tc => tc.feature_id).filter(Boolean))];
-        if (featureIds.length === 0) {
-            const { data: directData, error: directError } = await supabase
+
+        const queries = [
+            supabase
                 .from("features")
                 .select("id, feature_name, status, priority, modules ( module_name )")
                 .eq("assign_to", userId.toString())
-                .order("feature_name");
-            if (!directError && directData) setMyFeatures(directData);
-            return;
+                .order("feature_name"),
+        ];
+
+        if (featureIds.length > 0) {
+            queries.push(
+                supabase
+                    .from("features")
+                    .select("id, feature_name, status, priority, modules ( module_name )")
+                    .in("id", featureIds)
+                    .order("feature_name")
+            );
         }
 
-        const { data, error } = await supabase
-            .from("features")
-            .select("id, feature_name, status, priority, modules ( module_name )")
-            .in("id", featureIds)
-            .order("feature_name");
-
-        if (error) console.error("fetchMyFeatures error:", error);
-        if (!error && data) setMyFeatures(data);
+        const results = await Promise.all(queries);
+        const allFeatures = results.flatMap(r => r.data || []);
+        const unique = Array.from(new Map(allFeatures.map(f => [f.id, f])).values());
+        setMyFeatures(unique);
     }
 
     const tabs = [
@@ -211,18 +220,14 @@ function MyAssignments({ userId, loading: parentLoading }) {
                     <button
                         key={tab.key}
                         onClick={() => setActiveTab(tab.key)}
-                        className={`p-4 text-center transition-colors hover:bg-muted/50 ${activeTab === tab.key ? "bg-primary/5 border-b-2 border-primary" : ""
-                            }`}
+                        className={`p-4 text-center transition-colors hover:bg-muted/50 ${activeTab === tab.key ? "bg-primary/5 border-b-2 border-primary" : ""}`}
                     >
-                        <div className={`text-2xl font-bold mb-1 ${activeTab === tab.key ? "text-primary" : "text-foreground"
-                            }`}>
+                        <div className={`text-2xl font-bold mb-1 ${activeTab === tab.key ? "text-primary" : "text-foreground"}`}>
                             {loading ? <Skeleton className="h-7 w-8 mx-auto" /> : tab.count}
                         </div>
                         <div className="flex items-center justify-center gap-1.5">
-                            <i className={`fa-solid ${tab.icon} text-xs ${activeTab === tab.key ? "text-primary" : "text-muted-foreground"
-                                }`} />
-                            <span className={`text-xs font-medium ${activeTab === tab.key ? "text-primary" : "text-muted-foreground"
-                                }`}>{tab.label}</span>
+                            <i className={`fa-solid ${tab.icon} text-xs ${activeTab === tab.key ? "text-primary" : "text-muted-foreground"}`} />
+                            <span className={`text-xs font-medium ${activeTab === tab.key ? "text-primary" : "text-muted-foreground"}`}>{tab.label}</span>
                         </div>
                     </button>
                 ))}
@@ -240,124 +245,113 @@ function MyAssignments({ userId, loading: parentLoading }) {
                             No {tabs.find(t => t.key === activeTab)?.label.toLowerCase()} assigned to you
                         </p>
                     </div>
-                ) : (
-
-                    activeTab === "testcases" ? (
-                        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                            {myTestCases.map(tc => (
-                                <div key={tc.id}
-                                    onClick={() => navigate("/test-execution")}
-                                    className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                        <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                                            <i className="fa-solid fa-flask text-primary text-xs" />
-                                        </div>
-                                        <div className="min-w-0">
-                                            <p className="text-sm font-medium text-foreground truncate">{tc.name}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {tc.test_case_id}
-                                                {tc.modules?.module_name && ` · ${tc.modules.module_name}`}
-                                                {tc.versions?.version_number && ` · ${tc.versions.version_number}`}
-                                            </p>
-                                        </div>
+                ) : activeTab === "testcases" ? (
+                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                        {myTestCases.map(tc => (
+                            <div key={tc.id}
+                                onClick={() => navigate("/test-execution")}
+                                className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                        <i className="fa-solid fa-flask text-primary text-xs" />
                                     </div>
-                                    <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                                        {tc.priority && (
-                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${tc.priority === "High" || tc.priority === "Critical"
-                                                ? "bg-red-100 text-red-600"
-                                                : tc.priority === "Medium"
-                                                    ? "bg-yellow-100 text-yellow-600"
-                                                    : "bg-gray-100 text-gray-500"
-                                                }`}>{tc.priority}</span>
-                                        )}
-                                        <AssignmentBadge status={tc.status} />
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-medium text-foreground truncate">{tc.name}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {tc.test_case_id}
+                                            {tc.modules?.module_name && ` · ${tc.modules.module_name}`}
+                                            {tc.versions?.version_number && ` · ${tc.versions.version_number}`}
+                                        </p>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    ) :
-
-                        activeTab === "modules" ? (
-                            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                                {myModules.map(m => (
-                                    <div key={m.id}
-                                        onClick={() => navigate("/modules")}
-                                        className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
-                                        <div className="flex items-center gap-3 min-w-0">
-                                            <div className="w-8 h-8 bg-blue-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                <i className="fa-solid fa-cube text-blue-500 text-xs" />
-                                            </div>
-                                            <div className="min-w-0">
-                                                <p className="text-sm font-medium text-foreground truncate">{m.module_name}</p>
-                                                {m.description && (
-                                                    <p className="text-xs text-muted-foreground truncate">{m.description}</p>
-                                                )}
-                                            </div>
-                                        </div>
-                                        {m.status && <AssignmentBadge status={m.status} />}
-                                    </div>
-                                ))}
+                                <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                                    {tc.priority && (
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${tc.priority === "High" || tc.priority === "Critical"
+                                            ? "bg-red-100 text-red-600"
+                                            : tc.priority === "Medium"
+                                                ? "bg-yellow-100 text-yellow-600"
+                                                : "bg-gray-100 text-gray-500"
+                                            }`}>{tc.priority}</span>
+                                    )}
+                                    <AssignmentBadge status={tc.status} />
+                                </div>
                             </div>
-                        ) :
-
-                            activeTab === "versions" ? (
-                                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                                    {myVersions.map(v => (
-                                        <div key={v.id}
-                                            onClick={() => navigate("/versions")}
-                                            className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                    <i className="fa-solid fa-code-branch text-emerald-500 text-xs" />
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="text-sm font-medium text-foreground truncate">{v.version_number}</p>
-                                                    {v.release_date && (
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Release: {new Date(v.release_date).toLocaleDateString()}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            {v.status && <AssignmentBadge status={v.status} />}
-                                        </div>
-                                    ))}
-                                </div>
-                            ) :
-
-                                activeTab === "features" ? (
-                                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                                        {myFeatures.map(f => (
-                                            <div key={f.id}
-                                                onClick={() => navigate("/features")}
-                                                className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
-                                                <div className="flex items-center gap-3 min-w-0">
-                                                    <div className="w-8 h-8 bg-purple-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                        <i className="fa-solid fa-list-check text-purple-500 text-xs" />
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <p className="text-sm font-medium text-foreground truncate">{f.feature_name}</p>
-                                                        {f.modules?.module_name && (
-                                                            <p className="text-xs text-muted-foreground">{f.modules.module_name}</p>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                                                    {f.priority && (
-                                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${f.priority === "High" || f.priority === "Critical"
-                                                            ? "bg-red-100 text-red-600"
-                                                            : f.priority === "Medium"
-                                                                ? "bg-yellow-100 text-yellow-600"
-                                                                : "bg-gray-100 text-gray-500"
-                                                            }`}>{f.priority}</span>
-                                                    )}
-                                                    {f.status && <AssignmentBadge status={f.status} />}
-                                                </div>
-                                            </div>
-                                        ))}
+                        ))}
+                    </div>
+                ) : activeTab === "modules" ? (
+                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                        {myModules.map(m => (
+                            <div key={m.id}
+                                onClick={() => navigate("/modules")}
+                                className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-8 h-8 bg-blue-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                        <i className="fa-solid fa-cube text-blue-500 text-xs" />
                                     </div>
-                                ) : null
-                )}
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-medium text-foreground truncate">{m.module_name}</p>
+                                        {m.description && <p className="text-xs text-muted-foreground truncate">{m.description}</p>}
+                                    </div>
+                                </div>
+                                {m.status && <AssignmentBadge status={m.status} />}
+                            </div>
+                        ))}
+                    </div>
+                ) : activeTab === "versions" ? (
+                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                        {myVersions.map(v => (
+                            <div key={v.id}
+                                onClick={() => navigate("/versions")}
+                                className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                        <i className="fa-solid fa-code-branch text-emerald-500 text-xs" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-medium text-foreground truncate">{v.version_number}</p>
+                                        {v.release_date && (
+                                            <p className="text-xs text-muted-foreground">
+                                                Release: {new Date(v.release_date).toLocaleDateString()}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                                {v.status && <AssignmentBadge status={v.status} />}
+                            </div>
+                        ))}
+                    </div>
+                ) : activeTab === "features" ? (
+                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                        {myFeatures.map(f => (
+                            <div key={f.id}
+                                onClick={() => navigate("/features")}
+                                className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-8 h-8 bg-purple-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                        <i className="fa-solid fa-list-check text-purple-500 text-xs" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-medium text-foreground truncate">{f.feature_name}</p>
+                                        {f.modules?.module_name && (
+                                            <p className="text-xs text-muted-foreground">{f.modules.module_name}</p>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                                    {f.priority && (
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${f.priority === "High" || f.priority === "Critical"
+                                            ? "bg-red-100 text-red-600"
+                                            : f.priority === "Medium"
+                                                ? "bg-yellow-100 text-yellow-600"
+                                                : "bg-gray-100 text-gray-500"
+                                            }`}>{f.priority}</span>
+                                    )}
+                                    {f.status && <AssignmentBadge status={f.status} />}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : null}
             </div>
         </div>
     );
@@ -371,7 +365,13 @@ export default function Dashboard() {
     const [toasts, setToasts] = useState([]);
     const [currentUserId, setCurrentUserId] = useState(null);
 
-    const [stats, setStats] = useState({ total: 0, passed: 0, failed: 0, pending: 0, passRate: 0, executions: 0 });
+    const [stats, setStats] = useState({
+        total: 0,
+        passed: 0,
+        failed: 0,
+        passRate: 0,
+        executions: 0,
+    });
 
     const [versions, setVersions] = useState([]);
     const [modules, setModules] = useState([]);
@@ -418,54 +418,68 @@ export default function Dashboard() {
             { count: total },
             { count: passed },
             { count: failed },
-            { count: execCount },
+            { count: executions },
         ] = await Promise.all([
             supabase.from("test_cases").select("*", { count: "exact", head: true }),
-            supabase.from("test_cases").select("*", { count: "exact", head: true }).eq("status", "Passed"),
-            supabase.from("test_cases").select("*", { count: "exact", head: true }).eq("status", "Failed"),
+            supabase.from("test_executions").select("*", { count: "exact", head: true }).eq("execution_status", "pass"),
+            supabase.from("test_executions").select("*", { count: "exact", head: true }).eq("execution_status", "fail"),
             supabase.from("test_executions").select("*", { count: "exact", head: true }),
         ]);
 
         const t = total || 0;
         const p = passed || 0;
         const f = failed || 0;
-        const pending = t - p - f;
-        const passRate = t > 0 ? Math.round((p / t) * 100) : 0;
+        const exec = executions || 0;
+        const passRate = exec > 0 ? Math.round((p / exec) * 100) : 0;
 
-        setStats({ total: t, passed: p, failed: f, pending, passRate, executions: execCount || 0 });
+        setStats({
+            total: t,
+            passed: p,
+            failed: f,
+            passRate,
+            executions: exec,
+        });
     }
 
     async function fetchVersionStats() {
-        const { data, error } = await supabase
-            .from("test_cases")
-            .select("version_id, status");
-        if (error || !data) return;
+        const { data: versionsData, error: vErr } = await supabase
+            .from("versions")
+            .select(`
+                id, version_number, status,
+                test_cases ( status )
+            `)
+            .order("created_date", { ascending: false })
+            .limit(3);
 
-        const map = {};
-        data.forEach(tc => {
-            const vid = tc.version_id || "unknown";
-            if (!map[vid]) map[vid] = { version_id: vid, passed: 0, failed: 0, pending: 0, total: 0 };
-            map[vid].total++;
-            if (tc.status === "Passed") map[vid].passed++;
-            else if (tc.status === "Failed") map[vid].failed++;
-            else map[vid].pending++;
+        if (vErr || !versionsData) return;
+
+        const colorOptions = [
+            { text: "text-primary", iconBg: "bg-primary/10", bar: "bg-primary" },
+            { text: "text-secondary", iconBg: "bg-secondary/10", bar: "bg-secondary" },
+            { text: "text-accent", iconBg: "bg-accent/10", bar: "bg-accent" },
+        ];
+
+        const shaped = versionsData.map((v, i) => {
+            const tcs = v.test_cases || [];
+            const total = tcs.length;
+            const passed = tcs.filter(t => t.status === "Passed").length;
+            const failed = tcs.filter(t => t.status === "Failed").length;
+            const pending = tcs.filter(t => t.status === "Pending").length;
+            const completion = total > 0 ? Math.round(((passed + failed) / total) * 100) : 0;
+            return {
+                version_id: v.id,
+                label: v.version_number,
+                status: v.status,
+                total,
+                passed,
+                failed,
+                pending,
+                completion,
+                colors: colorOptions[i] || colorOptions[0],
+            };
         });
 
-        const versionsArr = Object.values(map)
-            .sort((a, b) => b.total - a.total)
-            .slice(0, 3)
-            .map((v, i) => ({
-                ...v,
-                label: v.version_id === "unknown" ? "Unversioned" : `Version Group ${i + 1}`,
-                completion: v.total > 0 ? Math.round(((v.passed + v.failed) / v.total) * 100) : 0,
-                colors: [
-                    { text: "text-primary", iconBg: "bg-primary/10", bar: "bg-primary" },
-                    { text: "text-secondary", iconBg: "bg-secondary/10", bar: "bg-secondary" },
-                    { text: "text-accent", iconBg: "bg-accent/10", bar: "bg-accent" },
-                ][i] || { text: "text-primary", iconBg: "bg-primary/10", bar: "bg-primary" },
-            }));
-
-        setVersions(versionsArr);
+        setVersions(shaped);
     }
 
     async function fetchModules() {
@@ -524,36 +538,43 @@ export default function Dashboard() {
     }
 
     async function fetchTeamPerformance() {
-        const { data: profilesData } = await supabase
-            .from("profiles")
-            .select("id, full_name, avatar_url, email")
-            .limit(10);
-        if (!profilesData) return;
-
-        const { data: execData } = await supabase
+        const { data: execData, error } = await supabase
             .from("test_executions")
-            .select("executed_by, execution_status");
+            .select(`
+                executed_by, execution_status,
+                executor:profiles!executed_by ( id, full_name, avatar_url, email )
+            `);
 
-        const execMap = {};
-        (execData || []).forEach(e => {
-            if (!execMap[e.executed_by]) execMap[e.executed_by] = { total: 0, passed: 0 };
-            execMap[e.executed_by].total++;
-            if (e.execution_status === "Passed") execMap[e.executed_by].passed++;
+        if (error || !execData) return;
+
+        const memberMap = {};
+        execData.forEach(e => {
+            const profile = e.executor;
+            if (!profile) return;
+            const id = profile.id;
+            if (!memberMap[id]) {
+                memberMap[id] = {
+                    id,
+                    name: profile.full_name || profile.email || "Unknown",
+                    avatar: profile.avatar_url,
+                    assigned: 0,
+                    completed: 0,
+                };
+            }
+            memberMap[id].assigned++;
+            if (e.execution_status === "Passed") memberMap[id].completed++;
         });
 
-        const shaped = profilesData.map(p => {
-            const ex = execMap[p.id] || { total: 0, passed: 0 };
-            const passRate = ex.total > 0 ? Math.round((ex.passed / ex.total) * 100) : 0;
-            return {
-                id: p.id,
-                name: p.full_name || p.email || "Unknown",
-                avatar: p.avatar_url,
-                assigned: ex.total,
-                completed: ex.passed,
-                passRate,
-                barColor: passRate >= 80 ? "bg-green-500" : passRate >= 50 ? "bg-accent" : "bg-destructive",
-            };
-        }).filter(p => p.assigned > 0).sort((a, b) => b.assigned - a.assigned);
+        const shaped = Object.values(memberMap)
+            .map(m => {
+                const passRate = m.assigned > 0 ? Math.round((m.completed / m.assigned) * 100) : 0;
+                return {
+                    ...m,
+                    passRate,
+                    barColor: passRate >= 80 ? "bg-green-500" : passRate >= 50 ? "bg-accent" : "bg-destructive",
+                };
+            })
+            .sort((a, b) => b.assigned - a.assigned);
 
         setTeamMembers(shaped);
     }
@@ -638,20 +659,58 @@ export default function Dashboard() {
             <main className="flex-1 overflow-auto">
                 <div className="p-4 lg:p-8 space-y-6 lg:space-y-8">
 
-                    {/* ── Stats Cards ── */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                        <StatCard loading={loading} icon="fa-vials" iconBg="bg-primary/10" iconColor="text-primary"
-                            label="Total Test Cases" value={stats.total} sub="All versions" subColor="text-muted-foreground" />
-                        <StatCard loading={loading} icon="fa-check-circle" iconBg="bg-muted" iconColor="text-muted-foreground"
-                            label="Passed" value={stats.passed} sub={`${stats.passRate}% pass rate`} subColor="text-muted-foreground" />
-                        <StatCard loading={loading} icon="fa-times-circle" iconBg="bg-destructive/10" iconColor="text-destructive"
-                            label="Failed" value={stats.failed} sub="Needs attention" subColor="text-destructive" />
-                        <StatCard loading={loading} icon="fa-clock" iconBg="bg-accent/10" iconColor="text-accent"
-                            label="Pending" value={stats.pending} sub="In progress" subColor="text-accent" />
-                        <StatCard loading={loading} icon="fa-play-circle" iconBg="bg-secondary/10" iconColor="text-secondary"
-                            label="Executions" value={stats.executions} sub="Total runs" subColor="text-muted-foreground" />
-                        <StatCard loading={loading} icon="fa-gauge-high" iconBg="bg-muted" iconColor="text-muted-foreground"
-                            label="Pass Rate" value={`${stats.passRate}%`} sub="Overall quality" subColor={stats.passRate >= 80 ? "text-green-500" : "text-destructive"} />
+                    {/* ── KPI Cards: Total | Passed | Failed | Pass Rate | Executions ── */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                        <StatCard
+                            loading={loading}
+                            icon="fa-vials"
+                            iconBg="bg-primary/10"
+                            iconColor="text-primary"
+                            label="Total Test Cases"
+                            value={stats.total}
+                            sub="All versions"
+                            subColor="text-muted-foreground"
+                        />
+                        <StatCard
+                            loading={loading}
+                            icon="fa-circle-check"
+                            iconBg="bg-green-500/10"
+                            iconColor="text-green-500"
+                            label="Passed Attempts"
+                            value={stats.passed}
+                            sub={`${stats.passRate}% pass rate`}
+                            subColor="text-green-500"
+                        />
+                        <StatCard
+                            loading={loading}
+                            icon="fa-circle-xmark"
+                            iconBg="bg-destructive/10"
+                            iconColor="text-destructive"
+                            label="Failed Attempts"
+                            value={stats.failed}
+                            sub="Needs attention"
+                            subColor="text-destructive"
+                        />
+                        <StatCard
+                            loading={loading}
+                            icon="fa-gauge-high"
+                            iconBg="bg-muted"
+                            iconColor="text-muted-foreground"
+                            label="Pass Rate"
+                            value={`${stats.passRate}%`}
+                            sub="Overall quality"
+                            subColor={stats.passRate >= 80 ? "text-green-500" : "text-destructive"}
+                        />
+                        <StatCard
+                            loading={loading}
+                            icon="fa-play-circle"
+                            iconBg="bg-secondary/10"
+                            iconColor="text-secondary"
+                            label="Executions"
+                            value={stats.executions}
+                            sub="Total runs"
+                            subColor="text-muted-foreground"
+                        />
                     </div>
 
                     {/* ── MY ASSIGNMENTS ── */}
@@ -695,7 +754,10 @@ export default function Dashboard() {
                                                 <i className={`fa-solid fa-code-branch ${v.colors.text} text-lg`} />
                                             </div>
                                             <div>
-                                                <h4 className="font-semibold text-foreground mb-1">{v.label}</h4>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <h4 className="font-semibold text-foreground">{v.label}</h4>
+                                                    {v.status && <AssignmentBadge status={v.status} />}
+                                                </div>
                                                 <p className="text-sm text-muted-foreground mb-2">{v.total} total test cases</p>
                                                 <div className="flex flex-wrap gap-2">
                                                     <span className="text-xs px-2 py-1 bg-green-500/10 text-green-500 rounded-full">{v.passed} Passed</span>
@@ -730,23 +792,26 @@ export default function Dashboard() {
                                 {!loading && stats.total > 0 ? (
                                     <div className="space-y-4">
                                         {[
-                                            { label: "Passed", value: stats.passed, color: "bg-green-500", textColor: "text-green-600" },
-                                            { label: "Failed", value: stats.failed, color: "bg-destructive", textColor: "text-destructive" },
-                                            { label: "Pending", value: stats.pending, color: "bg-accent", textColor: "text-accent" },
-                                        ].map(s => (
-                                            <div key={s.label}>
-                                                <div className="flex justify-between mb-1.5 text-sm">
-                                                    <span className="font-medium text-foreground">{s.label}</span>
-                                                    <span className={`font-semibold ${s.textColor}`}>
-                                                        {s.value} ({stats.total > 0 ? Math.round((s.value / stats.total) * 100) : 0}%)
-                                                    </span>
+                                            { label: "Passed Attempts", value: stats.passed, color: "bg-green-500", textColor: "text-green-600" },
+                                            { label: "Failed Attempts", value: stats.failed, color: "bg-destructive", textColor: "text-destructive" },
+                                        ].map(s => {
+                                            const base = stats.executions > 0 ? stats.executions : 1;
+                                            const pct = Math.min(Math.round((s.value / base) * 100), 100);
+                                            return (
+                                                <div key={s.label}>
+                                                    <div className="flex justify-between mb-1.5 text-sm">
+                                                        <span className="font-medium text-foreground">{s.label}</span>
+                                                        <span className={`font-semibold ${s.textColor}`}>
+                                                            {s.value} ({pct}%)
+                                                        </span>
+                                                    </div>
+                                                    <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
+                                                        <div className={`${s.color} h-3 rounded-full transition-all duration-700`}
+                                                            style={{ width: `${pct}%` }} />
+                                                    </div>
                                                 </div>
-                                                <div className="w-full bg-muted rounded-full h-3">
-                                                    <div className={`${s.color} h-3 rounded-full transition-all duration-700`}
-                                                        style={{ width: `${stats.total > 0 ? (s.value / stats.total) * 100 : 0}%` }} />
-                                                </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                         <div className="pt-4 border-t border-border">
                                             <div className="text-center">
                                                 <p className="text-4xl font-bold text-foreground">{stats.passRate}%</p>

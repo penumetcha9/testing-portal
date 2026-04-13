@@ -1,6 +1,30 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "../services/supabaseClient";
 
+// Force all Supabase REST fetches to bypass the browser HTTP cache.
+if (typeof window !== "undefined") {
+    const _origFetch = window.fetch;
+    window.fetch = (input, init = {}) => {
+        const url = typeof input === "string" ? input
+            : input instanceof Request ? input.url
+                : input?.url ?? "";
+        if (url.includes("/rest/v1/")) {
+            init = { ...init, cache: "no-store" };
+        }
+        return _origFetch(input, init);
+    };
+}
+
+// ── Session-persisted pending updates ────────────────────────────────────────
+// Keeps pass/fail colors alive across page switches for the entire browser session.
+const STORAGE_KEY = "te_pending_updates";
+function loadPendingUpdates() {
+    try { return JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "{}"); } catch { return {}; }
+}
+function savePendingUpdates(map) {
+    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(map)); } catch { }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const formatTime = (s) => {
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
@@ -22,6 +46,24 @@ const VERSION_BADGE = {
     planning: "bg-purple-100 text-purple-700",
 };
 const getVB = (s) => VERSION_BADGE[s] || "bg-slate-100 text-slate-500";
+
+const isUntested = (status) =>
+    !status ||
+    status === "not-tested" ||
+    status === "not_run" ||
+    status === "Pending" ||
+    status === "pending" ||
+    status === "Not Tested" ||
+    status === "not_tested";
+
+const normaliseStatus = (s) => {
+    if (!s) return "not-tested";
+    const l = s.toLowerCase();
+    if (l === "pass" || l === "passed") return "pass";
+    if (l === "fail" || l === "failed") return "fail";
+    if (l === "blocked") return "blocked";
+    return "not-tested";
+};
 
 // ── Small dropdown for filters ────────────────────────────────────────────────
 function FilterSelect({ value, onChange, options, placeholder, icon, accent = "slate" }) {
@@ -156,7 +198,7 @@ function SubmitModal({ show, onClose, onConfirm, submitting, currentTest, select
 // ═════════════════════════════════════════════════════════════════════════════
 // VIEW 1 — TEST CASE LIST
 // ═════════════════════════════════════════════════════════════════════════════
-function TestCaseListView({ onSelect }) {
+function TestCaseListView({ onSelect, pendingUpdates }) {
     const [testCases, setTestCases] = useState([]);
     const [allVersions, setAllVersions] = useState([]);
     const [allModules, setAllModules] = useState([]);
@@ -246,20 +288,26 @@ function TestCaseListView({ onSelect }) {
                 }
 
                 if (filterStatus === "untested") {
-                    q = q.or("status.is.null,status.eq.not-tested,status.eq.not_run");
+                    q = q.or(
+                        "status.is.null,status.eq.not-tested,status.eq.not_run,status.eq.not_tested,status.eq.Pending,status.eq.pending,status.eq.Not Tested"
+                    );
                 } else if (filterStatus) {
                     q = q.eq("status", filterStatus);
                 }
 
                 const { data, error: err } = await q;
-                if (err) throw err;
                 if (!cancelled) {
+                    // Load latest pendingUpdates from sessionStorage at mapping time
+                    // so even a full re-fetch gets the correct overrides applied.
+                    const latestPending = loadPendingUpdates();
                     const { mod, feat, ver } = mapsRef.current;
                     setTestCases((data || []).map(t => {
                         const featureRow = allFeatures.find(f => f.id === t.feature_id);
                         const resolvedModuleId = t.module_id || featureRow?.module_id || null;
+                        const overrideStatus = latestPending[t.id] || pendingUpdates[t.id];
                         return {
                             ...t,
+                            status: overrideStatus || t.status,
                             _moduleName: mod[resolvedModuleId] || null,
                             _featureName: feat[t.feature_id] || null,
                             _versionNumber: ver[t.version_id] || null,
@@ -271,6 +319,20 @@ function TestCaseListView({ onSelect }) {
         })();
         return () => { cancelled = true; };
     }, [metaReady, filterVersion, filterModule, filterFeature, filterStatus, allFeatures]);
+
+    // Patch test cases in-place when pendingUpdates changes (instant visual feedback
+    // after returning from ExecuteView, no re-fetch needed).
+    useEffect(() => {
+        const allPending = { ...loadPendingUpdates(), ...pendingUpdates };
+        if (Object.keys(allPending).length === 0) return;
+        setTestCases(prev => prev.map(t => {
+            const overrideStatus = allPending[t.id];
+            if (overrideStatus && t.status !== overrideStatus) {
+                return { ...t, status: overrideStatus };
+            }
+            return t;
+        }));
+    }, [pendingUpdates]);
 
     const handleModuleChange = (v) => { setFilterModule(v); setFilterFeature(""); };
 
@@ -287,15 +349,13 @@ function TestCaseListView({ onSelect }) {
         return t.name?.toLowerCase().includes(q) || t.test_case_id?.toLowerCase().includes(q);
     });
 
+    const passCount = visible.filter(t => normaliseStatus(t.status) === "pass").length;
+    const failCount = visible.filter(t => normaliseStatus(t.status) === "fail").length;
+    const blockedCount = visible.filter(t => normaliseStatus(t.status) === "blocked").length;
+    const statusStats = { pass: passCount, fail: failCount, blocked: blockedCount, untested: visible.length - passCount - failCount - blockedCount };
+
     const anyFilter = filterVersion || filterModule || filterFeature || filterStatus || search;
     const clearAll = () => { setFilterVersion(""); setFilterModule(""); setFilterFeature(""); setFilterStatus(""); setSearch(""); };
-
-    const statusStats = {
-        pass: testCases.filter(t => t.status === "pass").length,
-        fail: testCases.filter(t => t.status === "fail").length,
-        blocked: testCases.filter(t => t.status === "blocked").length,
-        untested: testCases.filter(t => !t.status || t.status === "not-tested" || t.status === "not_run").length,
-    };
 
     return (
         <div className="flex-1 flex flex-col min-w-0 bg-slate-50">
@@ -308,7 +368,7 @@ function TestCaseListView({ onSelect }) {
                         <p className="text-sm text-slate-500 mt-0.5">Select a test case to begin execution</p>
                     </div>
                     <div className="flex items-center gap-3">
-                        <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-sm font-semibold">{testCases.length} test cases</span>
+                        <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-sm font-semibold">{visible.length} test cases</span>
                     </div>
                 </div>
             </header>
@@ -379,9 +439,10 @@ function TestCaseListView({ onSelect }) {
                     </div>
                 </div>
 
-                {!loading && testCases.length > 0 && (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {!loading && visible.length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                         {[
+                            { label: "Total", value: visible.length, color: "text-slate-700", bg: "bg-white", icon: "fa-list-check" },
                             { label: "Not Tested", value: statusStats.untested, color: "text-slate-500", bg: "bg-white", icon: "fa-circle" },
                             { label: "Pass", value: statusStats.pass, color: "text-emerald-600", bg: "bg-emerald-50", icon: "fa-check-circle" },
                             { label: "Fail", value: statusStats.fail, color: "text-red-600", bg: "bg-red-50", icon: "fa-times-circle" },
@@ -425,10 +486,23 @@ function TestCaseListView({ onSelect }) {
                         </div>
                         <div className="divide-y divide-slate-50">
                             {visible.map(t => {
-                                const sm = getSM(t.status || "not-tested");
+                                const normStatus = normaliseStatus(t.status);
+                                const sm = getSM(normStatus);
+                                const rowBg =
+                                    normStatus === "pass" ? "hover:bg-emerald-50 hover:border-l-4 hover:border-emerald-500" :
+                                        normStatus === "fail" ? "hover:bg-red-50 hover:border-l-4 hover:border-red-400" :
+                                            normStatus === "blocked" ? "hover:bg-amber-50 hover:border-l-4 hover:border-amber-400" :
+                                                "hover:bg-slate-50 hover:border-l-4 hover:border-slate-300";
+
+                                const leftBorder =
+                                    normStatus === "pass" ? "border-l-4 border-emerald-500 bg-emerald-50/40" :
+                                        normStatus === "fail" ? "border-l-4 border-red-400 bg-red-50/40" :
+                                            normStatus === "blocked" ? "border-l-4 border-amber-400 bg-amber-50/40" :
+                                                "border-l-4 border-transparent";
+
                                 return (
                                     <button key={t.id} onClick={() => onSelect(t, visible)}
-                                        className="w-full text-left px-5 py-4 hover:bg-emerald-50 hover:border-l-4 hover:border-emerald-500 border-l-4 border-transparent transition-all group">
+                                        className={`w-full text-left px-5 py-4 ${leftBorder} ${rowBg} transition-all group`}>
                                         <div className="flex items-center gap-4">
                                             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${sm.bgLight}`}>
                                                 <i className={`fa-solid ${sm.icon} ${sm.color} text-sm`} />
@@ -438,13 +512,13 @@ function TestCaseListView({ onSelect }) {
                                                     <span className="font-mono text-xs font-bold text-slate-400">{t.test_case_id}</span>
                                                     {t.priority && (
                                                         <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded capitalize ${t.priority?.toLowerCase() === "high" ? "bg-red-100 text-red-600" :
-                                                                t.priority?.toLowerCase() === "medium" ? "bg-amber-100 text-amber-600" :
-                                                                    "bg-slate-100 text-slate-500"
+                                                            t.priority?.toLowerCase() === "medium" ? "bg-amber-100 text-amber-600" :
+                                                                "bg-slate-100 text-slate-500"
                                                             }`}>{t.priority}</span>
                                                     )}
                                                     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${sm.bgLight} ${sm.color}`}>{sm.label}</span>
                                                 </div>
-                                                <p className="text-sm font-semibold text-slate-800 truncate group-hover:text-emerald-800">{t.name}</p>
+                                                <p className="text-sm font-semibold text-slate-800 truncate group-hover:text-slate-900">{t.name}</p>
                                                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                                                     {t._versionNumber && (
                                                         <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-medium">
@@ -468,8 +542,8 @@ function TestCaseListView({ onSelect }) {
                                                     )}
                                                 </div>
                                             </div>
-                                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-50 group-hover:bg-emerald-100 flex items-center justify-center transition-colors">
-                                                <i className="fa-solid fa-arrow-right text-slate-400 group-hover:text-emerald-600 text-xs transition-colors" />
+                                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-50 group-hover:bg-white flex items-center justify-center transition-colors">
+                                                <i className={`fa-solid fa-arrow-right ${sm.color} text-xs transition-colors`} />
                                             </div>
                                         </div>
                                     </button>
@@ -484,8 +558,6 @@ function TestCaseListView({ onSelect }) {
 }
 
 // ── Multi-select dropdown for team assignment ──────────────────────────────────
-// FIX: Dropdowns now use fixed positioning based on button's bounding rect
-// so they are never clipped by parent overflow:hidden containers.
 function MultiAssign({ label, icon, values, onChange, color = "emerald", profiles = [] }) {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState("");
@@ -504,7 +576,6 @@ function MultiAssign({ label, icon, values, onChange, color = "emerald", profile
         return () => document.removeEventListener("mousedown", h);
     }, []);
 
-    // Recalculate position whenever open changes
     useEffect(() => {
         if (open && btnRef.current) {
             const rect = btnRef.current.getBoundingClientRect();
@@ -545,7 +616,6 @@ function MultiAssign({ label, icon, values, onChange, color = "emerald", profile
                     })}
                 </div>
             )}
-            {/* Trigger button */}
             <button
                 ref={btnRef}
                 type="button"
@@ -556,7 +626,6 @@ function MultiAssign({ label, icon, values, onChange, color = "emerald", profile
                 <i className={`fa-solid fa-chevron-down text-slate-400 text-[9px] transition-transform ${open ? "rotate-180" : ""}`} />
             </button>
 
-            {/* FIX: Portal-style fixed positioning so the dropdown escapes overflow:hidden parents */}
             {open && (
                 <div
                     style={{
@@ -669,6 +738,8 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
         return () => document.removeEventListener("mousedown", h);
     }, []);
 
+    const authUserIdRef = useRef(null);
+
     useEffect(() => {
         (async () => {
             setVersionsLoading(true);
@@ -684,8 +755,15 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
             try {
                 const { data: { user } } = await supabase.auth.getUser();
                 if (!user) return;
-                const { data } = await supabase.from("profiles").select("full_name,avatar_url,email").eq("id", user.id).single();
-                setTester({ id: user.id, email: data?.email || user.email, full_name: data?.full_name || user.email, avatar_url: data?.avatar_url || null });
+                authUserIdRef.current = user.id;
+                let { data: profile } = await supabase.from("profiles").select("id,full_name,avatar_url,email").eq("id", user.id).single();
+                if (!profile) {
+                    const { data: created } = await supabase.from("profiles")
+                        .upsert({ id: user.id, email: user.email, full_name: user.user_metadata?.full_name || user.email }, { onConflict: "id" })
+                        .select("id,full_name,avatar_url,email").single();
+                    profile = created;
+                }
+                setTester({ id: user.id, email: profile?.email || user.email, full_name: profile?.full_name || user.email, avatar_url: profile?.avatar_url || null });
             } catch (e) { console.warn(e); }
         })();
     }, []);
@@ -700,7 +778,8 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
     }, []);
 
     useEffect(() => {
-        setSelectedStatus(testCase.status && testCase.status !== "not_run" ? testCase.status : "not-tested");
+        const normalised = isUntested(testCase.status) ? "not-tested" : (testCase.status || "not-tested");
+        setSelectedStatus(normalised);
         setExpectedResult(testCase.expected_result || "");
         setActualResult(testCase.actual_result || "");
         setFailureNotes(""); setIssueType(""); setAffectedField("");
@@ -734,7 +813,8 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
 
     const buildPayload = () => ({
         test_case_id: testCase.id, version_id: testCase.version_id || version?.id || null,
-        executed_by: tester?.id || null, execution_status: selectedStatus, environment, browser,
+        executed_by: authUserIdRef.current || tester?.id || null,
+        execution_status: selectedStatus, environment, browser,
         execution_time: 0, expected_result: expectedResult, actual_result: actualResult,
         failure_notes: failureNotes, issue_type: issueType || null, affected_component: affectedField,
         additional_notes: additionalNotes, steps_to_reproduce: stepsToReproduce || null,
@@ -742,6 +822,13 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
     });
 
     const handleSave = async () => {
+        if (!authUserIdRef.current) {
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) authUserIdRef.current = user.id;
+            } catch { }
+        }
+        if (!authUserIdRef.current) return alert("Unable to identify the current user. Please refresh and try again.");
         try {
             const { error } = await supabase.from("test_executions").insert(buildPayload());
             if (error) throw error;
@@ -763,10 +850,21 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
     };
 
     const confirmSubmit = async () => {
+        if (!authUserIdRef.current) {
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) authUserIdRef.current = user.id;
+            } catch { }
+        }
+        if (!authUserIdRef.current) {
+            setIsSubmitting(false);
+            return alert("Unable to identify the current user. Please refresh and try again.");
+        }
         setIsSubmitting(true);
         try {
             const { data: exec, error: execErr } = await supabase.from("test_executions").insert(buildPayload()).select().single();
             if (execErr) throw execErr;
+
             if (selectedStatus === "fail") {
                 await supabase.from("issues").insert({
                     test_case_id: testCase.id, test_execution_id: exec.id,
@@ -777,14 +875,23 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
                     status: "open", failure_comment: failureNotes, expected_behavior: expectedResult,
                     actual_behavior: actualResult, steps_to_reproduce: stepsToReproduce || null,
                     affected_component: affectedField, environment, browser,
-                    reported_by: tester?.id || null, assigned_to: testCase.assigned_to || null,
+                    reported_by: authUserIdRef.current || tester?.id || null, assigned_to: testCase.assigned_to || null,
                     reported_date: new Date().toISOString(),
                 });
             }
-            await supabase.from("test_cases").update({ status: selectedStatus, actual_result: actualResult || null }).eq("id", testCase.id);
+
+            const { data: updatedRow } = await supabase
+                .from("test_cases")
+                .update({ status: selectedStatus, actual_result: actualResult || null })
+                .eq("id", testCase.id)
+                .select("id,status")
+                .single();
+
+            const confirmedStatus = updatedRow?.status || selectedStatus;
+
             setShowSubmitModal(false);
             showNotif(`✓ ${selectedStatus.toUpperCase()} — result submitted!`);
-            setTimeout(() => onBack(), 1800);
+            onBack(testCase.id, confirmedStatus);
         } catch (e) { alert("Submission error: " + e.message); } finally { setIsSubmitting(false); }
     };
 
@@ -828,7 +935,7 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
             <header className="bg-white border-b border-slate-200 flex-shrink-0">
                 <div className="px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
                     <div className="flex items-center gap-3">
-                        <button onClick={onBack} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-sm font-medium transition-colors">
+                        <button onClick={() => onBack(null, null)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-sm font-medium transition-colors">
                             <i className="fa-solid fa-arrow-left text-xs" /> Back
                         </button>
                         <div className="w-px h-6 bg-slate-200" />
@@ -838,8 +945,8 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
                             <span className="text-sm font-bold text-slate-900 truncate max-w-xs">{testCase.name}</span>
                             {testCase.priority && (
                                 <span className={`text-[10px] font-semibold px-2 py-0.5 rounded capitalize ${testCase.priority?.toLowerCase() === "high" ? "bg-red-100 text-red-600" :
-                                        testCase.priority?.toLowerCase() === "medium" ? "bg-amber-100 text-amber-600" :
-                                            "bg-slate-100 text-slate-500"}`}>{testCase.priority}</span>
+                                    testCase.priority?.toLowerCase() === "medium" ? "bg-amber-100 text-amber-600" :
+                                        "bg-slate-100 text-slate-500"}`}>{testCase.priority}</span>
                             )}
                         </div>
                     </div>
@@ -897,9 +1004,8 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
             <main className="flex-1 overflow-y-auto">
                 <div className="p-5 space-y-4 max-w-3xl mx-auto">
 
-                    {/* ── Context + Team Card ── */}
+                    {/* Context + Team Card */}
                     <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                        {/* Context row */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-100 border-b border-slate-100">
                             {[
                                 { label: "Version", icon: "fa-code-branch", value: version ? `v${version.version_number}` : "—", sub: version?.build_number || "", color: "text-blue-400", bg: "bg-blue-50" },
@@ -918,9 +1024,7 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
                             ))}
                         </div>
 
-                        {/* FIX: removed overflow-hidden from this wrapper so dropdowns can escape */}
                         <div className="px-5 py-4">
-                            {/* FIX: overflow-visible on grid so fixed-positioned dropdowns aren't clipped */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" style={{ overflow: "visible" }}>
                                 <MultiAssign label="Assign Testers" icon="fa-flask" values={assignedTesters} onChange={setAssignedTesters} color="emerald" profiles={allProfiles} />
                                 <MultiAssign label="Assign Developers" icon="fa-code" values={assignedDevs} onChange={setAssignedDevs} color="blue" profiles={allProfiles} />
@@ -1057,7 +1161,7 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
 
                     {/* Submit bar */}
                     <div className="flex items-center justify-between gap-3 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-                        <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50">
+                        <button onClick={() => onBack(null, null)} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50">
                             <i className="fa-solid fa-arrow-left text-xs" /> Back to List
                         </button>
                         <div className="flex items-center gap-2">
@@ -1088,11 +1192,27 @@ export default function TestExecution() {
     const [testList, setTestList] = useState([]);
     const [selectedIdx, setSelectedIdx] = useState(-1);
 
+    // Initialise from sessionStorage so colors survive page switches.
+    const [pendingUpdates, setPendingUpdates] = useState(() => loadPendingUpdates());
+
     const handleSelect = (test, list = []) => {
         const idx = list.findIndex(t => t.id === test.id);
         setTestList(list);
         setSelectedIdx(idx);
         setSelectedTest(test);
+    };
+
+    const handleBack = (updatedId, updatedStatus) => {
+        if (updatedId && updatedStatus) {
+            setPendingUpdates(prev => {
+                const next = { ...prev, [updatedId]: updatedStatus };
+                // Persist to sessionStorage so the map survives if this component
+                // unmounts when the user navigates to another page and comes back.
+                savePendingUpdates(next);
+                return next;
+            });
+        }
+        setSelectedTest(null);
     };
 
     const handleNext = () => {
@@ -1107,12 +1227,17 @@ export default function TestExecution() {
         return (
             <ExecuteView
                 testCase={selectedTest}
-                onBack={() => setSelectedTest(null)}
+                onBack={handleBack}
                 onNext={selectedIdx < testList.length - 1 ? handleNext : null}
                 currentIdx={selectedIdx}
                 total={testList.length}
             />
         );
     }
-    return <TestCaseListView onSelect={(test, list) => handleSelect(test, list)} />;
+    return (
+        <TestCaseListView
+            pendingUpdates={pendingUpdates}
+            onSelect={(test, list) => handleSelect(test, list)}
+        />
+    );
 }
