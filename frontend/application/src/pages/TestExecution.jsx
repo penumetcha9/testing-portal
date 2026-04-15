@@ -206,6 +206,7 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [metaReady, setMetaReady] = useState(false);
+    const [userId, setUserId] = useState(null);
 
     const mapsRef = useRef({ mod: {}, feat: {}, ver: {} });
 
@@ -218,10 +219,11 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
     useEffect(() => {
         (async () => {
             try {
-                const [vRes, mRes, fRes] = await Promise.all([
+                const [vRes, mRes, fRes, { data: { user } }] = await Promise.all([
                     supabase.from("versions").select("id,version_number,build_number,status").order("created_at", { ascending: false }),
                     supabase.from("modules").select("id,module_name").order("module_name", { ascending: true }),
                     supabase.from("features").select("id,feature_name,module_id").order("feature_name", { ascending: true }),
+                    supabase.auth.getUser(),
                 ]);
                 const versions = vRes.data || [];
                 const modules = mRes.data || [];
@@ -229,6 +231,7 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                 setAllVersions(versions);
                 setAllModules(modules);
                 setAllFeatures(features);
+                setUserId(user?.id || null);
                 mapsRef.current = {
                     mod: Object.fromEntries(modules.map(m => [m.id, m.module_name])),
                     feat: Object.fromEntries(features.map(f => [f.id, f.feature_name])),
@@ -240,12 +243,15 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
     }, []);
 
     useEffect(() => {
-        if (!metaReady) return;
+        if (!metaReady || !userId) return;
         let cancelled = false;
         (async () => {
             setLoading(true); setError(null);
             try {
-                let q = supabase.from("test_cases").select("*").order("created_at", { ascending: true });
+                // Always filter to only the logged-in user's assigned test cases
+                let q = supabase.from("test_cases").select("*")
+                    .eq("assigned_to", userId)
+                    .order("created_at", { ascending: true });
 
                 if (filterFeature) {
                     q = q.eq("feature_id", filterFeature);
@@ -261,7 +267,7 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                 } else if (filterVersion) {
                     const [vmRes, tcDirectRes, featVerRes] = await Promise.all([
                         supabase.from("version_modules").select("module_id").eq("version_id", filterVersion),
-                        supabase.from("test_cases").select("id", { count: "exact", head: true }).eq("version_id", filterVersion),
+                        supabase.from("test_cases").select("id", { count: "exact", head: true }).eq("version_id", filterVersion).eq("assigned_to", userId),
                         supabase.from("features").select("id").eq("version_id", filterVersion),
                     ]);
 
@@ -297,8 +303,6 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
 
                 const { data, error: err } = await q;
                 if (!cancelled) {
-                    // Load latest pendingUpdates from sessionStorage at mapping time
-                    // so even a full re-fetch gets the correct overrides applied.
                     const latestPending = loadPendingUpdates();
                     const { mod, feat, ver } = mapsRef.current;
                     setTestCases((data || []).map(t => {
@@ -318,7 +322,7 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
             finally { if (!cancelled) setLoading(false); }
         })();
         return () => { cancelled = true; };
-    }, [metaReady, filterVersion, filterModule, filterFeature, filterStatus, allFeatures]);
+    }, [metaReady, userId, filterVersion, filterModule, filterFeature, filterStatus, allFeatures]);
 
     // Patch test cases in-place when pendingUpdates changes (instant visual feedback
     // after returning from ExecuteView, no re-fetch needed).
@@ -459,7 +463,7 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                     </div>
                 )}
 
-                {loading ? (
+                {(loading || !userId) ? (
                     <div className="flex flex-col items-center justify-center py-20 gap-4">
                         <div className="w-10 h-10 border-4 border-slate-200 border-t-emerald-600 rounded-full animate-spin" />
                         <p className="text-sm text-slate-500">Loading test cases…</p>
@@ -1025,11 +1029,7 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
                         </div>
 
                         <div className="px-5 py-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" style={{ overflow: "visible" }}>
-                                <MultiAssign label="Assign Testers" icon="fa-flask" values={assignedTesters} onChange={setAssignedTesters} color="emerald" profiles={allProfiles} />
-                                <MultiAssign label="Assign Developers" icon="fa-code" values={assignedDevs} onChange={setAssignedDevs} color="blue" profiles={allProfiles} />
-                            </div>
-                            <div className="flex items-center justify-between mt-3">
+                            <div className="flex items-center justify-between">
                                 {executionHistory.length > 0 ? (
                                     <span className={`text-xs flex items-center gap-1.5 ${getSM(executionHistory[0].execution_status).color}`}>
                                         <i className="fa-solid fa-history text-slate-400 text-xs" />
@@ -1037,10 +1037,6 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
                                         <span className="font-semibold">{executionHistory[0].execution_status}</span>
                                     </span>
                                 ) : <span />}
-                                <button onClick={handleSaveAssignments} disabled={savingAssign}
-                                    className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-                                    {savingAssign ? <><i className="fa-solid fa-spinner fa-spin text-xs" />Saving…</> : <><i className="fa-solid fa-check text-xs" />Save Assignments</>}
-                                </button>
                             </div>
                         </div>
                     </div>

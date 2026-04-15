@@ -148,7 +148,7 @@ const Chip = ({ label, style: s, mono }) => (
 );
 
 // ─── Single-select Dropdown ────────────────────────────────────────────────────
-const Dropdown = memo(({ options, selected, onChange, placeholder = "Select..." }) => {
+const Dropdown = memo(({ options, selected, onChange, placeholder = "Select...", upward = false }) => {
     const [open, setOpen] = useState(false);
     const [hov, setHov] = useState(null);
     const ref = useRef(null);
@@ -190,7 +190,9 @@ const Dropdown = memo(({ options, selected, onChange, placeholder = "Select..." 
 
             {open && (
                 <div style={{
-                    position: "absolute", top: "calc(100% + 5px)", left: 0, right: 0,
+                    position: "absolute",
+                    ...(upward ? { bottom: "calc(100% + 5px)", top: "auto" } : { top: "calc(100% + 5px)" }),
+                    left: 0, right: 0,
                     zIndex: 9999, background: T.surface, border: `1px solid ${T.border}`,
                     borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
                     animation: "ddIn 0.16s cubic-bezier(.4,0,.2,1)", overflow: "hidden",
@@ -230,7 +232,7 @@ const Dropdown = memo(({ options, selected, onChange, placeholder = "Select..." 
 });
 
 // ─── Multi-select Dropdown ─────────────────────────────────────────────────────
-const MultiSelectDropdown = memo(({ options, selected = [], onChange, placeholder = "Select..." }) => {
+const MultiSelectDropdown = memo(({ options, selected = [], onChange, placeholder = "Select...", upward = false }) => {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState("");
     const ref = useRef(null);
@@ -312,10 +314,11 @@ const MultiSelectDropdown = memo(({ options, selected = [], onChange, placeholde
                 </span>
             </div>
 
-            {/* Dropdown panel */}
             {open && (
                 <div style={{
-                    position: "absolute", top: "calc(100% + 5px)", left: 0, right: 0,
+                    position: "absolute",
+                    ...(upward ? { bottom: "calc(100% + 5px)", top: "auto" } : { top: "calc(100% + 5px)" }),
+                    left: 0, right: 0,
                     zIndex: 9999, background: T.surface, border: `1px solid ${T.border}`,
                     borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
                     animation: "ddIn 0.16s cubic-bezier(.4,0,.2,1)", overflow: "hidden",
@@ -484,9 +487,9 @@ const TestCaseRow = memo(({ tc, onEdit, onDelete }) => (
             <Chip label={tc.status} style={STATUS_STYLE[tc.status] || STATUS_STYLE["Active"]} />
         </td>
         <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
-            {tc.assignee
+            {tc.assigneeName
                 ? <span style={{ fontSize: 11, color: T.textMid, fontFamily: T.sans, display: "flex", alignItems: "center", gap: 5 }}>
-                    <i className="fa-solid fa-user" style={{ fontSize: 9, color: T.textFaint }}></i>{tc.assignee}
+                    <i className="fa-solid fa-user" style={{ fontSize: 9, color: T.textFaint }}></i>{tc.assigneeName}
                 </span>
                 : <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>—</span>
             }
@@ -781,7 +784,11 @@ export default function FeaturesLibrary() {
     const flatFeatures = useMemo(() =>
         modules.flatMap(mod => mod.features.map(feat => {
             const assignedUser = users.find(u => u.id === feat.assign_to);
-            return { ...feat, assign_to_name: assignedUser ? assignedUser.name : (feat.assign_to || null) };
+            const testCasesWithNames = (feat.testCases || []).map(tc => {
+                const tcUser = users.find(u => u.id === tc.assignee);
+                return { ...tc, assigneeName: tcUser ? tcUser.name : (tc.assignee || null) };
+            });
+            return { ...feat, assign_to_name: assignedUser ? assignedUser.name : (feat.assign_to || null), testCases: testCasesWithNames };
         })),
         [modules, users]
     );
@@ -791,7 +798,7 @@ export default function FeaturesLibrary() {
     const totalTestCases = useMemo(() => flatFeatures.reduce((a, f) => a + f.testCasesCount, 0), [flatFeatures]);
 
     const userOptions = useMemo(() => [{ id: "", name: "Select Assignee" }, ...users.map(u => ({ id: u.id, name: u.name }))], [users]);
-    const testerOptions = useMemo(() => [{ id: "", name: "Select Tester" }, ...users.map(u => ({ id: u.name, name: u.name }))], [users]);
+    const testerOptions = useMemo(() => [{ id: "", name: "Select Tester" }, ...users.map(u => ({ id: u.id, name: u.name }))], [users]);
     const moduleOptions = useMemo(() => [{ id: "", name: "Choose Module" }, ...modules.map(m => ({ id: m.id, name: m.name }))], [modules]);
 
     const filteredFeatures = useMemo(() => {
@@ -831,13 +838,19 @@ export default function FeaturesLibrary() {
         setAddFeatureModal(true);
     }, [flatFeatures]);
 
-    const openAddModal = useCallback((e, moduleId, featureId) => {
+    const openAddModal = useCallback(async (e, moduleId, featureId) => {
         e.stopPropagation();
-        const allTCs = modules.flatMap(m => m.features.flatMap(f => f.testCases));
-        const nextId = generateNextTcId(allTCs);
+        // Query DB directly to get the true max TC id across all test cases
+        const { data } = await supabase
+            .from("test_cases")
+            .select("test_case_id")
+            .order("test_case_id", { ascending: false });
+        const nextId = generateNextTcId(
+            (data || []).map(r => ({ tcId: r.test_case_id }))
+        );
         setForm({ ...emptyForm, id: nextId });
         setAddModal({ open: true, featureId, moduleId });
-    }, [modules]);
+    }, []);
 
     const openEditModal = useCallback((e, moduleId, featureId, tc) => {
         e.stopPropagation();
@@ -1078,7 +1091,7 @@ export default function FeaturesLibrary() {
                         </div>
                         <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
                             <Field label="Module" required>
-                                <Dropdown options={moduleOptions} selected={featureForm.moduleId} onChange={v => setFeatureForm(f => ({ ...f, moduleId: v }))} placeholder="Choose Module" />
+                                <Dropdown options={moduleOptions} selected={featureForm.moduleId} onChange={v => setFeatureForm(f => ({ ...f, moduleId: v }))} placeholder="Choose Module" upward />
                             </Field>
                             <Field label="Feature Name" required>
                                 <input className="fl-input" type="text" placeholder="e.g., Two-Factor Authentication" value={featureForm.name} onChange={e => setFeatureForm(f => ({ ...f, name: e.target.value }))} />
@@ -1098,7 +1111,7 @@ export default function FeaturesLibrary() {
                                 <textarea className="fl-input" rows="3" placeholder="Brief description…" value={featureForm.description} onChange={e => setFeatureForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "none" }} />
                             </Field>
                             <Field label="Assign To">
-                                <Dropdown options={userOptions} selected={featureForm.assign_to} onChange={v => setFeatureForm(f => ({ ...f, assign_to: v }))} placeholder="Select Assignee" />
+                                <Dropdown options={userOptions} selected={featureForm.assign_to} onChange={v => setFeatureForm(f => ({ ...f, assign_to: v }))} placeholder="Select Assignee" upward />
                             </Field>
                         </div>
                         <div style={MODAL_FOOTER}>
@@ -1124,7 +1137,7 @@ export default function FeaturesLibrary() {
                         </div>
                         <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
                             <Field label="Module" required>
-                                <Dropdown options={moduleOptions} selected={editFeatureForm.moduleId} onChange={v => setEditFeatureForm(f => ({ ...f, moduleId: v }))} placeholder="Choose Module" />
+                                <Dropdown options={moduleOptions} selected={editFeatureForm.moduleId} onChange={v => setEditFeatureForm(f => ({ ...f, moduleId: v }))} placeholder="Choose Module" upward />
                             </Field>
                             <Field label="Feature Name" required>
                                 <input className="fl-input" type="text" value={editFeatureForm.name} onChange={e => setEditFeatureForm(f => ({ ...f, name: e.target.value }))} />
@@ -1141,7 +1154,7 @@ export default function FeaturesLibrary() {
                                 <textarea className="fl-input" rows="3" value={editFeatureForm.description} onChange={e => setEditFeatureForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "none" }} />
                             </Field>
                             <Field label="Assign To">
-                                <Dropdown options={userOptions} selected={editFeatureForm.assign_to} onChange={v => setEditFeatureForm(f => ({ ...f, assign_to: v }))} placeholder="Select Assignee" />
+                                <Dropdown options={userOptions} selected={editFeatureForm.assign_to} onChange={v => setEditFeatureForm(f => ({ ...f, assign_to: v }))} placeholder="Select Assignee" upward />
                             </Field>
                         </div>
                         <div style={MODAL_FOOTER}>
@@ -1210,7 +1223,7 @@ export default function FeaturesLibrary() {
                                     </div>
                                 </Field>
                                 <Field label="Priority" required>
-                                    <Dropdown options={PRIORITY_WITH_PH} selected={form.priority} onChange={v => setForm(f => ({ ...f, priority: v }))} placeholder="Select Priority" />
+                                    <Dropdown options={PRIORITY_WITH_PH} selected={form.priority} onChange={v => setForm(f => ({ ...f, priority: v }))} placeholder="Select Priority" upward />
                                 </Field>
                             </div>
                             <Field label="Test Case Name" required>
@@ -1227,15 +1240,16 @@ export default function FeaturesLibrary() {
                                     selected={form.userStoryIds}
                                     onChange={ids => setForm(f => ({ ...f, userStoryIds: ids }))}
                                     placeholder={userStories.length === 0 ? "No user stories available" : "Select user stories…"}
+                                    upward
                                 />
                             </Field>
 
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                                 <Field label="Assigned To">
-                                    <Dropdown options={testerOptions} selected={form.assignee} onChange={v => setForm(f => ({ ...f, assignee: v }))} placeholder="Select Tester" />
+                                    <Dropdown options={testerOptions} selected={form.assignee} onChange={v => setForm(f => ({ ...f, assignee: v }))} placeholder="Select Tester" upward />
                                 </Field>
                                 <Field label="Status" required>
-                                    <Dropdown options={STATUS_OPTIONS} selected={form.status} onChange={v => setForm(f => ({ ...f, status: v }))} placeholder="Select Status" />
+                                    <Dropdown options={STATUS_OPTIONS} selected={form.status} onChange={v => setForm(f => ({ ...f, status: v }))} placeholder="Select Status" upward />
                                 </Field>
                             </div>
                         </div>

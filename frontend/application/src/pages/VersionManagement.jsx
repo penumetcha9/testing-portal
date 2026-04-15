@@ -106,8 +106,8 @@ const ChevronIcon = memo(({ open }) => (
 ));
 ChevronIcon.displayName = "ChevronIcon";
 
-const DropdownList = memo(({ children }) => (
-    <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 9999, background: "#fff", border: "1.5px solid #e8eaf6", borderRadius: "12px", boxShadow: "0 8px 32px rgba(99,102,241,0.13),0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden" }}>
+const DropdownList = memo(({ children, upward }) => (
+    <div style={{ position: "absolute", ...(upward ? { bottom: "calc(100% + 6px)", top: "auto" } : { top: "calc(100% + 6px)" }), left: 0, right: 0, zIndex: 9999, background: "#fff", border: "1.5px solid #e8eaf6", borderRadius: "12px", boxShadow: "0 8px 32px rgba(99,102,241,0.13),0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden" }}>
         <div style={{ padding: "6px", maxHeight: "300px", overflowY: "auto" }}>{children}</div>
     </div>
 ));
@@ -137,7 +137,7 @@ const SingleItem = memo(({ opt, isSel, onChange }) => (
 ));
 SingleItem.displayName = "SingleItem";
 
-const CustomDropdown = memo(({ options, selected, onChange, placeholder = "Select options..." }) => {
+const CustomDropdown = memo(({ options, selected, onChange, placeholder = "Select options...", upward = false }) => {
     const [isOpen, setIsOpen] = useState(false);
     const ref = useRef(null);
 
@@ -173,7 +173,7 @@ const CustomDropdown = memo(({ options, selected, onChange, placeholder = "Selec
                 <ChevronIcon open={isOpen} />
             </button>
             {isOpen && (
-                <DropdownList>
+                <DropdownList upward={upward}>
                     {options.map((opt) => (
                         <MultiItem key={opt.id} opt={opt} isSel={selected.includes(opt.id)} onSelect={handleSelect} />
                     ))}
@@ -576,9 +576,17 @@ export default function VersionManagement() {
 
     const fetchUsers = useCallback(async () => {
         try {
-            const { data, error: e } = await supabase.from("users").select("id, name").order("name");
+            const { data, error: e } = await supabase
+                .from("profiles")
+                .select("id, full_name, username, email")
+                .order("full_name");
             if (e) throw e;
-            setUsers(data || []);
+            setUsers(
+                (data || []).map(p => ({
+                    id: p.id,
+                    name: p.full_name || p.username || p.email || "Unknown",
+                }))
+            );
         } catch (err) { console.error(err); }
     }, []);
 
@@ -822,7 +830,7 @@ export default function VersionManagement() {
                         <h3 className="text-lg font-semibold">Filters &amp; Search</h3>
                         <button onClick={handleResetFilters} className="text-sm text-green-700 hover:underline font-medium">Reset All</button>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium mb-1">Search Version</label>
                             <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by version or build number..." className="w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300" />
@@ -830,9 +838,6 @@ export default function VersionManagement() {
                         <div>
                             <label className="block text-sm font-medium mb-1">Status</label>
                             <SingleDropdown options={STATUS_FILTER_OPTIONS} selected={statusFilter} onChange={setStatusFilter} placeholder="All Statuses" />
-                        </div>
-                        <div className="flex items-end">
-                            <button className="w-full px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:opacity-90">Apply Filters</button>
                         </div>
                     </div>
                 </div>
@@ -923,7 +928,7 @@ export default function VersionManagement() {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-2">Assign Testers</label>
-                                <CustomDropdown options={users} selected={formData.selectedTesters} onChange={setTestersSel} placeholder="Select testers..." />
+                                <CustomDropdown options={users} selected={formData.selectedTesters} onChange={setTestersSel} placeholder="Select testers..." upward />
                                 {formData.selectedTesters.length > 0 && (
                                     <div className="mt-3 flex flex-wrap gap-2">
                                         {users.filter(u => formData.selectedTesters.includes(u.id)).map(user => (

@@ -304,23 +304,6 @@ function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, add
                     </div>
 
                     <div className="bg-white border border-slate-200 rounded-xl p-4">
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Change Role</p>
-                        <div className="flex gap-2">
-                            <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="flex-1 px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                                <option value="tester">Tester</option>
-                                <option value="developer">Developer</option>
-                                <option value="admin">Admin</option>
-                            </select>
-                            <button type="button" onClick={handleRoleSave} disabled={savingRole || newRole === currentRole}
-                                className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${saveSuccess ? "bg-emerald-100 text-emerald-700" : "bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"}`}>
-                                {savingRole ? <><i className="fa-solid fa-spinner animate-spin" />Saving…</> : saveSuccess ? <><i className="fa-solid fa-check-double" />Saved!</> : <><i className="fa-solid fa-check" />Save</>}
-                            </button>
-                        </div>
-                        {newRole !== currentRole && !saveSuccess && <p className="text-xs text-amber-600 mt-2 flex items-center gap-1"><i className="fa-solid fa-triangle-exclamation" />Role changed to <strong>{newRole}</strong> — click Save to apply</p>}
-                        {saveSuccess && <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1"><i className="fa-solid fa-check-circle" />Role successfully updated to <strong>{currentRole}</strong></p>}
-                    </div>
-
-                    <div className="bg-white border border-slate-200 rounded-xl p-4">
                         <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Account Status</p>
                         <div className="flex items-center justify-between">
                             <div>
@@ -495,26 +478,27 @@ export default function UserManagement() {
         } catch (e) { addToast("Unexpected error: " + e.message, "error"); }
     }, [addToast]);
 
-    const handleExport = useCallback(() => {
-        const rows = [
-            ["Name", "Email", "Role", "Status"],
-            ...filteredUsers.map((u) => [u.full_name || "", u.email, u.role, u.is_active === false ? "Inactive" : "Active"]),
-        ].map((r) => r.map((c) => `"${(c || "").toString().replace(/"/g, '""')}"`).join(",")).join("\n");
-        const blob = new Blob([rows], { type: "text/csv" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url; a.download = `users-${new Date().toISOString().split("T")[0]}.csv`; a.click();
-        URL.revokeObjectURL(url);
-        addToast(`Exported ${filteredUsers.length} users`);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [users, addToast]);
-
     const filteredUsers = users.filter((u) => {
         const q = searchTerm.toLowerCase();
         const matchSearch = !searchTerm || u.full_name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q);
         const matchRole = filterRole === "all" || u.role === filterRole;
         return matchSearch && matchRole;
     });
+
+    const handleExport = useCallback(() => {
+        const exportData = filteredUsers;
+        const roleLabel = filterRole !== "all" ? `_${filterRole}s` : "";
+        const rows = [
+            ["Name", "Email", "Role", "Status"],
+            ...exportData.map((u) => [u.full_name || "", u.email, u.role, u.is_active === false ? "Inactive" : "Active"]),
+        ].map((r) => r.map((c) => `"${(c || "").toString().replace(/"/g, '""')}"`).join(",")).join("\n");
+        const blob = new Blob([rows], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = `users${roleLabel}-${new Date().toISOString().split("T")[0]}.csv`; a.click();
+        URL.revokeObjectURL(url);
+        addToast(`Exported ${exportData.length} user${exportData.length !== 1 ? "s" : ""}${roleLabel ? ` (${filterRole})` : ""}`);
+    }, [filteredUsers, filterRole, addToast]);
 
     const stats = [
         { label: "Total Users", value: users.length, icon: "fa-users", color: "emerald" },

@@ -229,7 +229,7 @@ function EditModuleModal({ module, onClose, onSuccess, users }) {
     });
 
     const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-    const userOptions = [{ id: "", name: "Select Owner" }, ...users.map(u => ({ id: u.name || u.id, name: u.name }))];
+    const userOptions = [{ id: "", name: "Select Owner" }, ...users.map(u => ({ id: u.name, name: u.name }))];
 
     const handleUpdate = async () => {
         if (!form.module_name) { alert("Module Name required"); return; }
@@ -336,7 +336,7 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
     const [form, setForm] = useState({ module_name: "", description: "", module_owner: "", priority: "", status: "Active" });
 
     const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-    const userOptions = [{ id: "", name: "Select Owner" }, ...users.map(u => ({ id: u.name || u.id, name: u.name }))];
+    const userOptions = [{ id: "", name: "Select Owner" }, ...users.map(u => ({ id: u.name, name: u.name }))];
 
     const handleCreate = async () => {
         if (!form.module_name) { alert("Module Name required"); return; }
@@ -682,8 +682,16 @@ export default function ModulesLibrary() {
     const [deleteLoading, setDeleteLoading] = useState(false);
 
     const fetchUsers = async () => {
-        const { data } = await supabase.from("users").select("*").order("name", { ascending: true });
-        setUsers(data || []);
+        const { data } = await supabase
+            .from("profiles")
+            .select("id, full_name, username, email")
+            .order("full_name", { ascending: true });
+        setUsers(
+            (data || []).map(p => ({
+                id: p.id,
+                name: p.full_name || p.username || p.email || "Unknown",
+            }))
+        );
     };
 
     const fetchModules = async () => {
@@ -743,7 +751,6 @@ export default function ModulesLibrary() {
     const statsConfig = [
         { label: "Total Modules", value: modules.length, icon: "fa-puzzle-piece", colorClass: "text-blue-500", bgClass: "bg-blue-50" },
         { label: "Active Modules", value: modules.filter(m => m.status === "Active").length, icon: "fa-check-circle", colorClass: "text-green-700", bgClass: "bg-green-50" },
-        { label: "In Progress", value: modules.filter(m => m.status === "Inactive").length, icon: "fa-hourglass-end", colorClass: "text-yellow-500", bgClass: "bg-yellow-50" },
         { label: "Archived Modules", value: modules.filter(m => m.status === "Archived").length, icon: "fa-archive", colorClass: "text-gray-400", bgClass: "bg-gray-100" },
     ];
 
@@ -774,7 +781,7 @@ export default function ModulesLibrary() {
                 <div className="p-8 space-y-6">
 
                     {/* Stats */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                         {statsConfig.map(s => <StatCard key={s.label} {...s} />)}
                     </div>
 
