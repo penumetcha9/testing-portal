@@ -281,9 +281,6 @@ function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, add
                         <div>
                             <p className="font-bold text-slate-900 text-base">{user.full_name || "—"}</p>
                             <p className="text-sm text-slate-500">{user.email}</p>
-                            <span className={`inline-flex items-center gap-1.5 mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${rs.badge}`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${rs.dot}`} />{currentRole}
-                            </span>
                         </div>
                     </div>
 
@@ -301,23 +298,6 @@ function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, add
                                 ))}
                             </div>
                         )}
-                    </div>
-
-                    <div className="bg-white border border-slate-200 rounded-xl p-4">
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Change Role</p>
-                        <div className="flex gap-2">
-                            <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="flex-1 px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                                <option value="tester">Tester</option>
-                                <option value="developer">Developer</option>
-                                <option value="admin">Admin</option>
-                            </select>
-                            <button type="button" onClick={handleRoleSave} disabled={savingRole || newRole === currentRole}
-                                className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${saveSuccess ? "bg-emerald-100 text-emerald-700" : "bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"}`}>
-                                {savingRole ? <><i className="fa-solid fa-spinner animate-spin" />Saving…</> : saveSuccess ? <><i className="fa-solid fa-check-double" />Saved!</> : <><i className="fa-solid fa-check" />Save</>}
-                            </button>
-                        </div>
-                        {newRole !== currentRole && !saveSuccess && <p className="text-xs text-amber-600 mt-2 flex items-center gap-1"><i className="fa-solid fa-triangle-exclamation" />Role changed to <strong>{newRole}</strong> — click Save to apply</p>}
-                        {saveSuccess && <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1"><i className="fa-solid fa-check-circle" />Role successfully updated to <strong>{currentRole}</strong></p>}
                     </div>
 
                     <div className="bg-white border border-slate-200 rounded-xl p-4">
@@ -398,67 +378,7 @@ function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, add
     );
 }
 
-// ── Role Cell with local state — only saves on explicit confirm ───────────────
-function RoleCell({ userId, savedRole, onSave }) {
-    const [committedRole, setCommittedRole] = useState(savedRole);
-    const [pendingRole, setPendingRole] = useState(savedRole);
-    const [saving, setSaving] = useState(false);
-    const isDirty = pendingRole !== committedRole;
-
-    const handleSave = async () => {
-        setSaving(true);
-        const success = await onSave(userId, pendingRole);
-        if (success) {
-            setCommittedRole(pendingRole); // lock in the new role only on confirmed save
-        } else {
-            setPendingRole(committedRole); // revert dropdown on failure
-        }
-        setSaving(false);
-    };
-
-    const handleDiscard = () => setPendingRole(committedRole);
-
-    return (
-        <div className="flex items-center gap-1.5">
-            <select
-                value={pendingRole}
-                onChange={(e) => setPendingRole(e.target.value)}
-                className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            >
-                <option value="tester">Tester</option>
-                <option value="developer">Developer</option>
-                <option value="admin">Admin</option>
-            </select>
-            {isDirty && (
-                <>
-                    <button
-                        type="button"
-                        onClick={handleSave}
-                        disabled={saving}
-                        title="Save role change"
-                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:opacity-60"
-                    >
-                        {saving
-                            ? <i className="fa-solid fa-spinner animate-spin text-[10px]" />
-                            : <i className="fa-solid fa-check text-[10px]" />
-                        }
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleDiscard}
-                        disabled={saving}
-                        title="Discard change"
-                        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 transition-colors"
-                    >
-                        <i className="fa-solid fa-xmark text-[10px]" />
-                    </button>
-                </>
-            )}
-        </div>
-    );
-}
-
-
+// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function UserManagement() {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -547,27 +467,12 @@ export default function UserManagement() {
 
     const handleQuickRoleChange = useCallback(async (userId, newRole) => {
         try {
-            const { error, count } = await supabase
-                .from("profiles")
-                .update({ role: newRole }, { count: "exact" })
-                .eq("id", userId);
-            if (error) {
-                addToast("Role update failed: " + error.message, "error");
-                return false;
-            }
-            if (count === 0) {
-                addToast("Role update failed: no rows updated (check RLS policy)", "error");
-                return false;
-            }
-            // Update local state immediately for instant UI feedback
+            const { error } = await supabase.from("profiles").update({ role: newRole }).eq("id", userId);
+            if (error) { addToast("Role update failed: " + error.message, "error"); return; }
+            addToast("Role updated to " + newRole);
             setUsers((p) => p.map((u) => u.id === userId ? { ...u, role: newRole } : u));
             setSelectedUser((prev) => prev?.id === userId ? { ...prev, role: newRole } : prev);
-            addToast("Role updated to " + newRole);
-            return true;
-        } catch (e) {
-            addToast("Unexpected error: " + e.message, "error");
-            return false;
-        }
+        } catch (e) { addToast("Unexpected error: " + e.message, "error"); }
     }, [addToast]);
 
     const handleExport = useCallback(() => {
@@ -709,7 +614,7 @@ export default function UserManagement() {
                                 <table className="w-full">
                                     <thead className="bg-slate-50 border-b border-slate-200">
                                         <tr>
-                                            {["User", "Role", "Status", "Actions"].map((h) => (
+                                            {["User", "Status", "Actions"].map((h) => (
                                                 <th key={h} className="px-5 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                                             ))}
                                         </tr>
@@ -737,22 +642,18 @@ export default function UserManagement() {
                                                         </div>
                                                     </td>
                                                     <td className="px-5 py-4">
-                                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${rs.badge}`}>
-                                                            <span className={`w-1.5 h-1.5 rounded-full ${rs.dot}`} />{user.role}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-5 py-4">
                                                         <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${inactive ? "bg-red-100 text-red-600" : "bg-emerald-100 text-emerald-700"}`}>
                                                             {inactive ? "Inactive" : "Active"}
                                                         </span>
                                                     </td>
                                                     <td className="px-5 py-4">
                                                         <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                                                            <RoleCell
-                                                                userId={user.id}
-                                                                savedRole={user.role}
-                                                                onSave={handleQuickRoleChange}
-                                                            />
+                                                            <select value={user.role} onChange={(e) => handleQuickRoleChange(user.id, e.target.value)}
+                                                                className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                                                                <option value="tester">Tester</option>
+                                                                <option value="developer">Developer</option>
+                                                                <option value="admin">Admin</option>
+                                                            </select>
                                                             <button type="button" onClick={() => handleDelete(user.id)} title="Delete user"
                                                                 className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-50 transition-colors">
                                                                 <i className="fa-solid fa-trash text-sm" />
@@ -767,7 +668,7 @@ export default function UserManagement() {
                                             );
                                         }) : (
                                             <tr>
-                                                <td colSpan={4} className="px-6 py-16 text-center">
+                                                <td colSpan={3} className="px-6 py-16 text-center">
                                                     <i className="fa-solid fa-users text-slate-300 text-3xl mb-3 block" />
                                                     <p className="text-slate-500 font-medium">No users found</p>
                                                     <p className="text-xs text-slate-400 mt-1">Try adjusting your filters</p>
