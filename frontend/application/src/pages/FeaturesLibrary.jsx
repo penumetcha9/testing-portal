@@ -408,8 +408,21 @@ const PRIORITY_OPTIONS = [{ id: "High", name: "High" }, { id: "Medium", name: "M
 const STATUS_OPTIONS = [{ id: "Active", name: "Active" }, { id: "Draft", name: "Draft" }, { id: "Archived", name: "Archived" }];
 const FILTER_STATUS_OPT = [{ id: "", name: "All Status" }, { id: "Active", name: "Active" }, { id: "Draft", name: "Draft" }, { id: "Archived", name: "Archived" }];
 const PRIORITY_WITH_PH = [{ id: "", name: "Select Priority" }, ...PRIORITY_OPTIONS];
+const TEST_TYPE_OPTIONS = [
+    { id: "", name: "Select Type" },
+    { id: "Functional", name: "Functional" },
+    { id: "Integration", name: "Integration" },
+    { id: "Regression", name: "Regression" },
+    { id: "Smoke", name: "Smoke" },
+    { id: "Sanity", name: "Sanity" },
+    { id: "Performance", name: "Performance" },
+    { id: "Security", name: "Security" },
+    { id: "UI/UX", name: "UI/UX" },
+    { id: "API", name: "API" },
+    { id: "Exploratory", name: "Exploratory" },
+];
 
-const emptyForm = { id: "", name: "", description: "", preconditions: "", steps: "", expected: "", assignee: "", status: "Active", priority: "", tags: "", userStoryIds: [] };
+const emptyForm = { id: "", name: "", description: "", test_type: "", test_scenario: "", pre_requisites: "", test_steps: "", expected_result: "", assignee: "", status: "Active", priority: "", tags: "", userStoryIds: [] };
 const emptyFeatureForm = { moduleId: "", name: "", code: "", user_story: "", description: "", assign_to: "" };
 const emptyEditFeatureForm = { id: "", moduleId: "", name: "", code: "", user_story: "", description: "", assign_to: "" };
 
@@ -418,556 +431,6 @@ const generateUUID = () =>
         const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
     });
-
-// ─── CSV Parser ────────────────────────────────────────────────────────────────
-function parseCSV(text) {
-    const lines = text.trim().split(/\r?\n/);
-    if (lines.length < 2) return { headers: [], rows: [] };
-    const parseRow = (line) => {
-        const result = []; let current = ""; let inQuotes = false;
-        for (let i = 0; i < line.length; i++) {
-            const ch = line[i];
-            if (ch === '"') { if (inQuotes && line[i + 1] === '"') { current += '"'; i++; } else inQuotes = !inQuotes; }
-            else if (ch === ',' && !inQuotes) { result.push(current.trim()); current = ""; }
-            else current += ch;
-        }
-        result.push(current.trim()); return result;
-    };
-    const headers = parseRow(lines[0]).map(h => h.toLowerCase().replace(/\s+/g, "_"));
-    const rows = lines.slice(1).filter(l => l.trim()).map(l => {
-        const vals = parseRow(l); const obj = {};
-        headers.forEach((h, i) => { obj[h] = vals[i] || ""; }); return obj;
-    });
-    return { headers, rows };
-}
-
-const downloadCSV = (content, filename) => {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8;" }));
-    a.download = filename; a.style.visibility = "hidden";
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-};
-
-const VALID_PRIORITIES = ["High", "Medium", "Low"];
-const VALID_TC_STATUSES = ["Active", "Draft", "Archived"];
-const VALID_FEAT_STATUSES = ["Active", "Draft", "Archived"];
-
-// ─── Feature CSV Import Modal ──────────────────────────────────────────────────
-function FeatureImportModal({ onClose, onSuccess, modules, flatFeatures, users }) {
-    const fileInputRef = useRef(null);
-    const [step, setStep] = useState("upload");
-    const [dragging, setDragging] = useState(false);
-    const [parsedRows, setParsedRows] = useState([]);
-    const [validRows, setValidRows] = useState([]);
-    const [errorRows, setErrorRows] = useState([]);
-    const [importing, setImporting] = useState(false);
-    const [importResult, setImportResult] = useState(null);
-
-    const moduleMap = useMemo(() => {
-        const m = {};
-        modules.forEach(mod => {
-            m[(mod.module_name || mod.name || "").toLowerCase()] = mod.id;
-            m[String(mod.module_code).toLowerCase()] = mod.id;
-        });
-        return m;
-    }, [modules]);
-
-    const userMap = useMemo(() => {
-        const m = {};
-        users.forEach(u => { m[u.name.toLowerCase()] = u.id; });
-        return m;
-    }, [users]);
-
-    const downloadTemplate = () => {
-        downloadCSV(
-            ["Module Name,Feature Name,Description,User Story,Assign To,Status"].concat([
-                '"User Management","Login Feature","Handles user authentication","US-001","Alice","Active"',
-                '"Reporting & Analytics","Dashboard Charts","KPI widgets","","","Draft"',
-            ]).join("\n"),
-            "features_import_template.csv"
-        );
-    };
-
-    const validate = (rows) => {
-        const valid = [], errors = [];
-        let max = 0;
-        flatFeatures.forEach(f => { const m = (f.feature_code || f.code || "").match(/^FEAT-(\d+)$/i); if (m) max = Math.max(max, parseInt(m[1], 10)); });
-
-        rows.forEach((row, idx) => {
-            const errs = [];
-            const moduleName = (row["module_name"] || row["module"] || "").trim();
-            const name = (row["feature_name"] || row["feature"] || "").trim();
-            const status = (row["status"] || "Active").trim();
-            const moduleId = moduleMap[moduleName.toLowerCase()];
-
-            if (!name) errs.push("Feature Name is required");
-            if (!moduleName) errs.push("Module Name is required");
-            else if (!moduleId) errs.push(`Module "${moduleName}" not found — must match an existing module`);
-            if (status && !VALID_FEAT_STATUSES.includes(status)) errs.push(`Status must be: ${VALID_FEAT_STATUSES.join(" / ")}`);
-
-            if (errs.length) { errors.push({ rowNum: idx + 2, name: name || "(blank)", errors: errs }); }
-            else {
-                max++;
-                const code = `FEAT-${String(max).padStart(3, "0")}`;
-                const assignTo = userMap[(row["assign_to"] || "").toLowerCase()] || null;
-                valid.push({ module_id: moduleId, feature_name: name, feature_code: code, description: (row["description"] || "").trim(), user_story: (row["user_story"] || "").trim() || null, assign_to: assignTo, status: status || "Active", created_at: new Date().toISOString() });
-            }
-        });
-        return { valid, errors };
-    };
-
-    const processFile = (file) => {
-        if (!file?.name.endsWith(".csv")) { alert("Please upload a .csv file"); return; }
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const { rows } = parseCSV(e.target.result);
-            if (!rows.length) { alert("CSV has no data rows."); return; }
-            const { valid, errors } = validate(rows);
-            setParsedRows(rows); setValidRows(valid); setErrorRows(errors); setStep("preview");
-        };
-        reader.readAsText(file);
-    };
-
-    const handleImport = async () => {
-        setImporting(true);
-        const { error } = await supabase.from("features").insert(validRows);
-        setImporting(false);
-        if (error) { alert(`Import failed: ${error.message}`); return; }
-        setImportResult({ success: validRows.length, skipped: errorRows.length });
-        setStep("done"); onSuccess();
-    };
-
-    const reset = () => { setStep("upload"); setParsedRows([]); setValidRows([]); setErrorRows([]); setImportResult(null); if (fileInputRef.current) fileInputRef.current.value = ""; };
-
-    return (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
-            <div className="fl-modal-enter" style={{ background: T.surface, borderRadius: 14, boxShadow: "0 24px 60px rgba(0,0,0,0.16)", width: "100%", maxWidth: 640, maxHeight: "90vh", overflowY: "auto", fontFamily: T.sans }} onClick={e => e.stopPropagation()}>
-                {/* Header */}
-                <div style={{ padding: "18px 22px", borderBottom: `1px solid ${T.borderLight}`, position: "sticky", top: 0, background: T.surface, zIndex: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{ width: 34, height: 34, borderRadius: 9, background: T.greenLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <i className="fa-solid fa-file-import" style={{ color: T.green, fontSize: 14 }}></i>
-                        </div>
-                        <div>
-                            <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>Import Features via CSV</h3>
-                            <p style={{ fontSize: 11, color: T.textMuted, margin: 0 }}>
-                                {step === "upload" && "Upload a CSV to bulk-create features"}
-                                {step === "preview" && `${parsedRows.length} rows · ${validRows.length} valid · ${errorRows.length} errors`}
-                                {step === "done" && "Import complete"}
-                            </p>
-                        </div>
-                    </div>
-                    <button onClick={onClose} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 16 }}><i className="fa-solid fa-times"></i></button>
-                </div>
-
-                <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
-                    {step === "upload" && (
-                        <>
-                            {/* Info + template */}
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: T.blueTint, border: `1px solid rgba(37,99,235,0.15)`, borderRadius: 10 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                    <i className="fa-solid fa-circle-info" style={{ color: T.blue, fontSize: 14 }}></i>
-                                    <div>
-                                        <p style={{ fontSize: 13, fontWeight: 600, color: "#1D4ED8", margin: 0 }}>Need a template?</p>
-                                        <p style={{ fontSize: 11, color: "#3B82F6", margin: 0 }}>Download a pre-formatted CSV with example rows</p>
-                                    </div>
-                                </div>
-                                <button onClick={downloadTemplate} style={{ padding: "6px 12px", background: T.surface, border: `1px solid rgba(37,99,235,0.25)`, color: T.blue, borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
-                                    <i className="fa-solid fa-download" style={{ marginRight: 5 }}></i>Template
-                                </button>
-                            </div>
-
-                            {/* Columns */}
-                            <div style={{ padding: "12px 14px", background: T.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 10 }}>
-                                <p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 8px" }}>Expected Columns</p>
-                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                    {[["Module Name", true], ["Feature Name", true], ["Description", false], ["User Story", false], ["Assign To", false], ["Status", false]].map(([col, req]) => (
-                                        <span key={col} style={{ padding: "3px 10px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 11, fontFamily: T.mono, color: T.textMid }}>
-                                            {col}{req && <span style={{ color: T.red, marginLeft: 2 }}>*</span>}
-                                        </span>
-                                    ))}
-                                </div>
-                                <p style={{ fontSize: 11, color: T.textFaint, margin: "8px 0 0" }}>Status: <span style={{ fontFamily: T.mono }}>Active / Draft / Archived</span> &nbsp;·&nbsp; Module Name must match an existing module exactly</p>
-                            </div>
-
-                            {/* Drop zone */}
-                            <div
-                                onDragOver={e => { e.preventDefault(); setDragging(true); }}
-                                onDragLeave={() => setDragging(false)}
-                                onDrop={e => { e.preventDefault(); setDragging(false); processFile(e.dataTransfer.files[0]); }}
-                                onClick={() => fileInputRef.current?.click()}
-                                style={{ border: `2px dashed ${dragging ? T.green : T.border}`, borderRadius: 12, padding: "36px 20px", textAlign: "center", cursor: "pointer", background: dragging ? T.greenLight : T.surfaceAlt, transition: "all 0.15s" }}
-                            >
-                                <div style={{ width: 44, height: 44, background: T.surface, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px", border: `1px solid ${T.border}` }}>
-                                    <i className="fa-solid fa-cloud-arrow-up" style={{ color: dragging ? T.green : T.textFaint, fontSize: 20 }}></i>
-                                </div>
-                                <p style={{ fontSize: 13, fontWeight: 600, color: T.textMid, margin: "0 0 4px" }}>Drop CSV file here or click to browse</p>
-                                <p style={{ fontSize: 11, color: T.textFaint, margin: 0 }}>.csv files only</p>
-                                <input ref={fileInputRef} type="file" accept=".csv" style={{ display: "none" }} onChange={e => processFile(e.target.files[0])} />
-                            </div>
-                        </>
-                    )}
-
-                    {step === "preview" && (
-                        <>
-                            {/* Summary */}
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-                                {[["Total Rows", parsedRows.length, T.textMid, T.surfaceAlt, T.border], ["Ready", validRows.length, T.green, T.greenLight, T.greenTint], ["Errors", errorRows.length, T.red, T.redTint, "rgba(220,38,38,0.15)"]].map(([label, val, fg, bg, border]) => (
-                                    <div key={label} style={{ padding: "12px 14px", background: bg, border: `1px solid ${border}`, borderRadius: 10, textAlign: "center" }}>
-                                        <p style={{ fontSize: 24, fontWeight: 700, color: fg, margin: 0 }}>{val}</p>
-                                        <p style={{ fontSize: 11, color: T.textMuted, margin: "2px 0 0" }}>{label}</p>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {/* Errors */}
-                            {errorRows.length > 0 && (
-                                <div style={{ border: `1px solid rgba(220,38,38,0.2)`, borderRadius: 10, overflow: "hidden" }}>
-                                    <div style={{ padding: "10px 14px", background: T.redTint, borderBottom: `1px solid rgba(220,38,38,0.15)`, display: "flex", alignItems: "center", gap: 8 }}>
-                                        <i className="fa-solid fa-triangle-exclamation" style={{ color: T.red, fontSize: 12 }}></i>
-                                        <span style={{ fontSize: 12, fontWeight: 600, color: T.red }}>Rows with errors (will be skipped)</span>
-                                    </div>
-                                    <div style={{ maxHeight: 140, overflowY: "auto" }}>
-                                        {errorRows.map((er, i) => (
-                                            <div key={i} style={{ padding: "10px 14px", borderBottom: `1px solid ${T.borderLight}` }}>
-                                                <p style={{ fontSize: 12, fontWeight: 600, color: T.textMid, margin: "0 0 3px" }}>Row {er.rowNum}: <span style={{ fontWeight: 400 }}>{er.name}</span></p>
-                                                {er.errors.map((e, j) => <p key={j} style={{ fontSize: 11, color: T.red, margin: "1px 0 0" }}>• {e}</p>)}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Valid preview */}
-                            {validRows.length > 0 && (
-                                <div style={{ border: `1px solid ${T.border}`, borderRadius: 10, overflow: "hidden" }}>
-                                    <div style={{ padding: "10px 14px", background: T.surfaceAlt, borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 8 }}>
-                                        <i className="fa-solid fa-check-circle" style={{ color: T.green, fontSize: 12 }}></i>
-                                        <span style={{ fontSize: 12, fontWeight: 600, color: T.textMid }}>Features to be created</span>
-                                    </div>
-                                    <div style={{ maxHeight: 220, overflowY: "auto" }}>
-                                        {validRows.map((row, i) => (
-                                            <div key={i} style={{ padding: "10px 14px", borderBottom: `1px solid ${T.borderLight}`, display: "flex", alignItems: "center", gap: 10 }}>
-                                                <div style={{ width: 30, height: 30, borderRadius: 8, background: T.greenLight, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                                    <i className="fa-solid fa-list-check" style={{ color: T.green, fontSize: 12 }}></i>
-                                                </div>
-                                                <div style={{ flex: 1, minWidth: 0 }}>
-                                                    <p style={{ fontSize: 13, fontWeight: 600, color: T.text, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.feature_name}</p>
-                                                    <p style={{ fontSize: 11, color: T.textMuted, margin: "1px 0 0" }}>{row.feature_code} &nbsp;·&nbsp; {row.description || "—"}</p>
-                                                </div>
-                                                <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 5, ...STATUS_STYLE[row.status] }}>{row.status}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {validRows.length === 0 && (
-                                <div style={{ textAlign: "center", padding: "24px", background: T.redTint, border: `1px solid rgba(220,38,38,0.15)`, borderRadius: 10 }}>
-                                    <i className="fa-solid fa-circle-exclamation" style={{ color: T.red, fontSize: 24, marginBottom: 8, display: "block" }}></i>
-                                    <p style={{ fontSize: 13, fontWeight: 600, color: T.red, margin: 0 }}>No valid rows to import</p>
-                                    <p style={{ fontSize: 11, color: T.red, margin: "4px 0 0", opacity: 0.8 }}>Fix the errors in your CSV and try again</p>
-                                </div>
-                            )}
-                        </>
-                    )}
-
-                    {step === "done" && importResult && (
-                        <div style={{ textAlign: "center", padding: "24px 0" }}>
-                            <div style={{ width: 56, height: 56, borderRadius: "50%", background: T.greenLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
-                                <i className="fa-solid fa-circle-check" style={{ color: T.green, fontSize: 24 }}></i>
-                            </div>
-                            <p style={{ fontSize: 16, fontWeight: 700, color: T.text, margin: "0 0 6px" }}>Import Successful!</p>
-                            <p style={{ fontSize: 13, color: T.textMuted, margin: "0 0 20px" }}>
-                                <span style={{ fontWeight: 700, color: T.green }}>{importResult.success} feature{importResult.success !== 1 ? "s" : ""}</span> created.
-                                {importResult.skipped > 0 && <> <span style={{ fontWeight: 700, color: T.red }}>{importResult.skipped} skipped</span>.</>}
-                            </p>
-                            <div style={{ display: "flex", justifyContent: "center", gap: 10 }}>
-                                <button onClick={reset} style={BTN_CANCEL}>Import More</button>
-                                <button onClick={onClose} style={BTN_PRIMARY}>Done</button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {step !== "done" && (
-                    <div style={{ padding: "14px 22px", borderTop: `1px solid ${T.borderLight}`, position: "sticky", bottom: 0, background: T.surface, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                        <button onClick={step === "preview" ? reset : onClose} style={BTN_CANCEL}>{step === "preview" ? "← Back" : "Cancel"}</button>
-                        {step === "preview" && (
-                            <button onClick={handleImport} disabled={importing || validRows.length === 0} style={{ ...BTN_PRIMARY, opacity: (importing || validRows.length === 0) ? 0.5 : 1 }}>
-                                {importing ? <><i className="fa-solid fa-spinner fa-spin" style={{ marginRight: 6 }}></i>Importing…</> : <><i className="fa-solid fa-file-import" style={{ marginRight: 6 }}></i>Import {validRows.length} Feature{validRows.length !== 1 ? "s" : ""}</>}
-                            </button>
-                        )}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
-
-// ─── Test Case CSV Import Modal ────────────────────────────────────────────────
-function TestCaseImportModal({ onClose, onSuccess, modules, flatFeatures, users }) {
-    const fileInputRef = useRef(null);
-    const [step, setStep] = useState("upload");
-    const [dragging, setDragging] = useState(false);
-    const [parsedRows, setParsedRows] = useState([]);
-    const [validRows, setValidRows] = useState([]);
-    const [errorRows, setErrorRows] = useState([]);
-    const [importing, setImporting] = useState(false);
-    const [importResult, setImportResult] = useState(null);
-
-    const featureMap = useMemo(() => {
-        const m = {};
-        flatFeatures.forEach(f => {
-            m[(f.feature_name || f.name || "").toLowerCase()] = { id: f.id, moduleId: f.moduleId };
-            m[(f.feature_code || f.code || "").toLowerCase()] = { id: f.id, moduleId: f.moduleId };
-        });
-        return m;
-    }, [flatFeatures]);
-
-    const testerMap = useMemo(() => {
-        const m = {};
-        users.forEach(u => { m[u.name.toLowerCase()] = u.name; });
-        return m;
-    }, [users]);
-
-    const downloadTemplate = () => {
-        downloadCSV(
-            ["Feature Name,Feature Code,Test Case Name,Description,Priority,Status,Assigned To"].concat([
-                '"Login Feature","FEAT-001","Valid login with correct credentials","Test with correct email and password","High","Active","Alice"',
-                '"Login Feature","FEAT-001","Invalid login with wrong password","Test with wrong password","Medium","Active",""',
-            ]).join("\n"),
-            "test_cases_import_template.csv"
-        );
-    };
-
-    const validate = (rows) => {
-        const valid = [], errors = [];
-        // compute next TC id
-        const allTCs = flatFeatures.flatMap(f => f.testCases);
-        let tcMax = 0;
-        allTCs.forEach(tc => { const m = (tc.tcId || "").match(/^TC-(\d+)$/i); if (m) tcMax = Math.max(tcMax, parseInt(m[1], 10)); });
-
-        rows.forEach((row, idx) => {
-            const errs = [];
-            const featureName = (row["feature_name"] || row["feature"] || "").trim();
-            const featureCode = (row["feature_code"] || "").trim();
-            const name = (row["test_case_name"] || row["name"] || "").trim();
-            const priority = (row["priority"] || "").trim();
-            const status = (row["status"] || "Active").trim();
-
-            const featureKey = featureCode.toLowerCase() || featureName.toLowerCase();
-            const featureRef = featureMap[featureKey] || featureMap[featureName.toLowerCase()] || featureMap[featureCode.toLowerCase()];
-
-            if (!name) errs.push("Test Case Name is required");
-            if (!priority) errs.push("Priority is required");
-            else if (!VALID_PRIORITIES.includes(priority)) errs.push(`Priority must be: ${VALID_PRIORITIES.join(" / ")}`);
-            if (!featureName && !featureCode) errs.push("Feature Name or Feature Code is required");
-            else if (!featureRef) errs.push(`Feature "${featureName || featureCode}" not found — must match an existing feature`);
-            if (status && !VALID_TC_STATUSES.includes(status)) errs.push(`Status must be: ${VALID_TC_STATUSES.join(" / ")}`);
-
-            if (errs.length) { errors.push({ rowNum: idx + 2, name: name || "(blank)", errors: errs }); }
-            else {
-                tcMax++;
-                const tcId = `TC-${String(tcMax).padStart(3, "0")}`;
-                const assignedTo = testerMap[(row["assigned_to"] || "").toLowerCase()] || null;
-                valid.push({
-                    id: generateUUID(), test_case_id: tcId,
-                    name, description: (row["description"] || "").trim(),
-                    feature_id: featureRef.id, module_id: featureRef.moduleId,
-                    priority, status: status || "Active",
-                    assigned_to: assignedTo,
-                    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-                });
-            }
-        });
-        return { valid, errors };
-    };
-
-    const processFile = (file) => {
-        if (!file?.name.endsWith(".csv")) { alert("Please upload a .csv file"); return; }
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const { rows } = parseCSV(e.target.result);
-            if (!rows.length) { alert("CSV has no data rows."); return; }
-            const { valid, errors } = validate(rows);
-            setParsedRows(rows); setValidRows(valid); setErrorRows(errors); setStep("preview");
-        };
-        reader.readAsText(file);
-    };
-
-    const handleImport = async () => {
-        setImporting(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        const rows = validRows.map(r => ({ ...r, created_by: user?.id || null }));
-        const { error } = await supabase.from("test_cases").insert(rows);
-        setImporting(false);
-        if (error) { alert(`Import failed: ${error.message}`); return; }
-        setImportResult({ success: validRows.length, skipped: errorRows.length });
-        setStep("done"); onSuccess();
-    };
-
-    const reset = () => { setStep("upload"); setParsedRows([]); setValidRows([]); setErrorRows([]); setImportResult(null); if (fileInputRef.current) fileInputRef.current.value = ""; };
-
-    return (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
-            <div className="fl-modal-enter" style={{ background: T.surface, borderRadius: 14, boxShadow: "0 24px 60px rgba(0,0,0,0.16)", width: "100%", maxWidth: 660, maxHeight: "90vh", overflowY: "auto", fontFamily: T.sans }} onClick={e => e.stopPropagation()}>
-                {/* Header */}
-                <div style={{ padding: "18px 22px", borderBottom: `1px solid ${T.borderLight}`, position: "sticky", top: 0, background: T.surface, zIndex: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{ width: 34, height: 34, borderRadius: 9, background: T.purpleTint, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <i className="fa-solid fa-vial" style={{ color: T.purple, fontSize: 14 }}></i>
-                        </div>
-                        <div>
-                            <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>Import Test Cases via CSV</h3>
-                            <p style={{ fontSize: 11, color: T.textMuted, margin: 0 }}>
-                                {step === "upload" && "Upload a CSV to bulk-create test cases under existing features"}
-                                {step === "preview" && `${parsedRows.length} rows · ${validRows.length} valid · ${errorRows.length} errors`}
-                                {step === "done" && "Import complete"}
-                            </p>
-                        </div>
-                    </div>
-                    <button onClick={onClose} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 16 }}><i className="fa-solid fa-times"></i></button>
-                </div>
-
-                <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
-                    {step === "upload" && (
-                        <>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: T.purpleTint, border: `1px solid rgba(124,58,237,0.15)`, borderRadius: 10 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                    <i className="fa-solid fa-circle-info" style={{ color: T.purple, fontSize: 14 }}></i>
-                                    <div>
-                                        <p style={{ fontSize: 13, fontWeight: 600, color: T.purple, margin: 0 }}>Need a template?</p>
-                                        <p style={{ fontSize: 11, color: T.purple, margin: 0, opacity: 0.75 }}>Download a pre-formatted CSV with example rows</p>
-                                    </div>
-                                </div>
-                                <button onClick={downloadTemplate} style={{ padding: "6px 12px", background: T.surface, border: `1px solid rgba(124,58,237,0.25)`, color: T.purple, borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
-                                    <i className="fa-solid fa-download" style={{ marginRight: 5 }}></i>Template
-                                </button>
-                            </div>
-
-                            <div style={{ padding: "12px 14px", background: T.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 10 }}>
-                                <p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 8px" }}>Expected Columns</p>
-                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                    {[["Feature Name", true], ["Feature Code", false], ["Test Case Name", true], ["Description", false], ["Priority", true], ["Status", false], ["Assigned To", false]].map(([col, req]) => (
-                                        <span key={col} style={{ padding: "3px 10px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 11, fontFamily: T.mono, color: T.textMid }}>
-                                            {col}{req && <span style={{ color: T.red, marginLeft: 2 }}>*</span>}
-                                        </span>
-                                    ))}
-                                </div>
-                                <p style={{ fontSize: 11, color: T.textFaint, margin: "8px 0 0" }}>Priority: <span style={{ fontFamily: T.mono }}>High / Medium / Low</span> &nbsp;·&nbsp; Status: <span style={{ fontFamily: T.mono }}>Active / Draft / Archived</span> &nbsp;·&nbsp; Feature must match an existing feature name or code</p>
-                            </div>
-
-                            <div
-                                onDragOver={e => { e.preventDefault(); setDragging(true); }}
-                                onDragLeave={() => setDragging(false)}
-                                onDrop={e => { e.preventDefault(); setDragging(false); processFile(e.dataTransfer.files[0]); }}
-                                onClick={() => fileInputRef.current?.click()}
-                                style={{ border: `2px dashed ${dragging ? T.purple : T.border}`, borderRadius: 12, padding: "36px 20px", textAlign: "center", cursor: "pointer", background: dragging ? T.purpleTint : T.surfaceAlt, transition: "all 0.15s" }}
-                            >
-                                <div style={{ width: 44, height: 44, background: T.surface, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px", border: `1px solid ${T.border}` }}>
-                                    <i className="fa-solid fa-cloud-arrow-up" style={{ color: dragging ? T.purple : T.textFaint, fontSize: 20 }}></i>
-                                </div>
-                                <p style={{ fontSize: 13, fontWeight: 600, color: T.textMid, margin: "0 0 4px" }}>Drop CSV file here or click to browse</p>
-                                <p style={{ fontSize: 11, color: T.textFaint, margin: 0 }}>.csv files only</p>
-                                <input ref={fileInputRef} type="file" accept=".csv" style={{ display: "none" }} onChange={e => processFile(e.target.files[0])} />
-                            </div>
-                        </>
-                    )}
-
-                    {step === "preview" && (
-                        <>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-                                {[["Total Rows", parsedRows.length, T.textMid, T.surfaceAlt, T.border], ["Ready", validRows.length, T.green, T.greenLight, T.greenTint], ["Errors", errorRows.length, T.red, T.redTint, "rgba(220,38,38,0.15)"]].map(([label, val, fg, bg, border]) => (
-                                    <div key={label} style={{ padding: "12px 14px", background: bg, border: `1px solid ${border}`, borderRadius: 10, textAlign: "center" }}>
-                                        <p style={{ fontSize: 24, fontWeight: 700, color: fg, margin: 0 }}>{val}</p>
-                                        <p style={{ fontSize: 11, color: T.textMuted, margin: "2px 0 0" }}>{label}</p>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {errorRows.length > 0 && (
-                                <div style={{ border: `1px solid rgba(220,38,38,0.2)`, borderRadius: 10, overflow: "hidden" }}>
-                                    <div style={{ padding: "10px 14px", background: T.redTint, borderBottom: `1px solid rgba(220,38,38,0.15)`, display: "flex", alignItems: "center", gap: 8 }}>
-                                        <i className="fa-solid fa-triangle-exclamation" style={{ color: T.red, fontSize: 12 }}></i>
-                                        <span style={{ fontSize: 12, fontWeight: 600, color: T.red }}>Rows with errors (will be skipped)</span>
-                                    </div>
-                                    <div style={{ maxHeight: 140, overflowY: "auto" }}>
-                                        {errorRows.map((er, i) => (
-                                            <div key={i} style={{ padding: "10px 14px", borderBottom: `1px solid ${T.borderLight}` }}>
-                                                <p style={{ fontSize: 12, fontWeight: 600, color: T.textMid, margin: "0 0 3px" }}>Row {er.rowNum}: <span style={{ fontWeight: 400 }}>{er.name}</span></p>
-                                                {er.errors.map((e, j) => <p key={j} style={{ fontSize: 11, color: T.red, margin: "1px 0 0" }}>• {e}</p>)}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {validRows.length > 0 && (
-                                <div style={{ border: `1px solid ${T.border}`, borderRadius: 10, overflow: "hidden" }}>
-                                    <div style={{ padding: "10px 14px", background: T.surfaceAlt, borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 8 }}>
-                                        <i className="fa-solid fa-check-circle" style={{ color: T.green, fontSize: 12 }}></i>
-                                        <span style={{ fontSize: 12, fontWeight: 600, color: T.textMid }}>Test cases to be created</span>
-                                    </div>
-                                    <div style={{ maxHeight: 220, overflowY: "auto" }}>
-                                        {validRows.map((row, i) => (
-                                            <div key={i} style={{ padding: "10px 14px", borderBottom: `1px solid ${T.borderLight}`, display: "flex", alignItems: "center", gap: 10 }}>
-                                                <span style={{ fontSize: 11, fontWeight: 600, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "2px 7px", borderRadius: 5, flexShrink: 0 }}>{row.test_case_id}</span>
-                                                <div style={{ flex: 1, minWidth: 0 }}>
-                                                    <p style={{ fontSize: 12, fontWeight: 600, color: T.text, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.name}</p>
-                                                    {row.description && <p style={{ fontSize: 11, color: T.textMuted, margin: "1px 0 0" }}>{row.description}</p>}
-                                                </div>
-                                                <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
-                                                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 7px", borderRadius: 5, ...PRIORITY_STYLE[row.priority] }}>{row.priority}</span>
-                                                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 7px", borderRadius: 5, ...STATUS_STYLE[row.status] }}>{row.status}</span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {validRows.length === 0 && (
-                                <div style={{ textAlign: "center", padding: "24px", background: T.redTint, border: `1px solid rgba(220,38,38,0.15)`, borderRadius: 10 }}>
-                                    <i className="fa-solid fa-circle-exclamation" style={{ color: T.red, fontSize: 24, marginBottom: 8, display: "block" }}></i>
-                                    <p style={{ fontSize: 13, fontWeight: 600, color: T.red, margin: 0 }}>No valid rows to import</p>
-                                </div>
-                            )}
-                        </>
-                    )}
-
-                    {step === "done" && importResult && (
-                        <div style={{ textAlign: "center", padding: "24px 0" }}>
-                            <div style={{ width: 56, height: 56, borderRadius: "50%", background: T.greenLight, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
-                                <i className="fa-solid fa-circle-check" style={{ color: T.green, fontSize: 24 }}></i>
-                            </div>
-                            <p style={{ fontSize: 16, fontWeight: 700, color: T.text, margin: "0 0 6px" }}>Import Successful!</p>
-                            <p style={{ fontSize: 13, color: T.textMuted, margin: "0 0 20px" }}>
-                                <span style={{ fontWeight: 700, color: T.green }}>{importResult.success} test case{importResult.success !== 1 ? "s" : ""}</span> created.
-                                {importResult.skipped > 0 && <> <span style={{ fontWeight: 700, color: T.red }}>{importResult.skipped} skipped</span>.</>}
-                            </p>
-                            <div style={{ display: "flex", justifyContent: "center", gap: 10 }}>
-                                <button onClick={reset} style={BTN_CANCEL}>Import More</button>
-                                <button onClick={onClose} style={BTN_PRIMARY}>Done</button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {step !== "done" && (
-                    <div style={{ padding: "14px 22px", borderTop: `1px solid ${T.borderLight}`, position: "sticky", bottom: 0, background: T.surface, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                        <button onClick={step === "preview" ? reset : onClose} style={BTN_CANCEL}>{step === "preview" ? "← Back" : "Cancel"}</button>
-                        {step === "preview" && (
-                            <button onClick={handleImport} disabled={importing || validRows.length === 0} style={{ ...BTN_PRIMARY, opacity: (importing || validRows.length === 0) ? 0.5 : 1 }}>
-                                {importing ? <><i className="fa-solid fa-spinner fa-spin" style={{ marginRight: 6 }}></i>Importing…</> : <><i className="fa-solid fa-vial" style={{ marginRight: 6 }}></i>Import {validRows.length} Test Case{validRows.length !== 1 ? "s" : ""}</>}
-                            </button>
-                        )}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
 
 const generateNextTcId = (allTestCases) => {
     let max = 0;
@@ -1018,55 +481,129 @@ const StatCard = ({ stat }) => {
 };
 
 // ─── Test Case Row ──────────────────────────────────────────────────────────────
-const TestCaseRow = memo(({ tc, onEdit, onDelete }) => (
-    <tr className="fl-tc-row" style={{ borderBottom: `1px solid ${T.borderLight}` }}>
-        <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "2px 8px", borderRadius: 5 }}>{tc.tcId}</span>
-        </td>
-        <td style={{ padding: "10px 16px" }}>
-            <p style={{ fontSize: 12, color: T.text, fontWeight: 500, margin: 0, fontFamily: T.sans }}>{tc.name}</p>
-            {tc.description && <p style={{ fontSize: 11, color: T.textMuted, marginTop: 1, fontFamily: T.sans, lineHeight: 1.4 }}>{tc.description}</p>}
-        </td>
-        <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
-            <Chip label={tc.priority} style={PRIORITY_STYLE[tc.priority] || {}} mono />
-        </td>
-        <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
-            <Chip label={tc.status} style={STATUS_STYLE[tc.status] || STATUS_STYLE["Active"]} />
-        </td>
-        <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
-            {tc.assignee
-                ? <span style={{ fontSize: 11, color: T.textMid, fontFamily: T.sans, display: "flex", alignItems: "center", gap: 5 }}>
-                    <i className="fa-solid fa-user" style={{ fontSize: 9, color: T.textFaint }}></i>{tc.assignee}
-                </span>
-                : <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>—</span>
-            }
-        </td>
-        {/* ── FIX: show linked user stories ── */}
-        <td style={{ padding: "10px 16px" }}>
-            {tc.userStoryIds && tc.userStoryIds.length > 0 ? (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-                    {tc.userStoryCodes && tc.userStoryCodes.length > 0
-                        ? tc.userStoryCodes.map((code, i) => (
-                            <span key={i} style={{ fontSize: 10, fontWeight: 700, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "1px 6px", borderRadius: 4 }}>{code}</span>
-                        ))
-                        : tc.userStoryIds.map((id, i) => (
-                            <span key={i} style={{ fontSize: 10, fontWeight: 700, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "1px 6px", borderRadius: 4 }}>US</span>
-                        ))
+const TEST_TYPE_COLORS = {
+    Functional: { bg: "rgba(37,99,235,0.08)", fg: "#1D4ED8" },
+    Integration: { bg: "rgba(124,58,237,0.08)", fg: "#7C3AED" },
+    Regression: { bg: "rgba(217,119,6,0.08)", fg: "#B45309" },
+    Smoke: { bg: "rgba(20,184,166,0.08)", fg: "#0F766E" },
+    Sanity: { bg: "rgba(34,197,94,0.08)", fg: "#15803D" },
+    Performance: { bg: "rgba(239,68,68,0.08)", fg: "#DC2626" },
+    Security: { bg: "rgba(239,68,68,0.12)", fg: "#B91C1C" },
+    "UI/UX": { bg: "rgba(236,72,153,0.08)", fg: "#BE185D" },
+    API: { bg: "rgba(14,165,233,0.08)", fg: "#0369A1" },
+    Exploratory: { bg: "rgba(107,114,128,0.08)", fg: "#4B5563" },
+};
+
+const DetailSection = ({ icon, label, value, mono }) => value ? (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: T.textFaint, textTransform: "uppercase", letterSpacing: "0.07em", fontFamily: T.sans, display: "flex", alignItems: "center", gap: 5 }}>
+            <i className={`fa-solid ${icon}`} style={{ fontSize: 9 }}></i>{label}
+        </span>
+        <p style={{ fontSize: 12, color: T.textMid, margin: 0, fontFamily: mono ? T.mono : T.sans, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{value}</p>
+    </div>
+) : null;
+
+const TestCaseRow = memo(({ tc, onEdit, onDelete }) => {
+    const [expanded, setExpanded] = useState(false);
+    const hasDetails = tc.test_type || tc.test_scenario || tc.pre_requisites || tc.test_steps || tc.expected_result;
+    const typeStyle = TEST_TYPE_COLORS[tc.test_type] || {};
+
+    return (
+        <>
+            <tr className="fl-tc-row" style={{ borderBottom: expanded ? "none" : `1px solid ${T.borderLight}` }}>
+                <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "2px 8px", borderRadius: 5 }}>{tc.tcId}</span>
+                </td>
+                <td style={{ padding: "10px 16px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <p style={{ fontSize: 12, color: T.text, fontWeight: 500, margin: 0, fontFamily: T.sans }}>{tc.name}</p>
+                        {tc.test_type && (
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 4, fontFamily: T.mono, background: typeStyle.bg, color: typeStyle.fg }}>{tc.test_type}</span>
+                        )}
+                    </div>
+                    {tc.description && <p style={{ fontSize: 11, color: T.textMuted, marginTop: 1, fontFamily: T.sans, lineHeight: 1.4 }}>{tc.description}</p>}
+                </td>
+                <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                    <Chip label={tc.priority} style={PRIORITY_STYLE[tc.priority] || {}} mono />
+                </td>
+                <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                    <Chip label={tc.status} style={STATUS_STYLE[tc.status] || STATUS_STYLE["Active"]} />
+                </td>
+                <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                    {tc.assignee
+                        ? <span style={{ fontSize: 11, color: T.textMid, fontFamily: T.sans, display: "flex", alignItems: "center", gap: 5 }}>
+                            <i className="fa-solid fa-user" style={{ fontSize: 9, color: T.textFaint }}></i>{tc.assignee}
+                        </span>
+                        : <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>—</span>
                     }
-                </div>
-            ) : (
-                <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>—</span>
+                </td>
+                <td style={{ padding: "10px 16px" }}>
+                    {tc.userStoryIds && tc.userStoryIds.length > 0 ? (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                            {tc.userStoryCodes && tc.userStoryCodes.length > 0
+                                ? tc.userStoryCodes.map((code, i) => (
+                                    <span key={i} style={{ fontSize: 10, fontWeight: 700, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "1px 6px", borderRadius: 4 }}>{code}</span>
+                                ))
+                                : tc.userStoryIds.map((id, i) => (
+                                    <span key={i} style={{ fontSize: 10, fontWeight: 700, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "1px 6px", borderRadius: 4 }}>US</span>
+                                ))
+                            }
+                        </div>
+                    ) : (
+                        <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>—</span>
+                    )}
+                </td>
+                <td style={{ padding: "10px 16px", whiteSpace: "nowrap", fontSize: 11, color: T.textMuted, fontFamily: T.mono }}>{tc.updated}</td>
+                <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                        {hasDetails && (
+                            <button
+                                className="fl-icon-btn"
+                                onClick={() => setExpanded(p => !p)}
+                                title={expanded ? "Hide details" : "Show details"}
+                                style={{ color: expanded ? T.blue : T.textFaint }}
+                            >
+                                <i className={`fa-solid fa-chevron-${expanded ? "up" : "down"}`} style={{ fontSize: 10 }}></i>
+                            </button>
+                        )}
+                        <button className="fl-icon-btn edit" onClick={onEdit} title="Edit"><i className="fa-solid fa-pen-to-square"></i></button>
+                        <button className="fl-icon-btn delete" onClick={onDelete} title="Delete"><i className="fa-solid fa-trash"></i></button>
+                    </div>
+                </td>
+            </tr>
+            {expanded && hasDetails && (
+                <tr style={{ borderBottom: `1px solid ${T.borderLight}` }}>
+                    <td colSpan={8} style={{ padding: 0, background: "#FAFBF8" }}>
+                        <div style={{ padding: "16px 20px", borderTop: `1px dashed ${T.border}` }}>
+                            {/* Template header */}
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                                <div style={{ width: 24, height: 24, borderRadius: 6, background: T.greenLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    <i className="fa-solid fa-file-lines" style={{ color: T.green, fontSize: 10 }}></i>
+                                </div>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: T.green, textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: T.sans }}>Test Case Template</span>
+                                <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.mono }}>{tc.tcId}</span>
+                            </div>
+
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                                {/* Left column */}
+                                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                                    <DetailSection icon="fa-tag" label="Test Type" value={tc.test_type} />
+                                    <DetailSection icon="fa-align-left" label="Test Scenario" value={tc.test_scenario} />
+                                    <DetailSection icon="fa-list-check" label="Pre-Requisites" value={tc.pre_requisites} />
+                                </div>
+                                {/* Right column */}
+                                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                                    <DetailSection icon="fa-shoe-prints" label="Test Steps" value={tc.test_steps} />
+                                    <DetailSection icon="fa-circle-check" label="Expected Result" value={tc.expected_result} />
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
             )}
-        </td>
-        <td style={{ padding: "10px 16px", whiteSpace: "nowrap", fontSize: 11, color: T.textMuted, fontFamily: T.mono }}>{tc.updated}</td>
-        <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-                <button className="fl-icon-btn edit" onClick={onEdit} title="Edit"><i className="fa-solid fa-pen-to-square"></i></button>
-                <button className="fl-icon-btn delete" onClick={onDelete} title="Delete"><i className="fa-solid fa-trash"></i></button>
-            </div>
-        </td>
-    </tr>
-));
+        </>
+    );
+});
 
 // ─── Feature Card ──────────────────────────────────────────────────────────────
 const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEdit, onDelete }) => (
@@ -1212,9 +749,6 @@ export default function FeaturesLibrary() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const [showFeatureImport, setShowFeatureImport] = useState(false);
-    const [showTCImport, setShowTCImport] = useState(false);
-
     const [addModal, setAddModal] = useState({ open: false, featureId: null, moduleId: null });
     const [editModal, setEditModal] = useState({ open: false, tc: null, featureId: null, moduleId: null });
     const [deleteModal, setDeleteModal] = useState({ open: false, tc: null, featureId: null, moduleId: null });
@@ -1225,6 +759,14 @@ export default function FeaturesLibrary() {
     const [deleteFeatureModal, setDeleteFeatureModal] = useState(false);
     const [deleteFeatureTarget, setDeleteFeatureTarget] = useState(null);
     const [form, setForm] = useState(emptyForm);
+    const [importModal, setImportModal] = useState({ open: false });
+    const [importFile, setImportFile] = useState(null);
+    const [importRows, setImportRows] = useState([]);
+    const [importType, setImportType] = useState("features"); // "features" | "testcases"
+    const [importLoading, setImportLoading] = useState(false);
+    const [importError, setImportError] = useState("");
+    const [importSuccess, setImportSuccess] = useState("");
+    const importFileRef = useRef(null);
 
     const fetchModulesWithFeatures = useCallback(async () => {
         try {
@@ -1238,7 +780,7 @@ export default function FeaturesLibrary() {
             ] = await Promise.all([
                 supabase.from("modules").select("*").order("module_code", { ascending: false }),
                 supabase.from("features").select("*"),
-                supabase.from("test_cases").select("id, test_case_id, name, description, priority, status, updated_at, feature_id, module_id, assigned_to, user_story_ids"),
+                supabase.from("test_cases").select("id, test_case_id, name, description, priority, status, updated_at, feature_id, module_id, assigned_to, user_story_ids, test_type, test_scenario, pre_requisites, test_steps, expected_result"),
                 supabase.from("user_stories").select("id, story_id, story_title"),
             ]);
             if (modulesError) throw modulesError;
@@ -1270,6 +812,11 @@ export default function FeaturesLibrary() {
                     updated: new Date(tc.updated_at).toLocaleDateString(),
                     userStoryIds,
                     userStoryCodes,
+                    test_type: tc.test_type || "",
+                    test_scenario: tc.test_scenario || "",
+                    pre_requisites: tc.pre_requisites || "",
+                    test_steps: tc.test_steps || "",
+                    expected_result: tc.expected_result || "",
                 });
             }
             const featsByModule = {};
@@ -1384,13 +931,28 @@ export default function FeaturesLibrary() {
         setAddFeatureModal(true);
     }, [flatFeatures]);
 
-    const openAddModal = useCallback((e, moduleId, featureId) => {
+    const getNextTcId = useCallback(async () => {
+        try {
+            const { data } = await supabase
+                .from("test_cases")
+                .select("test_case_id");
+            let max = 0;
+            for (const row of (data || [])) {
+                const m = (row.test_case_id || "").match(/^TC-(\d+)$/i);
+                if (m) max = Math.max(max, parseInt(m[1], 10));
+            }
+            return `TC-${String(max + 1).padStart(3, "0")}`;
+        } catch (_) {
+            return `TC-${Date.now()}`;
+        }
+    }, []);
+
+    const openAddModal = useCallback(async (e, moduleId, featureId) => {
         e.stopPropagation();
-        const allTCs = modules.flatMap(m => m.features.flatMap(f => f.testCases));
-        const nextId = generateNextTcId(allTCs);
+        const nextId = await getNextTcId();
         setForm({ ...emptyForm, id: nextId });
         setAddModal({ open: true, featureId, moduleId });
-    }, [modules]);
+    }, [getNextTcId]);
 
     const openEditModal = useCallback((e, moduleId, featureId, tc) => {
         e.stopPropagation();
@@ -1398,12 +960,15 @@ export default function FeaturesLibrary() {
             id: tc.tcId,
             name: tc.name,
             description: tc.description,
-            preconditions: "", steps: "", expected: "",
+            test_type: tc.test_type || "",
+            test_scenario: tc.test_scenario || "",
+            pre_requisites: tc.pre_requisites || "",
+            test_steps: tc.test_steps || "",
+            expected_result: tc.expected_result || "",
             assignee: tc.assignee || "",
             status: tc.status,
             priority: tc.priority,
             tags: "",
-            // ── FIX: preserve userStoryIds on edit ──
             userStoryIds: tc.userStoryIds || [],
         });
         setEditModal({ open: true, tc, featureId, moduleId });
@@ -1428,9 +993,13 @@ export default function FeaturesLibrary() {
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) { alert("Must be logged in"); return; }
+
+            // Always re-fetch the true next ID at submit time to avoid race conditions
+            const freshId = await getNextTcId();
+
             const { error } = await supabase.from("test_cases").insert([{
                 id: generateUUID(),
-                test_case_id: form.id,
+                test_case_id: freshId,
                 name: form.name,
                 description: form.description,
                 feature_id: addModal.featureId || null,
@@ -1439,15 +1008,19 @@ export default function FeaturesLibrary() {
                 status: form.status,
                 created_by: user.id,
                 assigned_to: form.assignee || null,
-                // ── FIX: save user_story_ids as uuid array ──
                 user_story_ids: form.userStoryIds.length > 0 ? form.userStoryIds : null,
+                test_type: form.test_type || null,
+                test_scenario: form.test_scenario || null,
+                pre_requisites: form.pre_requisites || null,
+                test_steps: form.test_steps || null,
+                expected_result: form.expected_result || null,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
             }]);
             if (error) throw error;
             setAddModal({ open: false }); fetchModulesWithFeatures();
         } catch (err) { alert(`Error: ${err.message}`); }
-    }, [form, addModal.featureId, addModal.moduleId, fetchModulesWithFeatures]);
+    }, [form, addModal.featureId, addModal.moduleId, fetchModulesWithFeatures, getNextTcId]);
 
     const handleEditTestCase = useCallback(async () => {
         if (!form.name || !form.priority) { alert("Name and Priority required"); return; }
@@ -1457,8 +1030,12 @@ export default function FeaturesLibrary() {
                 description: form.description,
                 priority: form.priority,
                 status: form.status,
-                // ── FIX: also update user_story_ids on edit ──
                 user_story_ids: form.userStoryIds.length > 0 ? form.userStoryIds : null,
+                test_type: form.test_type || null,
+                test_scenario: form.test_scenario || null,
+                pre_requisites: form.pre_requisites || null,
+                test_steps: form.test_steps || null,
+                expected_result: form.expected_result || null,
                 updated_at: new Date().toISOString(),
             }).eq("id", editModal.tc.id);
             if (error) throw error;
@@ -1515,6 +1092,145 @@ export default function FeaturesLibrary() {
         } catch (err) { alert(`Error: ${err.message}`); }
     }, [deleteFeatureTarget, fetchModulesWithFeatures]);
 
+    // ── CSV Import ──────────────────────────────────────────────────────────────
+    const parseCSV = useCallback((text) => {
+        const lines = text.trim().split(/\r?\n/);
+        if (lines.length < 2) return [];
+        const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim());
+        return lines.slice(1).map(line => {
+            const vals = [];
+            let cur = "", inQ = false;
+            for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                if (ch === '"') { inQ = !inQ; }
+                else if (ch === "," && !inQ) { vals.push(cur.trim()); cur = ""; }
+                else { cur += ch; }
+            }
+            vals.push(cur.trim());
+            const row = {};
+            headers.forEach((h, i) => { row[h] = vals[i] || ""; });
+            return row;
+        }).filter(row => Object.values(row).some(v => v));
+    }, []);
+
+    const handleImportFile = useCallback((e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setImportFile(file);
+        setImportError("");
+        setImportSuccess("");
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const rows = parseCSV(ev.target.result);
+                if (!rows.length) { setImportError("No data rows found in the CSV."); setImportRows([]); return; }
+                setImportRows(rows);
+            } catch (err) { setImportError("Failed to parse CSV: " + err.message); setImportRows([]); }
+        };
+        reader.readAsText(file);
+    }, [parseCSV]);
+
+    const handleImportSubmit = useCallback(async () => {
+        if (!importRows.length) return;
+        setImportLoading(true); setImportError(""); setImportSuccess("");
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error("Must be logged in");
+
+            if (importType === "features") {
+                // Expect columns: Module Code, Feature Name, Feature Code, User Story, Description, Status
+                const modMap = {};
+                for (const m of modules) modMap[m.module_code] = m.id;
+
+                const inserts = importRows.map(row => {
+                    const moduleId = modMap[row["Module Code"]] || null;
+                    return {
+                        module_id: moduleId,
+                        feature_name: row["Feature Name"] || row["Name"] || "",
+                        feature_code: row["Feature Code"] || row["Code"] || "",
+                        user_story: row["User Story"] || null,
+                        description: row["Description"] || null,
+                        status: row["Status"] || "Active",
+                        created_at: new Date().toISOString(),
+                    };
+                }).filter(r => r.feature_name);
+
+                if (!inserts.length) throw new Error("No valid feature rows found. Ensure 'Feature Name' column exists.");
+                const { error } = await supabase.from("features").insert(inserts);
+                if (error) throw error;
+                setImportSuccess(`✓ Successfully imported ${inserts.length} feature(s).`);
+
+            } else {
+                // Test cases: expect columns: Feature Code, TC Name, Priority, Status, Test Type, Description, Test Scenario, Pre-Requisites, Test Steps, Expected Result
+                const featMap = {};
+                const modMap = {};
+                for (const m of modules) {
+                    modMap[m.module_code] = m.id;
+                    for (const f of m.features) { featMap[f.code] = { id: f.id, moduleId: m.id }; }
+                }
+
+                // Always query DB for true max TC ID — never rely on in-memory state
+                const { data: allTcIds } = await supabase.from("test_cases").select("test_case_id");
+                let tcCounter = 0;
+                for (const row of (allTcIds || [])) {
+                    const m = (row.test_case_id || "").match(/^TC-(\d+)$/i);
+                    if (m) tcCounter = Math.max(tcCounter, parseInt(m[1], 10));
+                }
+
+                const inserts = importRows.map(row => {
+                    const featCode = row["Feature Code"] || "";
+                    const feat = featMap[featCode] || {};
+                    tcCounter++;
+                    return {
+                        id: generateUUID(),
+                        test_case_id: `TC-${String(tcCounter).padStart(3, "0")}`,
+                        name: row["TC Name"] || row["Name"] || row["Test Case Name"] || "",
+                        description: row["Description"] || null,
+                        priority: row["Priority"] || "Medium",
+                        status: row["Status"] || "Active",
+                        feature_id: feat.id || null,
+                        module_id: feat.moduleId || null,
+                        test_type: row["Test Type"] || null,
+                        test_scenario: row["Test Scenario"] || null,
+                        pre_requisites: row["Pre-Requisites"] || null,
+                        test_steps: row["Test Steps"] || null,
+                        expected_result: row["Expected Result"] || null,
+                        created_by: user.id,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                    };
+                }).filter(r => r.name);
+
+                if (!inserts.length) throw new Error("No valid test case rows found. Ensure 'TC Name' or 'Name' column exists.");
+                const { error } = await supabase.from("test_cases").insert(inserts);
+                if (error) throw error;
+                setImportSuccess(`✓ Successfully imported ${inserts.length} test case(s).`);
+            }
+
+            fetchModulesWithFeatures();
+        } catch (err) { setImportError(err.message); }
+        finally { setImportLoading(false); }
+    }, [importRows, importType, modules, fetchModulesWithFeatures]);
+
+    const openImportModal = useCallback((type = "features") => {
+        setImportModal({ open: true });
+        setImportFile(null); setImportRows([]); setImportError(""); setImportSuccess("");
+        setImportType(type);
+    }, []);
+
+    const downloadSampleTemplate = useCallback((type) => {
+        let csv = "";
+        if (type === "features") {
+            csv = "Module Code,Feature Name,Feature Code,User Story,Description,Status";
+        } else {
+            csv = "Feature Code,TC Name,Priority,Status,Test Type,Description,Test Scenario,Pre-Requisites,Test Steps,Expected Result";
+        }
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+        a.download = `${type}_template.csv`;
+        a.click();
+    }, []);
+
     const exportToCSV = useCallback(() => {
         if (!flatFeatures.length) { alert("No data"); return; }
         const rows = [];
@@ -1562,14 +1278,14 @@ export default function FeaturesLibrary() {
                         <p style={{ fontSize: 12, color: T.textMuted, margin: "2px 0 0", lineHeight: 1.5 }}>All features with linked modules and test cases</p>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <button className="fl-btn-ghost" onClick={() => openImportModal("features")} style={{ padding: "8px 14px", fontSize: 13 }}>
+                            <i className="fa-solid fa-upload" style={{ fontSize: 11 }}></i> Import Features
+                        </button>
+                        <button className="fl-btn-ghost" onClick={() => openImportModal("testcases")} style={{ padding: "8px 14px", fontSize: 13 }}>
+                            <i className="fa-solid fa-upload" style={{ fontSize: 11 }}></i> Import Test Cases
+                        </button>
                         <button className="fl-btn-ghost" onClick={exportToCSV} style={{ padding: "8px 14px", fontSize: 13 }}>
                             <i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Export
-                        </button>
-                        <button className="fl-btn-ghost" onClick={() => setShowTCImport(true)} style={{ padding: "8px 14px", fontSize: 13 }}>
-                            <i className="fa-solid fa-file-import" style={{ fontSize: 11 }}></i> Import Test Cases
-                        </button>
-                        <button className="fl-btn-ghost" onClick={() => setShowFeatureImport(true)} style={{ padding: "8px 14px", fontSize: 13 }}>
-                            <i className="fa-solid fa-file-import" style={{ fontSize: 11 }}></i> Import Features
                         </button>
                         <button className="fl-btn-primary" onClick={openAddFeatureModal} style={{ padding: "8px 16px", fontSize: 13 }}>
                             <i className="fa-solid fa-plus" style={{ fontSize: 11 }}></i> Add Feature
@@ -1626,28 +1342,6 @@ export default function FeaturesLibrary() {
                     </div>
                 </div>
             </main>
-
-            {/* ── Feature Import Modal ── */}
-            {showFeatureImport && (
-                <FeatureImportModal
-                    onClose={() => setShowFeatureImport(false)}
-                    onSuccess={() => { fetchModulesWithFeatures(); setShowFeatureImport(false); }}
-                    modules={modules}
-                    flatFeatures={flatFeatures}
-                    users={users}
-                />
-            )}
-
-            {/* ── Test Case Import Modal ── */}
-            {showTCImport && (
-                <TestCaseImportModal
-                    onClose={() => setShowTCImport(false)}
-                    onSuccess={() => { fetchModulesWithFeatures(); setShowTCImport(false); }}
-                    modules={modules}
-                    flatFeatures={flatFeatures}
-                    users={users}
-                />
-            )}
 
             {/* ── Add Feature Modal ── */}
             {addFeatureModal && (
@@ -1777,28 +1471,57 @@ export default function FeaturesLibrary() {
             {/* ── Add Test Case Modal ── */}
             {addModal.open && (
                 <div style={OVERLAY} onClick={() => setAddModal({ open: false })}>
-                    <div className="fl-modal-enter" style={modalBox("620px")} onClick={e => e.stopPropagation()}>
+                    <div className="fl-modal-enter" style={modalBox("680px")} onClick={e => e.stopPropagation()}>
                         <div style={MODAL_HEADER}>
                             <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, margin: 0 }}>Add Test Case</h3>
                             <button onClick={() => setAddModal({ open: false })} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 16 }}><i className="fa-solid fa-times"></i></button>
                         </div>
                         <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+                            {/* ── Identifiers section ── */}
+                            <div style={{ background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 8, padding: "12px 14px" }}>
+                                <p style={{ fontSize: 10, fontWeight: 700, color: T.textFaint, textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 10px", fontFamily: T.sans }}>Identifiers</p>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                                    <Field label="Test Case ID">
+                                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 13px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8 }}>
+                                            <span style={{ fontSize: 13, fontWeight: 700, color: T.purple, fontFamily: T.mono }}>{form.id}</span>
+                                            <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>Auto</span>
+                                        </div>
+                                    </Field>
+                                    <Field label="Priority" required>
+                                        <Dropdown options={PRIORITY_WITH_PH} selected={form.priority} onChange={v => setForm(f => ({ ...f, priority: v }))} placeholder="Select Priority" />
+                                    </Field>
+                                </div>
+                            </div>
+
+                            {/* ── Basic Info ── */}
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                                <Field label="Test Case ID">
-                                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 13px", background: T.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 8 }}>
-                                        <span style={{ fontSize: 13, fontWeight: 700, color: T.purple, fontFamily: T.mono }}>{form.id}</span>
-                                        <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>Auto-generated</span>
-                                    </div>
+                                <Field label="Test Case Name" required>
+                                    <input className="fl-input" type="text" placeholder="e.g., Valid login with correct credentials" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
                                 </Field>
-                                <Field label="Priority" required>
-                                    <Dropdown options={PRIORITY_WITH_PH} selected={form.priority} onChange={v => setForm(f => ({ ...f, priority: v }))} placeholder="Select Priority" />
+                                <Field label="Test Type">
+                                    <Dropdown options={TEST_TYPE_OPTIONS} selected={form.test_type} onChange={v => setForm(f => ({ ...f, test_type: v }))} placeholder="Select Type" />
                                 </Field>
                             </div>
-                            <Field label="Test Case Name" required>
-                                <input className="fl-input" type="text" placeholder="e.g., Valid login with correct credentials" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-                            </Field>
+
                             <Field label="Description">
-                                <textarea className="fl-input" rows="3" placeholder="Brief description…" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "none" }} />
+                                <textarea className="fl-input" rows="2" placeholder="Brief description…" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "none" }} />
+                            </Field>
+
+                            <Field label="Test Scenario">
+                                <textarea className="fl-input" rows="2" placeholder="Describe the scenario being tested…" value={form.test_scenario} onChange={e => setForm(f => ({ ...f, test_scenario: e.target.value }))} style={{ resize: "none" }} />
+                            </Field>
+
+                            <Field label="Pre-Requisites">
+                                <textarea className="fl-input" rows="2" placeholder="List all conditions that must be met before running this test…" value={form.pre_requisites} onChange={e => setForm(f => ({ ...f, pre_requisites: e.target.value }))} style={{ resize: "none" }} />
+                            </Field>
+
+                            <Field label="Test Steps">
+                                <textarea className="fl-input" rows="4" placeholder={"1. Navigate to login page\n2. Enter valid credentials\n3. Click Sign In…"} value={form.test_steps} onChange={e => setForm(f => ({ ...f, test_steps: e.target.value }))} style={{ resize: "vertical" }} />
+                            </Field>
+
+                            <Field label="Expected Result">
+                                <textarea className="fl-input" rows="2" placeholder="Describe what the expected outcome should be…" value={form.expected_result} onChange={e => setForm(f => ({ ...f, expected_result: e.target.value }))} style={{ resize: "none" }} />
                             </Field>
 
                             {/* ── User Stories multi-select ── */}
@@ -1831,28 +1554,57 @@ export default function FeaturesLibrary() {
             {/* ── Edit Test Case Modal ── */}
             {editModal.open && (
                 <div style={OVERLAY} onClick={() => setEditModal({ open: false })}>
-                    <div className="fl-modal-enter" style={modalBox("620px")} onClick={e => e.stopPropagation()}>
+                    <div className="fl-modal-enter" style={modalBox("680px")} onClick={e => e.stopPropagation()}>
                         <div style={MODAL_HEADER}>
                             <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, margin: 0 }}>Edit Test Case</h3>
                             <button onClick={() => setEditModal({ open: false })} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 16 }}><i className="fa-solid fa-times"></i></button>
                         </div>
                         <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+                            {/* ── Identifiers section ── */}
+                            <div style={{ background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 8, padding: "12px 14px" }}>
+                                <p style={{ fontSize: 10, fontWeight: 700, color: T.textFaint, textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 10px", fontFamily: T.sans }}>Identifiers</p>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                                    <Field label="Test Case ID">
+                                        <input className="fl-input" type="text" value={form.id} readOnly style={{ background: T.surface, color: T.textMuted, cursor: "default" }} />
+                                    </Field>
+                                    <Field label="Priority" required>
+                                        <Dropdown options={PRIORITY_OPTIONS} selected={form.priority} onChange={v => setForm(f => ({ ...f, priority: v }))} placeholder="Select Priority" />
+                                    </Field>
+                                </div>
+                            </div>
+
+                            {/* ── Basic Info ── */}
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                                <Field label="Test Case ID">
-                                    <input className="fl-input" type="text" value={form.id} readOnly style={{ background: T.surfaceAlt, color: T.textMuted, cursor: "default" }} />
+                                <Field label="Test Case Name" required>
+                                    <input className="fl-input" type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
                                 </Field>
-                                <Field label="Priority" required>
-                                    <Dropdown options={PRIORITY_OPTIONS} selected={form.priority} onChange={v => setForm(f => ({ ...f, priority: v }))} placeholder="Select Priority" />
+                                <Field label="Test Type">
+                                    <Dropdown options={TEST_TYPE_OPTIONS} selected={form.test_type} onChange={v => setForm(f => ({ ...f, test_type: v }))} placeholder="Select Type" />
                                 </Field>
                             </div>
-                            <Field label="Test Case Name" required>
-                                <input className="fl-input" type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-                            </Field>
+
                             <Field label="Description">
-                                <textarea className="fl-input" rows="3" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "none" }} />
+                                <textarea className="fl-input" rows="2" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "none" }} />
                             </Field>
 
-                            {/* ── FIX: added User Stories to edit modal too ── */}
+                            <Field label="Test Scenario">
+                                <textarea className="fl-input" rows="2" placeholder="Describe the scenario being tested…" value={form.test_scenario} onChange={e => setForm(f => ({ ...f, test_scenario: e.target.value }))} style={{ resize: "none" }} />
+                            </Field>
+
+                            <Field label="Pre-Requisites">
+                                <textarea className="fl-input" rows="2" placeholder="List all conditions that must be met before running this test…" value={form.pre_requisites} onChange={e => setForm(f => ({ ...f, pre_requisites: e.target.value }))} style={{ resize: "none" }} />
+                            </Field>
+
+                            <Field label="Test Steps">
+                                <textarea className="fl-input" rows="4" placeholder={"1. Navigate to login page\n2. Enter valid credentials\n3. Click Sign In…"} value={form.test_steps} onChange={e => setForm(f => ({ ...f, test_steps: e.target.value }))} style={{ resize: "vertical" }} />
+                            </Field>
+
+                            <Field label="Expected Result">
+                                <textarea className="fl-input" rows="2" placeholder="Describe what the expected outcome should be…" value={form.expected_result} onChange={e => setForm(f => ({ ...f, expected_result: e.target.value }))} style={{ resize: "none" }} />
+                            </Field>
+
+                            {/* ── User Stories multi-select ── */}
                             <Field label="User Stories">
                                 <MultiSelectDropdown
                                     options={userStories}
@@ -1898,6 +1650,198 @@ export default function FeaturesLibrary() {
                                 <button onClick={() => setDeleteModal({ open: false })} style={BTN_CANCEL}>Cancel</button>
                                 <button onClick={handleDeleteTestCase} style={BTN_DANGER}>Delete</button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Import CSV Modal ── */}
+            {importModal.open && (
+                <div style={OVERLAY} onClick={() => setImportModal({ open: false })}>
+                    <div className="fl-modal-enter" style={{ ...modalBox("620px"), maxHeight: "92vh" }} onClick={e => e.stopPropagation()}>
+
+                        {/* Header */}
+                        <div style={{ padding: "22px 24px 18px", borderBottom: `1px solid ${T.borderLight}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                                <div style={{ width: 42, height: 42, background: T.greenLight, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                    <i className={`fa-solid ${importType === "features" ? "fa-list-check" : "fa-vial"}`} style={{ color: T.green, fontSize: 17 }}></i>
+                                </div>
+                                <div>
+                                    <h3 style={{ fontSize: 17, fontWeight: 700, color: T.text, margin: "0 0 2px", letterSpacing: "-0.01em" }}>
+                                        Import {importType === "features" ? "Features" : "Test Cases"} via CSV
+                                    </h3>
+                                    <p style={{ fontSize: 12, color: T.textMuted, margin: 0 }}>Upload a CSV file to bulk-{importType === "features" ? "create features" : "create test cases"}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setImportModal({ open: false })} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 4, marginTop: -2 }}>
+                                <i className="fa-solid fa-times"></i>
+                            </button>
+                        </div>
+
+                        <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16, overflowY: "auto" }}>
+
+                            {/* Need a template? banner */}
+                            <div style={{ background: "#EFF6FF", border: `1px solid #BFDBFE`, borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                    <i className="fa-solid fa-circle-info" style={{ color: T.blue, fontSize: 15, flexShrink: 0 }}></i>
+                                    <div>
+                                        <p style={{ fontSize: 13, fontWeight: 600, color: "#1E40AF", margin: "0 0 1px" }}>Need a template?</p>
+                                        <p style={{ fontSize: 11, color: "#3B82F6", margin: 0 }}>Download a pre-formatted CSV with example rows</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => downloadSampleTemplate(importType)}
+                                    style={{
+                                        flexShrink: 0, padding: "7px 14px", borderRadius: 7, cursor: "pointer",
+                                        fontSize: 12, fontWeight: 600, fontFamily: T.sans,
+                                        background: T.surface, border: `1.5px solid #93C5FD`, color: "#1D4ED8",
+                                        display: "inline-flex", alignItems: "center", gap: 6, transition: "all 0.13s", whiteSpace: "nowrap",
+                                    }}
+                                >
+                                    <i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Template
+                                </button>
+                            </div>
+
+                            {/* Expected columns */}
+                            <div style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: "14px 16px" }}>
+                                <p style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 10px", fontFamily: T.sans }}>Expected Columns</p>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                                    {(importType === "features"
+                                        ? [
+                                            { name: "Module Code", req: false },
+                                            { name: "Feature Name", req: true },
+                                            { name: "Feature Code", req: false },
+                                            { name: "User Story", req: false },
+                                            { name: "Description", req: false },
+                                            { name: "Status", req: false },
+                                        ]
+                                        : [
+                                            { name: "Feature Code", req: false },
+                                            { name: "TC Name", req: true },
+                                            { name: "Priority", req: false },
+                                            { name: "Status", req: false },
+                                            { name: "Test Type", req: false },
+                                            { name: "Description", req: false },
+                                            { name: "Test Scenario", req: false },
+                                            { name: "Pre-Requisites", req: false },
+                                            { name: "Test Steps", req: false },
+                                            { name: "Expected Result", req: false },
+                                        ]
+                                    ).map(col => (
+                                        <span key={col.name} style={{
+                                            display: "inline-flex", alignItems: "center", gap: 2,
+                                            padding: "4px 10px", borderRadius: 6, fontSize: 12, fontWeight: 500,
+                                            background: col.req ? T.greenLight : T.surfaceAlt,
+                                            border: `1px solid ${col.req ? T.greenTint : T.borderLight}`,
+                                            color: col.req ? T.green : T.textMid, fontFamily: T.sans,
+                                        }}>
+                                            {col.name}{col.req && <span style={{ color: T.red, marginLeft: 1, fontWeight: 700 }}>*</span>}
+                                        </span>
+                                    ))}
+                                </div>
+                                <p style={{ fontSize: 11, color: T.textFaint, margin: 0, lineHeight: 1.5, fontFamily: T.sans }}>
+                                    {importType === "features"
+                                        ? "Feature Name is required · Status: Active / Draft / Archived"
+                                        : "TC Name is required · Priority: High / Medium / Low · Status: Active / Draft / Archived"
+                                    }
+                                </p>
+                            </div>
+
+                            {/* Drop zone */}
+                            <div
+                                style={{
+                                    border: `2px dashed ${importFile ? T.green : "#D1D5DB"}`,
+                                    borderRadius: 12, padding: "36px 24px", textAlign: "center",
+                                    background: importFile ? T.greenLight : "#FAFAFA",
+                                    cursor: "pointer", transition: "all 0.15s",
+                                }}
+                                onClick={() => importFileRef.current?.click()}
+                                onDragOver={e => { e.preventDefault(); }}
+                                onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) { if (importFileRef.current) importFileRef.current.value = ""; handleImportFile({ target: { files: [f] } }); setImportFile(f); } }}
+                            >
+                                <input ref={importFileRef} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={handleImportFile} />
+                                {importFile ? (
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
+                                        <i className="fa-solid fa-file-csv" style={{ fontSize: 28, color: T.green }}></i>
+                                        <div style={{ textAlign: "left" }}>
+                                            <p style={{ fontSize: 13, fontWeight: 600, color: T.green, margin: "0 0 2px" }}>{importFile.name}</p>
+                                            <p style={{ fontSize: 11, color: T.textMuted, margin: 0 }}>{importRows.length} row{importRows.length !== 1 ? "s" : ""} detected</p>
+                                        </div>
+                                        <button onClick={e => { e.stopPropagation(); setImportFile(null); setImportRows([]); setImportError(""); setImportSuccess(""); if (importFileRef.current) importFileRef.current.value = ""; }}
+                                            style={{ marginLeft: 6, background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 15, padding: 4 }}>
+                                            <i className="fa-solid fa-times"></i>
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+                                            <i className="fa-solid fa-cloud-arrow-up" style={{ fontSize: 20, color: "#9CA3AF" }}></i>
+                                        </div>
+                                        <p style={{ fontSize: 14, fontWeight: 600, color: T.textMid, margin: "0 0 4px", fontFamily: T.sans }}>Drop your CSV file here</p>
+                                        <p style={{ fontSize: 12, color: T.textFaint, margin: 0, fontFamily: T.sans }}>or click to browse · .csv files only</p>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Preview table */}
+                            {importRows.length > 0 && (
+                                <div>
+                                    <p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 8px", fontFamily: T.sans }}>
+                                        Preview <span style={{ fontWeight: 400, textTransform: "none", color: T.textFaint }}>· first {Math.min(5, importRows.length)} of {importRows.length} rows</span>
+                                    </p>
+                                    <div style={{ overflowX: "auto", border: `1px solid ${T.border}`, borderRadius: 8 }}>
+                                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: T.sans }}>
+                                            <thead>
+                                                <tr style={{ background: T.surfaceAlt, borderBottom: `1px solid ${T.border}` }}>
+                                                    {Object.keys(importRows[0]).map(h => (
+                                                        <th key={h} style={{ padding: "7px 12px", textAlign: "left", fontWeight: 600, color: T.textMuted, whiteSpace: "nowrap", textTransform: "uppercase", fontSize: 10, letterSpacing: "0.05em" }}>{h}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {importRows.slice(0, 5).map((row, i) => (
+                                                    <tr key={i} style={{ borderBottom: `1px solid ${T.borderLight}`, background: i % 2 === 0 ? T.surface : T.surfaceAlt }}>
+                                                        {Object.values(row).map((v, j) => (
+                                                            <td key={j} style={{ padding: "7px 12px", color: T.textMid, whiteSpace: "nowrap", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis" }}>
+                                                                {v || <span style={{ color: T.textFaint }}>—</span>}
+                                                            </td>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Error / Success */}
+                            {importError && (
+                                <div style={{ background: T.redTint, border: `1px solid rgba(220,38,38,0.2)`, color: T.red, padding: "10px 14px", borderRadius: 8, fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                                    <i className="fa-solid fa-circle-exclamation"></i> {importError}
+                                </div>
+                            )}
+                            {importSuccess && (
+                                <div style={{ background: "rgba(34,197,94,0.08)", border: `1px solid rgba(34,197,94,0.25)`, color: "#15803D", padding: "10px 14px", borderRadius: 8, fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                                    <i className="fa-solid fa-circle-check"></i> {importSuccess}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div style={{ padding: "14px 24px", borderTop: `1px solid ${T.borderLight}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: T.surface }}>
+                            <button onClick={() => setImportModal({ open: false })} style={BTN_CANCEL}>Cancel</button>
+                            {importRows.length > 0 && (
+                                <button
+                                    onClick={handleImportSubmit}
+                                    disabled={importLoading}
+                                    style={{ ...BTN_PRIMARY, padding: "9px 20px", fontSize: 13, opacity: importLoading ? 0.7 : 1, cursor: importLoading ? "not-allowed" : "pointer" }}
+                                >
+                                    {importLoading
+                                        ? <><i className="fa-solid fa-spinner fa-spin" style={{ fontSize: 11 }}></i> Importing…</>
+                                        : <><i className="fa-solid fa-upload" style={{ fontSize: 11 }}></i> Import {importRows.length} Row{importRows.length !== 1 ? "s" : ""}</>
+                                    }
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>

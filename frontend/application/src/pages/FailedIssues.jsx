@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "../services/supabaseClient";
 import React from "react";
 
@@ -10,6 +10,120 @@ const PRIORITY_STYLES = {
     Low: "bg-slate-100  text-slate-600",
 };
 const getPriStyle = (p) => PRIORITY_STYLES[p] || "bg-slate-100 text-slate-600";
+
+// ── Custom Dropdown ───────────────────────────────────────────────────────────
+const DROPDOWN_STYLES = `
+    @keyframes dropdownIn {
+        from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+`;
+
+function Dropdown({ options, value, onChange, placeholder = "Select…" }) {
+    const [open, setOpen] = useState(false);
+    const ref = useRef(null);
+
+    useEffect(() => {
+        const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        document.addEventListener("mousedown", h);
+        return () => document.removeEventListener("mousedown", h);
+    }, []);
+
+    const label = options.find(o => o.value === value)?.label;
+
+    const triggerStyle = {
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "10px 14px",
+        background: open
+            ? "linear-gradient(135deg, #f0f4ff 0%, #fafbff 100%)"
+            : "linear-gradient(135deg, #fafbff 0%, #f4f6fb 100%)",
+        border: open ? "1.5px solid #6366f1" : "1.5px solid #e2e6f0",
+        borderRadius: 10,
+        fontSize: 13.5,
+        fontWeight: 500,
+        letterSpacing: "0.01em",
+        color: label ? "#1e293b" : "#94a3b8",
+        boxShadow: open
+            ? "0 0 0 3px rgba(99,102,241,.12), 0 2px 8px rgba(99,102,241,.08)"
+            : "0 1px 3px rgba(0,0,0,0.06)",
+        cursor: "pointer",
+        transition: "all 0.18s ease",
+        outline: "none",
+    };
+
+    const panelStyle = {
+        position: "absolute",
+        top: "calc(100% + 6px)",
+        left: 0,
+        right: 0,
+        zIndex: 9999,
+        background: "#ffffff",
+        border: "1.5px solid #e8eaf6",
+        borderRadius: 12,
+        boxShadow: "0 8px 32px rgba(99,102,241,.13), 0 2px 8px rgba(0,0,0,.08)",
+        padding: 6,
+        animation: "dropdownIn 0.18s cubic-bezier(.4,0,.2,1)",
+        maxHeight: 240,
+        overflowY: "auto",
+    };
+
+    return (
+        <div ref={ref} style={{ position: "relative" }}>
+            <style>{DROPDOWN_STYLES}</style>
+            <button type="button" onClick={() => setOpen(p => !p)} style={triggerStyle}>
+                <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {label || placeholder}
+                </span>
+                <svg
+                    style={{ width: 15, height: 15, marginLeft: 8, flexShrink: 0, transition: "transform 0.18s ease", transform: open ? "rotate(180deg)" : "rotate(0deg)", color: open ? "#6366f1" : "#94a3b8" }}
+                    viewBox="0 0 14 14" fill="none"
+                >
+                    <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+            </button>
+
+            {open && (
+                <div style={panelStyle}>
+                    {options.map(opt => {
+                        const sel = opt.value === value;
+                        return (
+                            <div
+                                key={opt.value}
+                                onClick={() => { onChange(opt.value); setOpen(false); }}
+                                style={{
+                                    padding: "9px 12px",
+                                    borderRadius: 8,
+                                    fontSize: 13.5,
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    transition: "all 0.12s ease",
+                                    background: sel ? "linear-gradient(135deg, #eef2ff 0%, #f0f4ff 100%)" : "transparent",
+                                    color: sel ? "#4f46e5" : "#374151",
+                                    fontWeight: sel ? 600 : 400,
+                                }}
+                                onMouseEnter={e => { if (!sel) { e.currentTarget.style.background = "#f8fafc"; e.currentTarget.style.color = "#1e293b"; } }}
+                                onMouseLeave={e => { if (!sel) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#374151"; } }}
+                            >
+                                <span>{opt.label}</span>
+                                {sel && (
+                                    <svg style={{ width: 13, height: 13, flexShrink: 0, marginLeft: 8, color: "#4f46e5" }} viewBox="0 0 14 14" fill="none">
+                                        <path d="M2.5 7l3.5 3.5 5.5-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ toasts }) {
@@ -417,7 +531,6 @@ export default function FailedIssues() {
     // ── Stats ──
     const stats = [
         { label: "Total Failed", value: issues.length, icon: "fa-bug", color: "red" },
-        { label: "Critical", value: issues.filter((i) => i.priority === "Critical").length, icon: "fa-skull-crossbones", color: "purple" },
         { label: "High Priority", value: issues.filter((i) => i.priority === "High").length, icon: "fa-arrow-up", color: "red" },
         { label: "Unassigned", value: issues.filter((i) => !i.assigned_to).length, icon: "fa-user-slash", color: "amber" },
         { label: "Total Comments", value: issues.reduce((a, i) => a + (i.comments?.length || 0), 0), icon: "fa-comments", color: "blue" },
@@ -456,7 +569,7 @@ export default function FailedIssues() {
                 <div className="p-4 lg:p-8 space-y-5">
 
                     {/* ── Stats ── */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         {stats.map((s) => {
                             const [bgC, textC, iconC] = colorMap[s.color];
                             return (
@@ -486,26 +599,33 @@ export default function FailedIssues() {
                             </div>
                             <div>
                                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Priority</label>
-                                <select value={filters.priority} onChange={(e) => setFilters({ ...filters, priority: e.target.value })}
-                                    className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                                    <option value="">All Priorities</option>
-                                    <option value="Critical">Critical</option>
-                                    <option value="High">High</option>
-                                    <option value="Medium">Medium</option>
-                                    <option value="Low">Low</option>
-                                </select>
+                                <Dropdown
+                                    value={filters.priority}
+                                    onChange={(v) => setFilters({ ...filters, priority: v })}
+                                    placeholder="All Priorities"
+                                    options={[
+                                        { value: "", label: "All Priorities" },
+                                        { value: "High", label: "High" },
+                                        { value: "Medium", label: "Medium" },
+                                        { value: "Low", label: "Low" },
+                                    ]}
+                                />
                             </div>
                             <div>
                                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Test Type</label>
-                                <select value={filters.issueType} onChange={(e) => setFilters({ ...filters, issueType: e.target.value })}
-                                    className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                                    <option value="">All Types</option>
-                                    <option value="Functional">Functional</option>
-                                    <option value="UI">UI</option>
-                                    <option value="Performance">Performance</option>
-                                    <option value="Security">Security</option>
-                                    <option value="Regression">Regression</option>
-                                </select>
+                                <Dropdown
+                                    value={filters.issueType}
+                                    onChange={(v) => setFilters({ ...filters, issueType: v })}
+                                    placeholder="All Types"
+                                    options={[
+                                        { value: "", label: "All Types" },
+                                        { value: "Functional", label: "Functional" },
+                                        { value: "UI", label: "UI" },
+                                        { value: "Performance", label: "Performance" },
+                                        { value: "Security", label: "Security" },
+                                        { value: "Regression", label: "Regression" },
+                                    ]}
+                                />
                             </div>
                         </div>
                         <div className="flex items-center gap-3 mt-4 pt-4 border-t border-slate-100">

@@ -52,7 +52,7 @@ const moduleIcons = {
 const VALID_PRIORITIES = ["High", "Medium", "Low"];
 const VALID_STATUSES = ["Active", "Inactive", "Archived"];
 const VALID_COLORS = ["blue", "green", "purple", "red", "indigo", "pink", "teal", "orange", "gray"];
-const CSV_TEMPLATE_HEADERS = ["Module Name", "Description", "Owner", "Priority", "Status", "Color"];
+const CSV_TEMPLATE_HEADERS = ["Module Code", "Module Name", "Description", "Owner", "Priority", "Status", "Color"];
 
 const exportToCSV = (data) => {
     if (!data || data.length === 0) { alert("No data to export"); return; }
@@ -71,13 +71,8 @@ const exportToCSV = (data) => {
 };
 
 const downloadTemplate = () => {
-    const example = [
-        CSV_TEMPLATE_HEADERS.join(","),
-        '"User Management","Handles all user auth and roles","Alice","High","Active","blue"',
-        '"Reporting & Analytics","Dashboard and reports","Bob","Medium","Active","purple"',
-    ].join("\n");
     const link = document.createElement("a");
-    link.setAttribute("href", URL.createObjectURL(new Blob([example], { type: "text/csv;charset=utf-8;" })));
+    link.setAttribute("href", URL.createObjectURL(new Blob([CSV_TEMPLATE_HEADERS.join(",")], { type: "text/csv;charset=utf-8;" })));
     link.setAttribute("download", "modules_import_template.csv");
     link.style.visibility = "hidden";
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
@@ -125,19 +120,37 @@ function parseCSV(text) {
 // ─── Simple dropdown ───────────────────────────────────────────────────────────
 function SimpleDropdown({ options, value, onChange, placeholder = "Select..." }) {
     const [open, setOpen] = useState(false);
-    const ref = useRef(null);
+    const [rect, setRect] = useState(null);
+    const btnRef = useRef(null);
+    const panelRef = useRef(null);
 
     useEffect(() => {
-        const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        const h = (e) => {
+            const clickedBtn = btnRef.current && btnRef.current.contains(e.target);
+            const clickedPanel = panelRef.current && panelRef.current.contains(e.target);
+            if (!clickedBtn && !clickedPanel) setOpen(false);
+        };
         document.addEventListener("mousedown", h);
         return () => document.removeEventListener("mousedown", h);
     }, []);
 
+    useEffect(() => {
+        if (!open) return;
+        const update = () => {
+            if (btnRef.current) setRect(btnRef.current.getBoundingClientRect());
+        };
+        update();
+        window.addEventListener("scroll", update, true);
+        window.addEventListener("resize", update);
+        return () => { window.removeEventListener("scroll", update, true); window.removeEventListener("resize", update); };
+    }, [open]);
+
     const label = options.find(o => o.id === value)?.name;
 
     return (
-        <div ref={ref} className="relative">
+        <div style={{ position: "relative" }}>
             <button
+                ref={btnRef}
                 type="button"
                 onClick={() => setOpen(p => !p)}
                 className={`w-full flex items-center justify-between px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 bg-white ${open ? "border-green-600 ring-2 ring-green-100" : "border-gray-200"} ${label ? "text-gray-900" : "text-gray-400"}`}
@@ -147,21 +160,44 @@ function SimpleDropdown({ options, value, onChange, placeholder = "Select..." })
                     <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
             </button>
-            {open && (
-                <div className="absolute top-full mt-1.5 left-0 right-0 z-50 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
-                    <div className="p-1.5 max-h-60 overflow-y-auto">
+            {open && rect && (
+                <div
+                    ref={panelRef}
+                    style={{
+                        position: "fixed",
+                        top: rect.bottom + 6,
+                        left: rect.left,
+                        width: rect.width,
+                        zIndex: 99999,
+                        background: "white",
+                        border: "1px solid #E5E7EB",
+                        borderRadius: 12,
+                        boxShadow: "0 8px 24px rgba(0,0,0,0.14)",
+                        overflow: "hidden",
+                    }}
+                >
+                    <div style={{ padding: 6, maxHeight: 240, overflowY: "auto" }}>
                         {options.map(opt => {
                             const sel = opt.id === value;
                             return (
                                 <div
                                     key={opt.id}
-                                    onClick={() => { onChange(opt.id); setOpen(false); }}
-                                    className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${sel ? "bg-green-50 text-green-700 font-semibold" : "text-gray-700 hover:bg-gray-50"}`}
+                                    onMouseDown={e => { e.preventDefault(); onChange(opt.id); setOpen(false); }}
+                                    style={{
+                                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                                        padding: "8px 12px", borderRadius: 8, cursor: "pointer", fontSize: 13,
+                                        fontWeight: sel ? 600 : 400,
+                                        color: sel ? "#15803d" : "#374151",
+                                        background: sel ? "#f0fdf4" : "transparent",
+                                        transition: "background 0.1s",
+                                    }}
+                                    onMouseEnter={e => { if (!sel) e.currentTarget.style.background = "#f9fafb"; }}
+                                    onMouseLeave={e => { if (!sel) e.currentTarget.style.background = "transparent"; }}
                                 >
                                     <span>{opt.name}</span>
                                     {sel && (
-                                        <svg className="w-3.5 h-3.5 text-green-700 flex-shrink-0" viewBox="0 0 14 14" fill="none">
-                                            <path d="M2.5 7l3.5 3.5 5.5-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, marginLeft: 8 }}>
+                                            <path d="M2.5 7l3.5 3.5 5.5-6" stroke="#15803d" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                                         </svg>
                                     )}
                                 </div>
@@ -256,7 +292,7 @@ function DeleteModuleModal({ module, onClose, onConfirm, loading }) {
 }
 
 // ─── Edit Module Modal ─────────────────────────────────────────────────────────
-function EditModuleModal({ module, onClose, onSuccess, users }) {
+function EditModuleModal({ module, onClose, onSuccess, users, existingModuleNames }) {
     const [selectedColor, setSelectedColor] = useState(module?.color || "blue");
     const [loading, setLoading] = useState(false);
     const [form, setForm] = useState({
@@ -274,6 +310,9 @@ function EditModuleModal({ module, onClose, onSuccess, users }) {
     const handleUpdate = async () => {
         if (!form.module_name) { alert("Module Name required"); return; }
         if (!form.priority) { alert("Priority required"); return; }
+        // Duplicate name check — exclude current module's own name
+        const duplicate = existingModuleNames.some(n => n.toLowerCase() === form.module_name.trim().toLowerCase() && n.toLowerCase() !== (module?.module_name || "").toLowerCase());
+        if (duplicate) { alert(`A module named "${form.module_name.trim()}" already exists. Please use a unique name.`); return; }
         setLoading(true);
         const { error } = await supabase.from("modules").update({
             module_code: parseInt(form.module_code) || 0,
@@ -354,7 +393,7 @@ function EditModuleModal({ module, onClose, onSuccess, users }) {
 }
 
 // ─── Create Module Modal ───────────────────────────────────────────────────────
-function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
+function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes, existingModuleNames }) {
     const [selectedColor, setSelectedColor] = useState("blue");
     const [loading, setLoading] = useState(false);
     const autoCode = generateModuleCode(existingModuleCodes);
@@ -366,6 +405,9 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
     const handleCreate = async () => {
         if (!form.module_name) { alert("Module Name required"); return; }
         if (!form.priority) { alert("Priority required"); return; }
+        // Duplicate name check
+        const duplicate = existingModuleNames.some(n => n.toLowerCase() === form.module_name.trim().toLowerCase());
+        if (duplicate) { alert(`A module named "${form.module_name.trim()}" already exists. Please use a unique name.`); return; }
         setLoading(true);
         const { error } = await supabase.from("modules").insert([{
             module_code: autoCode,
@@ -458,27 +500,38 @@ function CSVImportModal({ onClose, onSuccess, existingModuleCodes }) {
 
     const validateRows = (rows, existingCodes) => {
         const valid = [], errors = [];
-        let nextCodeBase = generateModuleCode(existingCodes);
+        const seenCodes = new Set(existingCodes.map(c => String(c)));
+        const seenNames = new Set();
         rows.forEach((row, idx) => {
             const rowNum = idx + 2;
             const errs = [];
-            const name = row["module_name"] || row["module name"] || "";
-            const priority = row["priority"] || "";
-            const status = row["status"] || "Active";
-            const color = (row["color"] || "blue").toLowerCase();
+            const name = (row["module_name"] || row["module name"] || "").trim();
+            const codeRaw = (row["module_code"] || row["module code"] || "").trim();
+            const priority = (row["priority"] || "").trim();
+            const status = (row["status"] || "Active").trim();
+            const color = (row["color"] || "blue").toLowerCase().trim();
+            const codeNum = parseInt(codeRaw, 10);
 
-            if (!name.trim()) errs.push("Module Name is required");
-            if (!priority.trim()) errs.push("Priority is required");
-            if (priority && !VALID_PRIORITIES.includes(priority)) errs.push(`Priority must be one of: ${VALID_PRIORITIES.join(", ")}`);
+            if (!codeRaw) errs.push("Module Code is required");
+            else if (isNaN(codeNum)) errs.push("Module Code must be a number");
+            else if (seenCodes.has(String(codeNum))) errs.push(`Module Code "${codeNum}" is already used — must be unique`);
+
+            if (!name) errs.push("Module Name is required");
+            else if (seenNames.has(name.toLowerCase())) errs.push(`Module Name "${name}" is duplicated within this CSV`);
+
+            if (!priority) errs.push("Priority is required");
+            else if (!VALID_PRIORITIES.includes(priority)) errs.push(`Priority must be one of: ${VALID_PRIORITIES.join(", ")}`);
             if (status && !VALID_STATUSES.includes(status)) errs.push(`Status must be one of: ${VALID_STATUSES.join(", ")}`);
             if (color && !VALID_COLORS.includes(color)) errs.push(`Color must be one of: ${VALID_COLORS.join(", ")}`);
 
             if (errs.length > 0) {
                 errors.push({ rowNum, name: name || "(blank)", errors: errs });
             } else {
+                seenCodes.add(String(codeNum));
+                seenNames.add(name.toLowerCase());
                 valid.push({
-                    module_code: nextCodeBase++,
-                    module_name: name.trim(),
+                    module_code: codeNum,
+                    module_name: name,
                     description: (row["description"] || "").trim(),
                     module_owner: (row["owner"] || "").trim() || null,
                     priority,
@@ -593,11 +646,12 @@ function CSVImportModal({ onClose, onSuccess, existingModuleCodes }) {
                                 <div className="flex flex-wrap gap-2">
                                     {CSV_TEMPLATE_HEADERS.map(h => (
                                         <span key={h} className="px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs font-mono text-gray-700">
-                                            {h}{["Module Name", "Priority"].includes(h) && <span className="text-red-400 ml-0.5">*</span>}
+                                            {h}{["Module Code", "Module Name", "Priority"].includes(h) && <span className="text-red-400 ml-0.5">*</span>}
                                         </span>
                                     ))}
                                 </div>
                                 <p className="text-xs text-gray-400 mt-2">
+                                    Module Code: <span className="font-mono">unique number (e.g. 1005)</span> &nbsp;·&nbsp;
                                     Priority: <span className="font-mono">High / Medium / Low</span> &nbsp;·&nbsp;
                                     Status: <span className="font-mono">Active / Inactive / Archived</span> &nbsp;·&nbsp;
                                     Color: <span className="font-mono">blue / green / purple / red / indigo / pink / teal / orange</span>
@@ -978,8 +1032,8 @@ export default function ModulesLibrary() {
     const [deleteLoading, setDeleteLoading] = useState(false);
 
     const fetchUsers = async () => {
-        const { data } = await supabase.from("users").select("*").order("name", { ascending: true });
-        setUsers(data || []);
+        const { data } = await supabase.from("profiles").select("id, full_name, email").order("full_name", { ascending: true });
+        setUsers((data || []).map(u => ({ id: u.id, name: u.full_name || u.email || u.id })));
     };
 
     const fetchModules = async () => {
@@ -1035,6 +1089,7 @@ export default function ModulesLibrary() {
 
     const uniqueOwners = ["All Owners", ...new Set(modules.map(m => m.module_owner).filter(Boolean))];
     const existingModuleCodes = modules.map(m => m.module_code);
+    const existingModuleNames = modules.map(m => m.module_name);
 
     const statsConfig = [
         { label: "Total Modules", value: modules.length, icon: "fa-puzzle-piece", colorClass: "text-blue-500", bgClass: "bg-blue-50" },
@@ -1160,6 +1215,7 @@ export default function ModulesLibrary() {
                     onSuccess={fetchModules}
                     users={users}
                     existingModuleCodes={existingModuleCodes}
+                    existingModuleNames={existingModuleNames}
                 />
             )}
             {showEditModal && editingModule && (
@@ -1168,6 +1224,7 @@ export default function ModulesLibrary() {
                     onClose={() => { setShowEditModal(false); setEditingModule(null); }}
                     onSuccess={fetchModules}
                     users={users}
+                    existingModuleNames={existingModuleNames}
                 />
             )}
             {showImportModal && (

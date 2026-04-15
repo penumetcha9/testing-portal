@@ -304,6 +304,23 @@ function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, add
                     </div>
 
                     <div className="bg-white border border-slate-200 rounded-xl p-4">
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Change Role</p>
+                        <div className="flex gap-2">
+                            <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="flex-1 px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                                <option value="tester">Tester</option>
+                                <option value="developer">Developer</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                            <button type="button" onClick={handleRoleSave} disabled={savingRole || newRole === currentRole}
+                                className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${saveSuccess ? "bg-emerald-100 text-emerald-700" : "bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"}`}>
+                                {savingRole ? <><i className="fa-solid fa-spinner animate-spin" />Saving…</> : saveSuccess ? <><i className="fa-solid fa-check-double" />Saved!</> : <><i className="fa-solid fa-check" />Save</>}
+                            </button>
+                        </div>
+                        {newRole !== currentRole && !saveSuccess && <p className="text-xs text-amber-600 mt-2 flex items-center gap-1"><i className="fa-solid fa-triangle-exclamation" />Role changed to <strong>{newRole}</strong> — click Save to apply</p>}
+                        {saveSuccess && <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1"><i className="fa-solid fa-check-circle" />Role successfully updated to <strong>{currentRole}</strong></p>}
+                    </div>
+
+                    <div className="bg-white border border-slate-200 rounded-xl p-4">
                         <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Account Status</p>
                         <div className="flex items-center justify-between">
                             <div>
@@ -381,7 +398,67 @@ function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, add
     );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// ── Role Cell with local state — only saves on explicit confirm ───────────────
+function RoleCell({ userId, savedRole, onSave }) {
+    const [committedRole, setCommittedRole] = useState(savedRole);
+    const [pendingRole, setPendingRole] = useState(savedRole);
+    const [saving, setSaving] = useState(false);
+    const isDirty = pendingRole !== committedRole;
+
+    const handleSave = async () => {
+        setSaving(true);
+        const success = await onSave(userId, pendingRole);
+        if (success) {
+            setCommittedRole(pendingRole); // lock in the new role only on confirmed save
+        } else {
+            setPendingRole(committedRole); // revert dropdown on failure
+        }
+        setSaving(false);
+    };
+
+    const handleDiscard = () => setPendingRole(committedRole);
+
+    return (
+        <div className="flex items-center gap-1.5">
+            <select
+                value={pendingRole}
+                onChange={(e) => setPendingRole(e.target.value)}
+                className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+                <option value="tester">Tester</option>
+                <option value="developer">Developer</option>
+                <option value="admin">Admin</option>
+            </select>
+            {isDirty && (
+                <>
+                    <button
+                        type="button"
+                        onClick={handleSave}
+                        disabled={saving}
+                        title="Save role change"
+                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:opacity-60"
+                    >
+                        {saving
+                            ? <i className="fa-solid fa-spinner animate-spin text-[10px]" />
+                            : <i className="fa-solid fa-check text-[10px]" />
+                        }
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleDiscard}
+                        disabled={saving}
+                        title="Discard change"
+                        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 transition-colors"
+                    >
+                        <i className="fa-solid fa-xmark text-[10px]" />
+                    </button>
+                </>
+            )}
+        </div>
+    );
+}
+
+
 export default function UserManagement() {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -470,13 +547,42 @@ export default function UserManagement() {
 
     const handleQuickRoleChange = useCallback(async (userId, newRole) => {
         try {
-            const { error } = await supabase.from("profiles").update({ role: newRole }).eq("id", userId);
-            if (error) { addToast("Role update failed: " + error.message, "error"); return; }
-            addToast("Role updated to " + newRole);
+            const { error, count } = await supabase
+                .from("profiles")
+                .update({ role: newRole }, { count: "exact" })
+                .eq("id", userId);
+            if (error) {
+                addToast("Role update failed: " + error.message, "error");
+                return false;
+            }
+            if (count === 0) {
+                addToast("Role update failed: no rows updated (check RLS policy)", "error");
+                return false;
+            }
+            // Update local state immediately for instant UI feedback
             setUsers((p) => p.map((u) => u.id === userId ? { ...u, role: newRole } : u));
             setSelectedUser((prev) => prev?.id === userId ? { ...prev, role: newRole } : prev);
-        } catch (e) { addToast("Unexpected error: " + e.message, "error"); }
+            addToast("Role updated to " + newRole);
+            return true;
+        } catch (e) {
+            addToast("Unexpected error: " + e.message, "error");
+            return false;
+        }
     }, [addToast]);
+
+    const handleExport = useCallback(() => {
+        const rows = [
+            ["Name", "Email", "Role", "Status"],
+            ...filteredUsers.map((u) => [u.full_name || "", u.email, u.role, u.is_active === false ? "Inactive" : "Active"]),
+        ].map((r) => r.map((c) => `"${(c || "").toString().replace(/"/g, '""')}"`).join(",")).join("\n");
+        const blob = new Blob([rows], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = `users-${new Date().toISOString().split("T")[0]}.csv`; a.click();
+        URL.revokeObjectURL(url);
+        addToast(`Exported ${filteredUsers.length} users`);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [users, addToast]);
 
     const filteredUsers = users.filter((u) => {
         const q = searchTerm.toLowerCase();
@@ -484,21 +590,6 @@ export default function UserManagement() {
         const matchRole = filterRole === "all" || u.role === filterRole;
         return matchSearch && matchRole;
     });
-
-    const handleExport = useCallback(() => {
-        const exportData = filteredUsers;
-        const roleLabel = filterRole !== "all" ? `_${filterRole}s` : "";
-        const rows = [
-            ["Name", "Email", "Role", "Status"],
-            ...exportData.map((u) => [u.full_name || "", u.email, u.role, u.is_active === false ? "Inactive" : "Active"]),
-        ].map((r) => r.map((c) => `"${(c || "").toString().replace(/"/g, '""')}"`).join(",")).join("\n");
-        const blob = new Blob([rows], { type: "text/csv" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url; a.download = `users${roleLabel}-${new Date().toISOString().split("T")[0]}.csv`; a.click();
-        URL.revokeObjectURL(url);
-        addToast(`Exported ${exportData.length} user${exportData.length !== 1 ? "s" : ""}${roleLabel ? ` (${filterRole})` : ""}`);
-    }, [filteredUsers, filterRole, addToast]);
 
     const stats = [
         { label: "Total Users", value: users.length, icon: "fa-users", color: "emerald" },
@@ -657,12 +748,11 @@ export default function UserManagement() {
                                                     </td>
                                                     <td className="px-5 py-4">
                                                         <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                                                            <select value={user.role} onChange={(e) => handleQuickRoleChange(user.id, e.target.value)}
-                                                                className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                                                                <option value="tester">Tester</option>
-                                                                <option value="developer">Developer</option>
-                                                                <option value="admin">Admin</option>
-                                                            </select>
+                                                            <RoleCell
+                                                                userId={user.id}
+                                                                savedRole={user.role}
+                                                                onSave={handleQuickRoleChange}
+                                                            />
                                                             <button type="button" onClick={() => handleDelete(user.id)} title="Delete user"
                                                                 className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-50 transition-colors">
                                                                 <i className="fa-solid fa-trash text-sm" />
