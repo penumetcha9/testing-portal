@@ -54,29 +54,17 @@ function Toast({ toasts }) {
 // ── Assignment Badge ─────────────────────────────────────────────────────────
 function AssignmentBadge({ status }) {
     const map = {
-        pass: "bg-green-500/10 text-green-600",
-        passed: "bg-green-500/10 text-green-600",
         Passed: "bg-green-500/10 text-green-600",
-        fail: "bg-red-500/10 text-red-600",
-        failed: "bg-red-500/10 text-red-600",
         Failed: "bg-red-500/10 text-red-600",
-        blocked: "bg-orange-500/10 text-orange-600",
-        Blocked: "bg-orange-500/10 text-orange-600",
         Pending: "bg-yellow-500/10 text-yellow-600",
-        pending: "bg-yellow-500/10 text-yellow-600",
-        "not-tested": "bg-gray-100 text-gray-500",
-        "not_tested": "bg-gray-100 text-gray-500",
-        "Not Tested": "bg-gray-100 text-gray-500",
         "In Progress": "bg-blue-500/10 text-blue-600",
         Active: "bg-emerald-500/10 text-emerald-600",
-        active: "bg-emerald-500/10 text-emerald-600",
         Inactive: "bg-gray-200 text-gray-500",
+        active: "bg-emerald-500/10 text-emerald-600",
         testing: "bg-blue-500/10 text-blue-600",
         planning: "bg-purple-500/10 text-purple-600",
         completed: "bg-gray-200 text-gray-600",
         archived: "bg-gray-100 text-gray-400",
-        Archived: "bg-gray-100 text-gray-400",
-        Draft: "bg-gray-100 text-gray-500",
     };
     return (
         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${map[status] || "bg-muted text-muted-foreground"}`}>
@@ -119,7 +107,7 @@ function MyAssignments({ userId }) {
                 modules ( module_name ),
                 versions ( version_number )
             `)
-            .eq("assigned_to", userId)
+            .eq("assigned_to", userId.toString())
             .order("created_at", { ascending: false })
             .limit(20);
 
@@ -131,7 +119,7 @@ function MyAssignments({ userId }) {
         const { data: tcData, error: tcError } = await supabase
             .from("test_cases")
             .select("module_id")
-            .eq("assigned_to", userId);
+            .eq("assigned_to", userId.toString());
 
         if (tcError || !tcData) return;
 
@@ -152,7 +140,7 @@ function MyAssignments({ userId }) {
         const { data: tcData, error: tcError } = await supabase
             .from("test_cases")
             .select("version_id")
-            .eq("assigned_to", userId);
+            .eq("assigned_to", userId.toString());
 
         if (tcError || !tcData) return;
 
@@ -173,7 +161,7 @@ function MyAssignments({ userId }) {
         const { data: tcData, error: tcError } = await supabase
             .from("test_cases")
             .select("feature_id")
-            .eq("assigned_to", userId);
+            .eq("assigned_to", userId.toString());
 
         if (tcError || !tcData) return;
 
@@ -426,6 +414,8 @@ export default function Dashboard() {
     useEffect(() => { fetchAll(); }, [fetchAll]);
 
     async function fetchStats() {
+        // Total, Passed, Failed — all from test_cases table by status
+        // Executions count — from test_executions table
         const [
             { count: total },
             { count: passed },
@@ -433,8 +423,8 @@ export default function Dashboard() {
             { count: executions },
         ] = await Promise.all([
             supabase.from("test_cases").select("*", { count: "exact", head: true }),
-            supabase.from("test_executions").select("*", { count: "exact", head: true }).eq("execution_status", "pass"),
-            supabase.from("test_executions").select("*", { count: "exact", head: true }).eq("execution_status", "fail"),
+            supabase.from("test_cases").select("*", { count: "exact", head: true }).eq("status", "Passed"),
+            supabase.from("test_cases").select("*", { count: "exact", head: true }).eq("status", "Failed"),
             supabase.from("test_executions").select("*", { count: "exact", head: true }),
         ]);
 
@@ -442,7 +432,8 @@ export default function Dashboard() {
         const p = passed || 0;
         const f = failed || 0;
         const exec = executions || 0;
-        const passRate = exec > 0 ? Math.round((p / exec) * 100) : 0;
+        // Pass rate based on test cases (passed out of total)
+        const passRate = t > 0 ? Math.round((p / t) * 100) : 0;
 
         setStats({
             total: t,
@@ -474,9 +465,9 @@ export default function Dashboard() {
         const shaped = versionsData.map((v, i) => {
             const tcs = v.test_cases || [];
             const total = tcs.length;
-            const passed = tcs.filter(t => ["pass", "passed"].includes((t.status || "").toLowerCase())).length;
-            const failed = tcs.filter(t => ["fail", "failed"].includes((t.status || "").toLowerCase())).length;
-            const pending = tcs.filter(t => !["pass", "passed", "fail", "failed"].includes((t.status || "").toLowerCase())).length;
+            const passed = tcs.filter(t => t.status === "Passed").length;
+            const failed = tcs.filter(t => t.status === "Failed").length;
+            const pending = tcs.filter(t => t.status === "Pending").length;
             const completion = total > 0 ? Math.round(((passed + failed) / total) * 100) : 0;
             return {
                 version_id: v.id,
@@ -505,7 +496,7 @@ export default function Dashboard() {
         const shaped = data.map(m => {
             const tcs = m.test_cases || [];
             const total = tcs.length;
-            const passed = tcs.filter(t => ["pass", "passed"].includes((t.status || "").toLowerCase())).length;
+            const passed = tcs.filter(t => t.status === "Passed").length;
             const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
             return {
                 id: m.id,
@@ -574,7 +565,7 @@ export default function Dashboard() {
                 };
             }
             memberMap[id].assigned++;
-            if (["pass", "passed"].includes((e.execution_status || "").toLowerCase())) memberMap[id].completed++;
+            if (e.execution_status === "Passed") memberMap[id].completed++;
         });
 
         const shaped = Object.values(memberMap)
@@ -586,8 +577,7 @@ export default function Dashboard() {
                     barColor: passRate >= 80 ? "bg-green-500" : passRate >= 50 ? "bg-accent" : "bg-destructive",
                 };
             })
-            .sort((a, b) => b.assigned - a.assigned)
-            .slice(0, 10);
+            .sort((a, b) => b.assigned - a.assigned);
 
         setTeamMembers(shaped);
     }
@@ -633,9 +623,8 @@ export default function Dashboard() {
         data.forEach(e => {
             const key = e.created_at.split("T")[0];
             if (!buckets[key]) return;
-            const s = (e.execution_status || "").toLowerCase();
-            if (s === "pass" || s === "passed") buckets[key].passed++;
-            else if (s === "fail" || s === "failed") buckets[key].failed++;
+            if (e.execution_status === "Passed") buckets[key].passed++;
+            else if (e.execution_status === "Failed") buckets[key].failed++;
             else buckets[key].pending++;
         });
 
@@ -660,9 +649,8 @@ export default function Dashboard() {
     }
 
     const execIcon = (status) => {
-        const s = (status || "").toLowerCase();
-        if (s === "pass" || s === "passed") return { bg: "bg-green-500/10", color: "text-green-500", icon: "fa-check" };
-        if (s === "fail" || s === "failed") return { bg: "bg-destructive/10", color: "text-destructive", icon: "fa-times" };
+        if (status === "Passed") return { bg: "bg-green-500/10", color: "text-green-500", icon: "fa-check" };
+        if (status === "Failed") return { bg: "bg-destructive/10", color: "text-destructive", icon: "fa-times" };
         return { bg: "bg-accent/10", color: "text-accent", icon: "fa-clock" };
     };
 
@@ -691,7 +679,7 @@ export default function Dashboard() {
                             icon="fa-circle-check"
                             iconBg="bg-green-500/10"
                             iconColor="text-green-500"
-                            label="Passed Executions"
+                            label="Passed Test Cases"
                             value={stats.passed}
                             sub={`${stats.passRate}% pass rate`}
                             subColor="text-green-500"
@@ -701,7 +689,7 @@ export default function Dashboard() {
                             icon="fa-circle-xmark"
                             iconBg="bg-destructive/10"
                             iconColor="text-destructive"
-                            label="Failed Executions"
+                            label="Failed Test Cases"
                             value={stats.failed}
                             sub="Needs attention"
                             subColor="text-destructive"
@@ -804,14 +792,14 @@ export default function Dashboard() {
                                 <p className="text-sm text-muted-foreground">Overall test results</p>
                             </div>
                             <div className="p-6">
-                                {!loading && stats.executions > 0 ? (
+                                {!loading && stats.total > 0 ? (
                                     <div className="space-y-4">
                                         {[
-                                            { label: "Passed", value: stats.passed, color: "bg-green-500", textColor: "text-green-600" },
-                                            { label: "Failed", value: stats.failed, color: "bg-destructive", textColor: "text-destructive" },
-                                            { label: "Other / Blocked", value: Math.max(0, stats.executions - stats.passed - stats.failed), color: "bg-accent", textColor: "text-accent" },
+                                            { label: "Passed Test Cases", value: stats.passed, color: "bg-green-500", textColor: "text-green-600" },
+                                            { label: "Failed Test Cases", value: stats.failed, color: "bg-destructive", textColor: "text-destructive" },
                                         ].map(s => {
-                                            const pct = stats.executions > 0 ? Math.min(Math.round((s.value / stats.executions) * 100), 100) : 0;
+                                            const base = stats.total > 0 ? stats.total : 1;
+                                            const pct = Math.min(Math.round((s.value / base) * 100), 100);
                                             return (
                                                 <div key={s.label}>
                                                     <div className="flex justify-between mb-1.5 text-sm">
@@ -831,7 +819,6 @@ export default function Dashboard() {
                                             <div className="text-center">
                                                 <p className="text-4xl font-bold text-foreground">{stats.passRate}%</p>
                                                 <p className="text-sm text-muted-foreground mt-1">Overall Pass Rate</p>
-                                                <p className="text-xs text-muted-foreground mt-0.5">{stats.executions} total executions</p>
                                             </div>
                                         </div>
                                     </div>
@@ -947,7 +934,7 @@ export default function Dashboard() {
                                     <table className="w-full">
                                         <thead className="bg-muted border-b border-border">
                                             <tr>
-                                                {["Tester", "Total Runs", "Passed", "Pass Rate"].map(h => (
+                                                {["Tester", "Executions", "Passed", "Pass Rate"].map(h => (
                                                     <th key={h} className="px-6 py-3 text-left text-xs font-semibold text-foreground uppercase tracking-wider">{h}</th>
                                                 ))}
                                             </tr>
