@@ -730,6 +730,7 @@ const UserStoryMapping = () => {
     const [profilesLoading, setProfilesLoading] = useState(true);
     const [features, setFeatures] = useState([]);
     const [featuresLoading, setFeaturesLoading] = useState(true);
+    const [versions, setVersions] = useState([]);
 
     useEffect(() => {
         const fetchProfiles = async () => {
@@ -755,6 +756,17 @@ const UserStoryMapping = () => {
             finally { setFeaturesLoading(false); }
         };
         fetchFeatures();
+    }, []);
+
+    useEffect(() => {
+        const fetchVersions = async () => {
+            try {
+                const { data, error } = await supabase.from("versions").select("id, version_number, build_number").order("created_date", { ascending: false });
+                if (error) { console.error("Versions fetch error:", error); return; }
+                setVersions(data || []);
+            } catch (err) { console.error("Versions unexpected error:", err); }
+        };
+        fetchVersions();
     }, []);
 
     useEffect(() => {
@@ -1360,8 +1372,8 @@ const UserStoryMapping = () => {
                                                 <div><label className="text-xs text-muted-foreground block mb-1">Estimate Hours</label><input type="number" min="0" step="0.5" value={formData.estimateHours} onChange={e => handleInputChange('estimateHours', e.target.value)} placeholder="e.g. 8.5" className="w-full px-3 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary" /></div>
                                                 <div className="pt-3 border-t border-border space-y-3">
                                                     <div><label className="text-xs text-muted-foreground block mb-1">Planned Sprint</label><input type="text" value={formData.plannedSprint} onChange={e => handleInputChange('plannedSprint', e.target.value)} placeholder="e.g. Sprint 12" className="w-full px-3 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary" /></div>
-                                                    <div><label className="text-xs text-muted-foreground block mb-1">Planned Release</label><input type="text" value={formData.plannedRelease} onChange={e => handleInputChange('plannedRelease', e.target.value)} placeholder="e.g. v2.4.0" className="w-full px-3 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary" /></div>
-                                                    <div><label className="text-xs text-muted-foreground block mb-1">Version/Build</label><input type="text" value={formData.versionBuild} onChange={e => handleInputChange('versionBuild', e.target.value)} placeholder="e.g. build-1042" className="w-full px-3 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary" /></div>
+                                                    <div><label className="text-xs text-muted-foreground block mb-1">Planned Release</label><CustomSelect value={formData.plannedRelease} onChange={v => handleInputChange('plannedRelease', v)} options={versions.map(v => ({ value: v.version_number, label: v.version_number }))} placeholder="Select version…" /></div>
+                                                    <div><label className="text-xs text-muted-foreground block mb-1">Build Number</label><CustomSelect value={formData.versionBuild} onChange={v => handleInputChange('versionBuild', v)} options={versions.map(v => ({ value: v.build_number, label: v.build_number }))} placeholder="Select build…" /></div>
                                                 </div>
                                                 {formData.linkedFeatures.length > 0 && (
                                                     <div className="pt-3 border-t border-border">

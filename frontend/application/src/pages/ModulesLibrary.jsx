@@ -65,6 +65,17 @@ const exportToCSV = (data) => {
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
 };
 
+// ─── Import Template: header-only, no comments, no example rows ───────────────
+const downloadImportTemplate = () => {
+    const headers = ["Module Name", "Description", "Module Owner", "Priority", "Status", "Icon Color"];
+    const csv = headers.join(",") + "\n";
+    const link = document.createElement("a");
+    link.setAttribute("href", URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" })));
+    link.setAttribute("download", "modules_import_template.csv");
+    link.style.visibility = "hidden";
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+};
+
 const generateModuleCode = (existingCodes = []) => {
     const nums = existingCodes.map(c => parseInt(c, 10)).filter(c => !isNaN(c)).sort((a, b) => a - b);
     let next = 1001;
@@ -72,7 +83,7 @@ const generateModuleCode = (existingCodes = []) => {
     return next;
 };
 
-// ─── Simple dropdown matching Versions page style ──────────────────────────────
+// ─── Simple Dropdown ───────────────────────────────────────────────────────────
 function SimpleDropdown({ options, value, onChange, placeholder = "Select..." }) {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
@@ -144,7 +155,7 @@ function ColorPicker({ colors, selected, onChange }) {
 
 const COLORS = ["blue", "green", "purple", "red", "indigo", "pink", "teal", "orange"];
 
-// ─── Field wrapper ─────────────────────────────────────────────────────────────
+// ─── Field Wrapper ─────────────────────────────────────────────────────────────
 function Field({ label, required, children, hint }) {
     return (
         <div>
@@ -162,7 +173,6 @@ function DeleteModuleModal({ module, onClose, onConfirm, loading }) {
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={onClose}>
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-                {/* Header */}
                 <div className="p-6 border-b border-gray-100 flex items-start justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-11 h-11 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
@@ -177,10 +187,7 @@ function DeleteModuleModal({ module, onClose, onConfirm, loading }) {
                         <i className="fa-solid fa-times text-lg" />
                     </button>
                 </div>
-
-                {/* Body */}
                 <div className="p-6 space-y-4">
-                    {/* Module info */}
                     <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
                         <p className="text-sm font-semibold text-gray-900 mb-1">{module?.module_name}</p>
                         <p className="text-xs text-gray-400 font-mono mb-1">Code: {module?.module_code}</p>
@@ -188,16 +195,12 @@ function DeleteModuleModal({ module, onClose, onConfirm, loading }) {
                             <p className="text-xs text-gray-500 leading-relaxed">{module.description}</p>
                         )}
                     </div>
-
-                    {/* Warning */}
                     <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex gap-3">
                         <i className="fa-solid fa-triangle-exclamation text-red-500 text-sm mt-0.5 flex-shrink-0" />
                         <p className="text-xs text-red-600 leading-relaxed">
                             Deleting this module will permanently remove it and all associated data including features and test cases linked to it.
                         </p>
                     </div>
-
-                    {/* Actions */}
                     <div className="flex gap-3 pt-2">
                         <button onClick={onClose} disabled={loading}
                             className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
@@ -228,60 +231,32 @@ function EditModuleModal({ module, onClose, onSuccess, users }) {
         status: module?.status || "Active",
     });
 
-    // Re-sync form whenever a fresh module is passed in
-    useEffect(() => {
-        if (!module) return;
-        setForm({
-            module_code: module.module_code || "",
-            module_name: module.module_name || "",
-            description: module.description || "",
-            module_owner: module.module_owner || "",
-            priority: module.priority || "",
-            status: module.status || "Active",
-        });
-        setSelectedColor(module.color || "blue");
-    }, [module?.id]);
-
     const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-
-    // Always use user name as the option id — that's what's stored in module_owner column
-    const userOptions = [
-        { id: "", name: "Select Owner" },
-        ...users.filter(u => u.name).map(u => ({ id: u.name, name: u.name })),
-    ];
+    const userOptions = [{ id: "", name: "Select Owner" }, ...users.map(u => ({ id: u.name || u.id, name: u.name }))];
 
     const handleUpdate = async () => {
         if (!form.module_name) { alert("Module Name required"); return; }
+        if (!form.description) { alert("Description required"); return; }
+        if (!form.module_owner) { alert("Module Owner required"); return; }
         if (!form.priority) { alert("Priority required"); return; }
         setLoading(true);
-        const { data: updated, error, count } = await supabase
-            .from("modules")
-            .update({
-                module_name: form.module_name,
-                description: form.description || null,
-                module_owner: form.module_owner || null,
-                priority: form.priority,
-                status: form.status,
-                color: selectedColor,
-            })
-            .eq("id", module.id)
-            .select();
+        const { error } = await supabase.from("modules").update({
+            module_code: parseInt(form.module_code) || 0,
+            module_name: form.module_name,
+            description: form.description,
+            module_owner: form.module_owner,
+            priority: form.priority,
+            status: form.status,
+            color: selectedColor,
+        }).eq("id", module.id);
         setLoading(false);
-        if (error) {
-            alert(`DB Error: ${error.message}\nCode: ${error.code}\nDetails: ${error.details}`);
-        } else if (!updated || updated.length === 0) {
-            alert(`Update failed silently — 0 rows were modified.\n\nThis is likely a Row Level Security (RLS) policy blocking the update.\n\nModule ID: ${module.id}\n\nPlease check your Supabase RLS policies on the modules table.`);
-        } else {
-            onSuccess();
-            onClose();
-        }
+        if (error) { alert(`Error: ${error.message}`); }
+        else { onSuccess(); onClose(); }
     };
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={onClose}>
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-
-                {/* Header */}
                 <div className="sticky top-0 bg-white z-10 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
@@ -296,8 +271,6 @@ function EditModuleModal({ module, onClose, onSuccess, users }) {
                         <i className="fa-solid fa-times text-lg" />
                     </button>
                 </div>
-
-                {/* Body */}
                 <div className="p-6 space-y-5">
                     <Field label="Module Name" required>
                         <input
@@ -306,41 +279,34 @@ function EditModuleModal({ module, onClose, onSuccess, users }) {
                             placeholder="e.g., User Management"
                             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-500" />
                     </Field>
-
                     <Field label="Module Code" hint="Auto-generated · read-only">
                         <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
                             <i className="fa-solid fa-lock text-gray-300 text-xs" />
                             <span className="text-sm text-gray-500 font-mono">{form.module_code}</span>
                         </div>
                     </Field>
-
-                    <Field label="Description">
+                    <Field label="Description" required>
                         <textarea
                             rows={3} value={form.description}
                             onChange={e => set("description", e.target.value)}
                             placeholder="Brief description of this module..."
                             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-500 resize-none" />
                     </Field>
-
                     <div className="grid grid-cols-2 gap-4">
-                        <Field label="Module Owner">
+                        <Field label="Module Owner" required>
                             <SimpleDropdown options={userOptions} value={form.module_owner} onChange={v => set("module_owner", v)} placeholder="Select Owner" />
                         </Field>
                         <Field label="Priority" required>
                             <SimpleDropdown options={PRIORITY_OPTIONS} value={form.priority} onChange={v => set("priority", v)} placeholder="Select Priority" />
                         </Field>
                     </div>
-
                     <Field label="Status" required>
                         <SimpleDropdown options={STATUS_OPTIONS} value={form.status} onChange={v => set("status", v)} placeholder="Select Status" />
                     </Field>
-
                     <Field label="Icon Color">
                         <ColorPicker colors={COLORS} selected={selectedColor} onChange={setSelectedColor} />
                     </Field>
                 </div>
-
-                {/* Footer */}
                 <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-3">
                     <button onClick={onClose} disabled={loading}
                         className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
@@ -364,17 +330,19 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
     const [form, setForm] = useState({ module_name: "", description: "", module_owner: "", priority: "", status: "Active" });
 
     const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-    const userOptions = [{ id: "", name: "Select Owner" }, ...users.filter(u => u.name).map(u => ({ id: u.name, name: u.name }))];
+    const userOptions = [{ id: "", name: "Select Owner" }, ...users.map(u => ({ id: u.name || u.id, name: u.name }))];
 
     const handleCreate = async () => {
         if (!form.module_name) { alert("Module Name required"); return; }
+        if (!form.description) { alert("Description required"); return; }
+        if (!form.module_owner) { alert("Module Owner required"); return; }
         if (!form.priority) { alert("Priority required"); return; }
         setLoading(true);
         const { error } = await supabase.from("modules").insert([{
             module_code: autoCode,
             module_name: form.module_name,
-            description: form.description || "",
-            module_owner: form.module_owner || null,
+            description: form.description,
+            module_owner: form.module_owner,
             priority: form.priority,
             status: form.status,
             color: selectedColor,
@@ -387,8 +355,6 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={onClose}>
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-
-                {/* Header */}
                 <div className="sticky top-0 bg-white z-10 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center">
@@ -403,8 +369,6 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
                         <i className="fa-solid fa-times text-lg" />
                     </button>
                 </div>
-
-                {/* Body */}
                 <div className="p-6 space-y-5">
                     <Field label="Module Name" required>
                         <input
@@ -413,14 +377,12 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
                             placeholder="e.g., User Management"
                             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-500" />
                     </Field>
-
                     <Field label="Module Code" hint="Auto-generated">
                         <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-100 rounded-lg">
                             <i className="fa-solid fa-lock text-green-400 text-xs" />
                             <span className="text-sm text-green-700 font-mono font-medium">{autoCode}</span>
                         </div>
                     </Field>
-
                     <Field label="Description" required>
                         <textarea
                             rows={3} value={form.description}
@@ -428,26 +390,21 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
                             placeholder="Brief description of this module..."
                             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-500 resize-none" />
                     </Field>
-
                     <div className="grid grid-cols-2 gap-4">
-                        <Field label="Module Owner">
+                        <Field label="Module Owner" required>
                             <SimpleDropdown options={userOptions} value={form.module_owner} onChange={v => set("module_owner", v)} placeholder="Select Owner" />
                         </Field>
                         <Field label="Priority" required>
                             <SimpleDropdown options={PRIORITY_OPTIONS} value={form.priority} onChange={v => set("priority", v)} placeholder="Select Priority" />
                         </Field>
                     </div>
-
                     <Field label="Status" required>
                         <SimpleDropdown options={STATUS_OPTIONS} value={form.status} onChange={v => set("status", v)} placeholder="Select Status" />
                     </Field>
-
                     <Field label="Icon Color">
                         <ColorPicker colors={COLORS} selected={selectedColor} onChange={setSelectedColor} />
                     </Field>
                 </div>
-
-                {/* Footer */}
                 <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-3">
                     <button onClick={onClose} disabled={loading}
                         className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
@@ -473,12 +430,9 @@ function ViewDetailsModal({ module, onClose, onEdit, moduleFeatures, featuresLoa
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={onClose}>
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-
-                {/* Header */}
                 <div className="sticky top-0 bg-white z-10 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
-                            style={{ background: c.tint }}>
+                        <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: c.tint }}>
                             <i className={`fa-solid ${icon} text-lg`} style={{ color: c.hex }} />
                         </div>
                         <div>
@@ -490,9 +444,7 @@ function ViewDetailsModal({ module, onClose, onEdit, moduleFeatures, featuresLoa
                         <i className="fa-solid fa-times text-lg" />
                     </button>
                 </div>
-
                 <div className="p-6 space-y-5">
-                    {/* Info grid */}
                     <div className="grid grid-cols-3 gap-3">
                         <div className={`p-3 rounded-xl ${sb.bg}`}>
                             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Status</p>
@@ -507,16 +459,12 @@ function ViewDetailsModal({ module, onClose, onEdit, moduleFeatures, featuresLoa
                             <p className="text-sm font-bold text-blue-600 truncate">{module.module_owner || "—"}</p>
                         </div>
                     </div>
-
-                    {/* Description */}
                     {module.description && (
                         <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
                             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Description</p>
                             <p className="text-sm text-gray-600 leading-relaxed">{module.description}</p>
                         </div>
                     )}
-
-                    {/* Linked Versions */}
                     {module.linkedVersions && module.linkedVersions.length > 0 && (
                         <div>
                             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
@@ -532,8 +480,6 @@ function ViewDetailsModal({ module, onClose, onEdit, moduleFeatures, featuresLoa
                             </div>
                         </div>
                     )}
-
-                    {/* Connected Features */}
                     <div className="border border-gray-200 rounded-xl overflow-hidden">
                         <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-3">
                             <div className="w-8 h-8 bg-purple-50 rounded-lg flex items-center justify-center">
@@ -544,7 +490,6 @@ function ViewDetailsModal({ module, onClose, onEdit, moduleFeatures, featuresLoa
                                 <span className="px-2 py-0.5 bg-purple-50 text-purple-600 text-xs font-bold rounded-full">{moduleFeatures.length}</span>
                             )}
                         </div>
-
                         {featuresLoading ? (
                             <div className="flex items-center justify-center gap-2 py-10 text-gray-400 text-sm">
                                 <i className="fa-solid fa-spinner fa-spin" /> Loading features…
@@ -579,8 +524,6 @@ function ViewDetailsModal({ module, onClose, onEdit, moduleFeatures, featuresLoa
                         )}
                     </div>
                 </div>
-
-                {/* Footer */}
                 <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-3">
                     <button onClick={onClose}
                         className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
@@ -607,11 +550,9 @@ function ModuleCard({ mod, onEdit, onDelete, onViewDetails }) {
     return (
         <div className={`bg-white border rounded-xl shadow-sm hover:shadow-md transition-shadow ${isArchived ? "border-yellow-300 opacity-70" : "border-gray-200"}`}>
             <div className="p-6">
-                {/* Top row */}
                 <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
-                            style={{ background: c.tint }}>
+                        <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: c.tint }}>
                             <i className={`fa-solid ${icon} text-lg`} style={{ color: c.hex }} />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -627,7 +568,6 @@ function ModuleCard({ mod, onEdit, onDelete, onViewDetails }) {
                             <p className="text-xs text-gray-400 font-mono">{mod.module_code}</p>
                         </div>
                     </div>
-                    {/* Actions */}
                     <div className="flex gap-1.5 flex-shrink-0">
                         <button onClick={() => onEdit(mod)} title="Edit"
                             className="w-8 h-8 flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-500 rounded-lg transition-colors text-xs">
@@ -639,17 +579,11 @@ function ModuleCard({ mod, onEdit, onDelete, onViewDetails }) {
                         </button>
                     </div>
                 </div>
-
-                {/* Description */}
                 <p className="text-xs text-gray-500 mb-4 leading-relaxed line-clamp-2">{mod.description}</p>
-
-                {/* Badges */}
                 <div className="flex gap-2 mb-4">
                     <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${sb.bg} ${sb.text}`}>{mod.status}</span>
                     <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${pb.bg} ${pb.text}`}>{mod.priority} Priority</span>
                 </div>
-
-                {/* Stats row */}
                 <div className="grid grid-cols-3 gap-2 mb-4 pb-4 border-b border-gray-100">
                     {[
                         { label: "Status", value: mod.status },
@@ -662,10 +596,7 @@ function ModuleCard({ mod, onEdit, onDelete, onViewDetails }) {
                         </div>
                     ))}
                 </div>
-
                 <p className="text-xs text-gray-300 mb-3">ID: {mod.id}</p>
-
-                {/* View Details */}
                 <button
                     onClick={onViewDetails}
                     className={`w-full py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${isArchived ? "bg-white border border-gray-200 text-gray-500 hover:bg-gray-50" : "bg-green-700 text-white hover:opacity-90"}`}>
@@ -691,12 +622,263 @@ function StatCard({ label, value, icon, colorClass, bgClass }) {
     );
 }
 
+// ─── Import Modal ──────────────────────────────────────────────────────────────
+function ImportModal({ onClose, onSuccess, existingModuleCodes, users }) {
+    const [file, setFile] = useState(null);
+    const [preview, setPreview] = useState([]);
+    const [errors, setErrors] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [step, setStep] = useState("upload"); // upload | preview | done
+    const fileRef = useRef(null);
+
+    const VALID_PRIORITIES = ["High", "Medium", "Low"];
+    const VALID_STATUSES = ["Active", "Inactive", "Archived"];
+    const VALID_COLORS = ["blue", "green", "purple", "red", "indigo", "pink", "teal", "orange"];
+
+    const parseCSV = (text) => {
+        const lines = text.split("\n").filter(l => l.trim() && !l.trim().startsWith("#"));
+        if (lines.length < 2) return { rows: [], headerError: "CSV has no data rows." };
+        const headers = lines[0].split(",").map(h => h.replace(/"/g, "").trim().toLowerCase());
+        const rows = lines.slice(1).map((line, idx) => {
+            const cols = line.match(/(".*?"|[^,]+|(?<=,)(?=,)|(?<=,)$|^(?=,))/g) || [];
+            const clean = cols.map(c => c.replace(/^"|"$/g, "").trim());
+            return {
+                rowNum: idx + 2,
+                module_name: clean[headers.indexOf("module name")] || "",
+                description: clean[headers.indexOf("description")] || "",
+                module_owner: clean[headers.indexOf("module owner")] || "",
+                priority: clean[headers.indexOf("priority")] || "",
+                status: clean[headers.indexOf("status")] || "",
+                color: clean[headers.indexOf("icon color")] || "blue",
+            };
+        }).filter(r => r.module_name || r.description || r.priority || r.status);
+        return { rows };
+    };
+
+    const validateRows = (rows) => {
+        const errs = [];
+        rows.forEach(r => {
+            if (!r.module_name) errs.push(`Row ${r.rowNum}: Module Name is required.`);
+            if (!r.description) errs.push(`Row ${r.rowNum}: Description is required.`);
+            if (!r.module_owner) errs.push(`Row ${r.rowNum}: Module Owner is required.`);
+            if (!VALID_PRIORITIES.includes(r.priority)) errs.push(`Row ${r.rowNum}: Priority must be High, Medium, or Low (got "${r.priority}").`);
+            if (!VALID_STATUSES.includes(r.status)) errs.push(`Row ${r.rowNum}: Status must be Active, Inactive, or Archived (got "${r.status}").`);
+            if (r.color && !VALID_COLORS.includes(r.color)) errs.push(`Row ${r.rowNum}: Icon Color "${r.color}" is not valid. Leave blank to use default (blue).`);
+        });
+        return errs;
+    };
+
+    const handleFileChange = (e) => {
+        const f = e.target.files[0];
+        if (!f) return;
+        setFile(f);
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const { rows, headerError } = parseCSV(ev.target.result);
+            if (headerError) { setErrors([headerError]); setPreview([]); return; }
+            const errs = validateRows(rows);
+            setErrors(errs);
+            setPreview(rows);
+            if (rows.length > 0) setStep("preview");
+        };
+        reader.readAsText(f);
+    };
+
+    const handleImport = async () => {
+        if (errors.length > 0) return;
+        setLoading(true);
+        let nextCode = Math.max(...existingModuleCodes.map(c => parseInt(c) || 0), 1000) + 1;
+        const records = preview.map(r => ({
+            module_code: nextCode++,
+            module_name: r.module_name,
+            description: r.description,
+            module_owner: r.module_owner,
+            priority: r.priority,
+            status: r.status,
+            color: VALID_COLORS.includes(r.color) ? r.color : "blue",
+        }));
+        const { error } = await supabase.from("modules").insert(records);
+        setLoading(false);
+        if (error) { setErrors([`Import failed: ${error.message}`]); }
+        else { setStep("done"); onSuccess(); }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+
+                {/* Header */}
+                <div className="sticky top-0 bg-white z-10 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+                            <i className="fa-solid fa-file-import text-blue-500" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-gray-900">Import Modules</h3>
+                            <p className="text-xs text-gray-400 mt-0.5">Upload a CSV file to bulk import modules</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1.5 rounded-lg hover:bg-gray-100">
+                        <i className="fa-solid fa-times text-lg" />
+                    </button>
+                </div>
+
+                <div className="p-6 space-y-5">
+                    {step === "done" ? (
+                        <div className="text-center py-10">
+                            <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <i className="fa-solid fa-circle-check text-green-600 text-3xl" />
+                            </div>
+                            <h4 className="text-lg font-bold text-gray-900 mb-1">Import Successful!</h4>
+                            <p className="text-sm text-gray-500">{preview.length} module{preview.length !== 1 ? "s" : ""} imported successfully.</p>
+                            <button onClick={onClose}
+                                className="mt-6 px-6 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity">
+                                Done
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Download Template */}
+                            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-center justify-between gap-4">
+                                <div>
+                                    <p className="text-sm font-semibold text-blue-800 mb-0.5">Download Import Template</p>
+                                    <p className="text-xs text-blue-600">Get the CSV template with all required columns. Fill it in and upload below.</p>
+                                </div>
+                                <button onClick={downloadImportTemplate}
+                                    className="flex items-center gap-2 px-4 py-2 bg-white border border-blue-200 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors flex-shrink-0">
+                                    <i className="fa-solid fa-download text-xs" /> Template
+                                </button>
+                            </div>
+
+                            {/* Column Reference */}
+                            <div className="border border-gray-200 rounded-xl overflow-hidden">
+                                <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+                                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Column Reference</p>
+                                </div>
+                                <div className="divide-y divide-gray-50">
+                                    {[
+                                        { col: "Module Name", req: true, note: "Any text" },
+                                        { col: "Description", req: true, note: "Brief description of the module" },
+                                        { col: "Module Owner", req: true, note: "Must match an existing user name" },
+                                        { col: "Priority", req: true, note: "High | Medium | Low" },
+                                        { col: "Status", req: true, note: "Active | Inactive | Archived" },
+                                        { col: "Icon Color", req: false, note: "blue | green | purple | red | indigo | pink | teal | orange" },
+                                    ].map(({ col, req, note }) => (
+                                        <div key={col} className="flex items-center gap-3 px-4 py-2.5">
+                                            <code className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-mono w-36 flex-shrink-0">{col}</code>
+                                            {req
+                                                ? <span className="text-xs text-red-500 font-medium w-16 flex-shrink-0">Required</span>
+                                                : <span className="text-xs text-gray-400 w-16 flex-shrink-0">Optional</span>}
+                                            <span className="text-xs text-gray-500">{note}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* File Upload */}
+                            <div>
+                                <input ref={fileRef} type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
+                                <button onClick={() => fileRef.current?.click()}
+                                    className="w-full border-2 border-dashed border-gray-200 hover:border-green-400 rounded-xl py-8 flex flex-col items-center gap-3 transition-colors group">
+                                    <div className="w-12 h-12 bg-gray-50 group-hover:bg-green-50 rounded-xl flex items-center justify-center transition-colors">
+                                        <i className="fa-solid fa-cloud-arrow-up text-gray-300 group-hover:text-green-500 text-xl transition-colors" />
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-sm font-semibold text-gray-700">{file ? file.name : "Click to upload CSV"}</p>
+                                        <p className="text-xs text-gray-400 mt-0.5">{file ? `${preview.length} row(s) found` : "Only .csv files are supported"}</p>
+                                    </div>
+                                </button>
+                            </div>
+
+                            {/* Errors */}
+                            {errors.length > 0 && (
+                                <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-1">
+                                    <p className="text-xs font-semibold text-red-700 mb-2 flex items-center gap-2">
+                                        <i className="fa-solid fa-circle-exclamation" /> {errors.length} validation error{errors.length !== 1 ? "s" : ""}
+                                    </p>
+                                    {errors.map((e, i) => (
+                                        <p key={i} className="text-xs text-red-600">• {e}</p>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Preview Table */}
+                            {preview.length > 0 && errors.length === 0 && (
+                                <div>
+                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                                        Preview — {preview.length} module{preview.length !== 1 ? "s" : ""} to import
+                                    </p>
+                                    <div className="border border-gray-200 rounded-xl overflow-hidden">
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-xs">
+                                                <thead>
+                                                    <tr className="bg-gray-50 border-b border-gray-100">
+                                                        {["Module Name", "Description", "Owner", "Priority", "Status", "Color"].map(h => (
+                                                            <th key={h} className="px-3 py-2.5 text-left font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-50">
+                                                    {preview.slice(0, 10).map((r, i) => (
+                                                        <tr key={i} className="hover:bg-gray-50">
+                                                            <td className="px-3 py-2.5 font-medium text-gray-800 max-w-[140px] truncate">{r.module_name}</td>
+                                                            <td className="px-3 py-2.5 text-gray-500 max-w-[160px] truncate">{r.description}</td>
+                                                            <td className="px-3 py-2.5 text-gray-600">{r.module_owner}</td>
+                                                            <td className="px-3 py-2.5 text-gray-600">{r.priority}</td>
+                                                            <td className="px-3 py-2.5 text-gray-600">{r.status}</td>
+                                                            <td className="px-3 py-2.5">
+                                                                <span className="inline-flex items-center gap-1.5">
+                                                                    <span className="w-3 h-3 rounded-full flex-shrink-0"
+                                                                        style={{ background: colorMap[r.color || "blue"]?.hex }} />
+                                                                    {r.color || "blue"}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {preview.length > 10 && (
+                                            <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-100 text-xs text-gray-400">
+                                                …and {preview.length - 10} more row{preview.length - 10 !== 1 ? "s" : ""}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+
+                {/* Footer */}
+                {step !== "done" && (
+                    <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-3">
+                        <button onClick={onClose} disabled={loading}
+                            className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleImport}
+                            disabled={loading || preview.length === 0 || errors.length > 0}
+                            className="px-6 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2">
+                            {loading
+                                ? <><i className="fa-solid fa-spinner fa-spin" /> Importing…</>
+                                : <><i className="fa-solid fa-file-import" /> Import {preview.length > 0 ? `${preview.length} Module${preview.length !== 1 ? "s" : ""}` : ""}</>}
+                        </button>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 export default function ModulesLibrary() {
     const [modules, setModules] = useState([]);
     const [users, setUsers] = useState([]);
     const [showModal, setShowModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
+    const [showImportModal, setShowImportModal] = useState(false);
     const [viewingModule, setViewingModule] = useState(null);
     const [moduleFeatures, setModuleFeatures] = useState([]);
     const [featuresLoading, setFeaturesLoading] = useState(false);
@@ -708,35 +890,10 @@ export default function ModulesLibrary() {
     const [searchTerm, setSearchTerm] = useState("");
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleteLoading, setDeleteLoading] = useState(false);
-    const [showImportModal, setShowImportModal] = useState(false);
-    const [importFile, setImportFile] = useState(null);
-    const [importDragging, setImportDragging] = useState(false);
-    const [importLoading, setImportLoading] = useState(false);
-    const importInputRef = useRef(null);
 
     const fetchUsers = async () => {
-        // Fetch from both tables simultaneously and merge
-        const [{ data: profilesData }, { data: usersData }] = await Promise.all([
-            supabase.from("profiles").select("id, full_name, email").order("full_name", { ascending: true }),
-            supabase.from("users").select("id, name").order("name", { ascending: true }),
-        ]);
-
-        const fromProfiles = (profilesData || [])
-            .map(p => ({ id: p.id, name: p.full_name || p.email || "" }))
-            .filter(u => u.name);
-
-        const fromUsers = (usersData || [])
-            .map(u => ({ id: u.id, name: u.name || "" }))
-            .filter(u => u.name);
-
-        // Merge: profiles takes priority, add any users not already present by name
-        const namesSeen = new Set(fromProfiles.map(u => u.name.toLowerCase()));
-        const merged = [
-            ...fromProfiles,
-            ...fromUsers.filter(u => !namesSeen.has(u.name.toLowerCase())),
-        ];
-
-        setUsers(merged);
+        const { data } = await supabase.from("users").select("*").order("name", { ascending: true });
+        setUsers(data || []);
     };
 
     const fetchModules = async () => {
@@ -779,223 +936,7 @@ export default function ModulesLibrary() {
         else { fetchModules(); setDeleteTarget(null); }
     };
 
-    const handleEditModule = async (module) => {
-        // Always fetch fresh data from DB so the edit form shows current values
-        const { data } = await supabase.from("modules").select("*").eq("id", module.id).single();
-        setEditingModule(data || module);
-        setShowEditModal(true);
-    };
-
-    const handleEditSuccess = async () => {
-        await fetchModules();
-        // If the edited module is currently being viewed, refresh viewingModule with updated data
-        if (editingModule && viewingModule && viewingModule.id === editingModule.id) {
-            const { data } = await supabase.from("modules").select("*").eq("id", editingModule.id).single();
-            if (data) {
-                const { data: vmData } = await supabase
-                    .from("version_modules")
-                    .select("module_id, versions(id, version_number, status)")
-                    .eq("module_id", data.id);
-                const linkedVersions = (vmData || []).map(row => row.versions).filter(Boolean);
-                setViewingModule({ ...data, linkedVersions });
-            }
-        }
-    };
-
-    // ── Load SheetJS dynamically ──
-    const loadXLSX = () => new Promise((resolve, reject) => {
-        if (window.XLSX) { resolve(window.XLSX); return; }
-        const s = document.createElement("script");
-        s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-        s.onload = () => resolve(window.XLSX);
-        s.onerror = reject;
-        document.head.appendChild(s);
-    });
-
-    // ── Download Module template as xlsx with owner dropdown ──
-    const downloadModuleTemplate = async () => {
-        try {
-            const XLSX = await loadXLSX();
-            const [{ data: profilesData }, { data: usersTableData }] = await Promise.all([
-                supabase.from("profiles").select("full_name, email").order("full_name", { ascending: true }),
-                supabase.from("users").select("name").order("name", { ascending: true }),
-            ]);
-            const fromProfiles = (profilesData || []).map(p => p.full_name || p.email).filter(Boolean);
-            const fromUsers = (usersTableData || []).map(u => u.name).filter(Boolean);
-            const namesSeen = new Set(fromProfiles.map(n => n.toLowerCase()));
-            const ownerNames = [...fromProfiles, ...fromUsers.filter(n => !namesSeen.has(n.toLowerCase()))];
-            const priorities = ["High", "Medium", "Low"];
-            const statuses = ["Active", "Inactive", "Archived"];
-            const colors = ["blue", "green", "purple", "red", "indigo", "pink", "teal", "orange"];
-
-            const wb = XLSX.utils.book_new();
-
-            // Hidden _Ref sheet for dropdown lists
-            const maxLen = Math.max(ownerNames.length, priorities.length, statuses.length, colors.length);
-            const refData = [
-                ["Owners", "Priorities", "Statuses", "Colors"],
-                ...Array.from({ length: maxLen }, (_, i) => [
-                    ownerNames[i] || "", priorities[i] || "", statuses[i] || "", colors[i] || "",
-                ]),
-            ];
-            const refWs = XLSX.utils.aoa_to_sheet(refData);
-            XLSX.utils.book_append_sheet(wb, refWs, "_Ref");
-
-            // Main sheet columns matching Create Module modal:
-            // A: Module Name*, B: Description, C: Module Owner, D: Priority*, E: Status*, F: Color
-            const headers = [["Module Name *", "Description", "Module Owner", "Priority *", "Status *", "Color"]];
-            const exampleRow = ["Example Module", "Description of the module", ownerNames[0] || "", "High", "Active", "green"];
-            const ws = XLSX.utils.aoa_to_sheet([...headers, exampleRow]);
-            ws["!cols"] = [{ wch: 28 }, { wch: 40 }, { wch: 24 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
-
-            ws["!dataValidation"] = [
-                {
-                    type: "list", sqref: "C2:C1000",
-                    formula1: `_Ref!$A$2:$A$${ownerNames.length + 1}`,
-                    showDropDown: false, showErrorMessage: false,
-                },
-                {
-                    type: "list", sqref: "D2:D1000",
-                    formula1: `"High,Medium,Low"`,
-                    showDropDown: false, showErrorMessage: true,
-                    error: "Priority must be High, Medium, or Low.", errorTitle: "Invalid Priority",
-                },
-                {
-                    type: "list", sqref: "E2:E1000",
-                    formula1: `"Active,Inactive,Archived"`,
-                    showDropDown: false, showErrorMessage: true,
-                    error: "Status must be Active, Inactive, or Archived.", errorTitle: "Invalid Status",
-                },
-                {
-                    type: "list", sqref: "F2:F1000",
-                    formula1: `"blue,green,purple,red,indigo,pink,teal,orange"`,
-                    showDropDown: false, showErrorMessage: false,
-                },
-            ];
-
-            // Style header: green background, white bold text
-            ["A1", "B1", "C1", "D1", "E1", "F1"].forEach(cell => {
-                if (!ws[cell]) return;
-                ws[cell].s = { font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "1B5E3B" } }, alignment: { horizontal: "center" } };
-            });
-
-            XLSX.utils.book_append_sheet(wb, ws, "Modules");
-            wb.SheetNames = ["Modules", "_Ref"];
-            XLSX.writeFile(wb, "modules_template.xlsx");
-        } catch (err) {
-            console.error("Template error:", err);
-            const csv = `Module Name *,Description,Module Owner,Priority *,Status *,Color\nExample Module,Description of the module,,High,Active,green`;
-            const a = document.createElement("a");
-            a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-            a.download = "modules_template.csv"; a.click();
-        }
-    };
-
-    // ── Parse xlsx or csv file ──
-    const parseFile = async (file) => {
-        const name = file.name.toLowerCase();
-        if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
-            const XLSX = await loadXLSX();
-            const buf = await file.arrayBuffer();
-            const wb = XLSX.read(buf, { type: "array" });
-            const sheetName = wb.SheetNames.find(n => !n.startsWith("_")) || wb.SheetNames[0];
-            const ws = wb.Sheets[sheetName];
-            const data = XLSX.utils.sheet_to_json(ws, { defval: "" });
-            return data.map(row => Object.fromEntries(Object.entries(row).map(([k, v]) => [k.toLowerCase().trim(), String(v).trim()])));
-        }
-        // CSV fallback
-        const text = await file.text();
-        const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-        if (lines.length < 2) return [];
-        const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim().toLowerCase());
-        return lines.slice(1).map(line => {
-            const cols = []; let cur = "", inQ = false;
-            for (const ch of line) {
-                if (ch === '"') { inQ = !inQ; }
-                else if (ch === "," && !inQ) { cols.push(cur.trim()); cur = ""; }
-                else { cur += ch; }
-            }
-            cols.push(cur.trim());
-            return Object.fromEntries(headers.map((h, i) => [h, (cols[i] || "").replace(/^"|"$/g, "").trim()]));
-        });
-    };
-
-    // ── Import Modules ──
-    const handleImportModules = async () => {
-        if (!importFile) { alert("Please select a file first."); return; }
-        setImportLoading(true);
-        try {
-            const rows = await parseFile(importFile);
-            if (rows.length === 0) throw new Error("File is empty or has no data rows.");
-
-            const { data: existingMods } = await supabase.from("modules").select("module_code, module_name");
-
-            // Fetch owners from both tables and merge
-            const [{ data: profilesData }, { data: usersTableData }] = await Promise.all([
-                supabase.from("profiles").select("id, full_name, email"),
-                supabase.from("users").select("id, name"),
-            ]);
-            const fromProfiles = (profilesData || []).map(p => ({ name: p.full_name || p.email || "" })).filter(u => u.name);
-            const fromUsers = (usersTableData || []).map(u => ({ name: u.name || "" })).filter(u => u.name);
-            const namesSeen = new Set(fromProfiles.map(u => u.name.toLowerCase()));
-            const allUsers = [...fromProfiles, ...fromUsers.filter(u => !namesSeen.has(u.name.toLowerCase()))];
-
-            // Build existing name set to skip duplicates
-            const existingNames = new Set((existingMods || []).map(m => (m.module_name || "").toLowerCase()));
-
-            // User lookup by name
-            const userByName = {};
-            for (const u of allUsers) {
-                if (u.name) userByName[u.name.toLowerCase()] = u.name;
-            }
-
-            // Get next module code
-            const existingCodes = (existingMods || []).map(m => m.module_code);
-            let nextCode = generateModuleCode(existingCodes);
-
-            const toInsert = [], skipped = [];
-            for (const row of rows) {
-                const moduleName = row["module name *"] || row["module name"] || row["module_name"] || "";
-                const description = row["description"] || "";
-                const ownerRaw = row["module owner"] || row["module_owner"] || "";
-                const rawPriority = row["priority *"] || row["priority"] || "Medium";
-                const priority = ["High", "Medium", "Low"].find(p => p.toLowerCase() === rawPriority.toLowerCase()) || "Medium";
-                const rawStatus = row["status *"] || row["status"] || "Active";
-                const status = ["Active", "Inactive", "Archived"].find(s => s.toLowerCase() === rawStatus.toLowerCase()) || "Active";
-                const rawColor = row["color"] || "green";
-                const color = ["blue", "green", "purple", "red", "indigo", "pink", "teal", "orange"].includes(rawColor.toLowerCase()) ? rawColor.toLowerCase() : "green";
-
-                if (!moduleName) { skipped.push("(row with no Module Name)"); continue; }
-                if (existingNames.has(moduleName.toLowerCase())) { skipped.push(`"${moduleName}" — already exists`); continue; }
-
-                // Resolve owner name
-                const moduleOwner = userByName[ownerRaw.toLowerCase()] || (ownerRaw || null);
-                existingNames.add(moduleName.toLowerCase());
-
-                toInsert.push({
-                    module_code: nextCode++,
-                    module_name: moduleName,
-                    description: description || null,
-                    module_owner: moduleOwner || null,
-                    priority,
-                    status,
-                    color,
-                });
-            }
-
-            if (toInsert.length === 0) throw new Error(`Nothing to import.\n\nSkipped (${skipped.length}):\n${skipped.slice(0, 8).join("\n")}`);
-
-            const { error } = await supabase.from("modules").insert(toInsert);
-            if (error) throw error;
-
-            let msg = `✅ Imported ${toInsert.length} module(s) successfully.`;
-            if (skipped.length > 0) msg += `\n\nSkipped (${skipped.length}):\n${skipped.slice(0, 5).join("\n")}${skipped.length > 5 ? "\n…" : ""}`;
-            alert(msg);
-            setShowImportModal(false); setImportFile(null);
-            fetchModules();
-        } catch (err) { alert(`Import failed: ${err.message}`); }
-        finally { setImportLoading(false); }
-    };
+    const handleEditModule = (module) => { setEditingModule(module); setShowEditModal(true); };
 
     useEffect(() => { fetchUsers(); fetchModules(); }, []);
 
@@ -1027,7 +968,7 @@ export default function ModulesLibrary() {
                         <p className="text-sm text-gray-500 mt-0.5">Manage all modules for NexTech RMS</p>
                     </div>
                     <div className="flex items-center gap-3">
-                        <button onClick={() => exportToCSV(filteredModules)}
+                        <button onClick={() => exportToCSV(modules)}
                             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
                             <i className="fa-solid fa-download" /> Export
                         </button>
@@ -1127,6 +1068,14 @@ export default function ModulesLibrary() {
             </main>
 
             {/* Modals */}
+            {showImportModal && (
+                <ImportModal
+                    onClose={() => setShowImportModal(false)}
+                    onSuccess={fetchModules}
+                    existingModuleCodes={existingModuleCodes}
+                    users={users}
+                />
+            )}
             {showModal && (
                 <CreateModuleModal
                     onClose={() => setShowModal(false)}
@@ -1139,7 +1088,7 @@ export default function ModulesLibrary() {
                 <EditModuleModal
                     module={editingModule}
                     onClose={() => { setShowEditModal(false); setEditingModule(null); }}
-                    onSuccess={handleEditSuccess}
+                    onSuccess={fetchModules}
                     users={users}
                 />
             )}
@@ -1159,108 +1108,6 @@ export default function ModulesLibrary() {
                     moduleFeatures={moduleFeatures}
                     featuresLoading={featuresLoading}
                 />
-            )}
-
-            {/* Hidden file input for import */}
-            <input
-                type="file" accept=".csv,.xlsx,.xls" ref={importInputRef} style={{ display: "none" }}
-                onChange={e => { if (e.target.files?.[0]) { setImportFile(e.target.files[0]); setShowImportModal(true); } e.target.value = ""; }}
-            />
-
-            {/* ── Import Modules Modal ── */}
-            {showImportModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => { setShowImportModal(false); setImportFile(null); }}>
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-
-                        {/* Header */}
-                        <div className="px-6 py-4 border-b border-gray-100 flex items-start gap-4">
-                            <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                                <i className="fa-solid fa-puzzle-piece text-green-700" />
-                            </div>
-                            <div className="flex-1">
-                                <h3 className="text-base font-bold text-gray-900">Import Modules via Excel / CSV</h3>
-                                <p className="text-xs text-gray-400 mt-0.5">Upload a file to bulk-create modules</p>
-                            </div>
-                            <button onClick={() => { setShowImportModal(false); setImportFile(null); }} className="text-gray-400 hover:text-gray-600 p-1">
-                                <i className="fa-solid fa-times text-lg" />
-                            </button>
-                        </div>
-
-                        <div className="p-6 space-y-5">
-                            {/* Template download banner */}
-                            <div className="flex items-center justify-between gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
-                                <div className="flex items-start gap-3">
-                                    <i className="fa-solid fa-circle-info text-blue-500 text-sm mt-0.5 flex-shrink-0" />
-                                    <div>
-                                        <p className="text-sm font-semibold text-blue-800">Need a template?</p>
-                                        <p className="text-xs text-blue-600 mt-0.5">Download an Excel file with owner dropdown from your user list</p>
-                                    </div>
-                                </div>
-                                <button onClick={downloadModuleTemplate}
-                                    className="flex items-center gap-2 px-3 py-2 bg-white border border-blue-300 text-blue-700 rounded-lg text-xs font-semibold hover:bg-blue-50 transition-colors flex-shrink-0">
-                                    <i className="fa-solid fa-download text-xs" /> Template
-                                </button>
-                            </div>
-
-                            {/* Expected columns */}
-                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Expected Columns</p>
-                                <div className="flex flex-wrap gap-2 mb-2">
-                                    {[
-                                        { name: "Module Name", req: true },
-                                        { name: "Description", req: false },
-                                        { name: "Module Owner", req: false },
-                                        { name: "Priority", req: true },
-                                        { name: "Status", req: true },
-                                        { name: "Color", req: false },
-                                    ].map(col => (
-                                        <span key={col.name} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold font-mono ${col.req ? "bg-red-50 text-red-600 border border-red-200" : "bg-white text-gray-600 border border-gray-200"}`}>
-                                            {col.name}{col.req && <span className="text-red-500">*</span>}
-                                        </span>
-                                    ))}
-                                </div>
-                                <p className="text-xs text-gray-400">Priority: High / Medium / Low · Status: Active / Inactive / Archived · Color: blue / green / purple / red / indigo / pink / teal / orange</p>
-                            </div>
-
-                            {/* Drop zone */}
-                            <div
-                                onDragOver={e => { e.preventDefault(); setImportDragging(true); }}
-                                onDragLeave={() => setImportDragging(false)}
-                                onDrop={e => { e.preventDefault(); setImportDragging(false); const f = e.dataTransfer.files?.[0]; if (f && (f.name.endsWith(".csv") || f.name.endsWith(".xlsx") || f.name.endsWith(".xls"))) setImportFile(f); else alert("Please drop a .xlsx or .csv file."); }}
-                                onClick={() => importInputRef.current?.click()}
-                                className={`border-2 border-dashed rounded-xl py-10 px-6 text-center cursor-pointer transition-all ${importDragging ? "border-green-500 bg-green-50" : importFile ? "border-green-400 bg-green-50" : "border-gray-200 bg-gray-50 hover:border-green-300 hover:bg-green-50"}`}
-                            >
-                                {importFile ? (
-                                    <>
-                                        <i className="fa-solid fa-file-excel text-3xl text-green-500 mb-3 block" />
-                                        <p className="text-sm font-bold text-gray-800">{importFile.name}</p>
-                                        <p className="text-xs text-gray-400 mt-1">{(importFile.size / 1024).toFixed(1)} KB · Click to change</p>
-                                    </>
-                                ) : (
-                                    <>
-                                        <i className="fa-solid fa-cloud-arrow-up text-3xl text-gray-300 mb-3 block" />
-                                        <p className="text-sm font-semibold text-gray-700">Drop your file here</p>
-                                        <p className="text-xs text-gray-400 mt-1">or click to browse · .xlsx or .csv accepted</p>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Footer */}
-                        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
-                            <button onClick={() => { setShowImportModal(false); setImportFile(null); }}
-                                className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                                Cancel
-                            </button>
-                            <button onClick={handleImportModules} disabled={!importFile || importLoading}
-                                className="flex items-center gap-2 px-6 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
-                                {importLoading
-                                    ? <><i className="fa-solid fa-spinner fa-spin" /> Importing…</>
-                                    : <><i className="fa-solid fa-upload text-xs" /> Import Modules</>}
-                            </button>
-                        </div>
-                    </div>
-                </div>
             )}
         </div>
     );

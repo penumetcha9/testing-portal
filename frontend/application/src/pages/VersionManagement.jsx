@@ -576,9 +576,9 @@ export default function VersionManagement() {
 
     const fetchUsers = useCallback(async () => {
         try {
-            const { data, error: e } = await supabase.from("users").select("id, name").order("name");
+            const { data, error: e } = await supabase.from("profiles").select("id, full_name, email").order("full_name");
             if (e) throw e;
-            setUsers(data || []);
+            setUsers((data || []).map(u => ({ id: u.id, name: u.full_name || u.email || u.id })));
         } catch (err) { console.error(err); }
     }, []);
 
@@ -894,14 +894,17 @@ export default function VersionManagement() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium mb-1">Version Number *</label>
-                                    <div className="relative">
-                                        <input type="text" value={formData.version_number} readOnly placeholder="Auto-generated" className="w-full px-4 py-2 pr-10 border rounded-lg text-sm bg-gray-50 cursor-not-allowed text-gray-700 focus:outline-none" />
-                                        <span className="absolute right-3 top-1/2 -translate-y-1/2"><i className="fa-solid fa-lock text-gray-400 text-sm" /></span>
+                                    <div className="flex gap-2">
+                                        <input type="text" value={formData.version_number} onChange={(e) => setFormData(prev => ({ ...prev, version_number: e.target.value }))} placeholder="e.g., 5.2.1" className="flex-1 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300" />
+                                        <button onClick={handleGenerateVersion} title="Regenerate" className="px-3 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors"><i className="fa-solid fa-wand-magic-sparkles" /></button>
                                     </div>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium mb-1">Build Number *</label>
-                                    <input type="text" value={formData.build_number} onChange={(e) => setFormData(prev => ({ ...prev, build_number: e.target.value }))} placeholder="e.g., 2024.12.001" className="w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300" />
+                                    <div className="flex gap-2">
+                                        <input type="text" value={formData.build_number} onChange={(e) => setFormData(prev => ({ ...prev, build_number: e.target.value }))} placeholder="e.g., 2024.12.001" className="flex-1 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300" />
+                                        <button onClick={handleGenerateBuild} title="Generate build number" className="px-3 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors"><i className="fa-solid fa-wand-magic-sparkles" /></button>
+                                    </div>
                                 </div>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

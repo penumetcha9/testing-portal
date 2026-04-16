@@ -263,7 +263,6 @@ const MultiSelectDropdown = memo(({ options, selected = [], onChange, placeholde
 
     return (
         <div ref={ref} style={{ position: "relative", userSelect: "none" }}>
-            {/* Trigger */}
             <div
                 onClick={() => setOpen(p => !p)}
                 style={{
@@ -301,7 +300,6 @@ const MultiSelectDropdown = memo(({ options, selected = [], onChange, placeholde
                         >✕</span>
                     </span>
                 ))}
-                {/* Chevron */}
                 <span style={{
                     position: "absolute", right: 10, top: "50%", transform: `translateY(-50%) rotate(${open ? 180 : 0}deg)`,
                     transition: "transform 0.2s", color: open ? T.green : T.textFaint, display: "flex",
@@ -312,7 +310,6 @@ const MultiSelectDropdown = memo(({ options, selected = [], onChange, placeholde
                 </span>
             </div>
 
-            {/* Dropdown panel */}
             {open && (
                 <div style={{
                     position: "absolute", top: "calc(100% + 5px)", left: 0, right: 0,
@@ -320,7 +317,6 @@ const MultiSelectDropdown = memo(({ options, selected = [], onChange, placeholde
                     borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
                     animation: "ddIn 0.16s cubic-bezier(.4,0,.2,1)", overflow: "hidden",
                 }}>
-                    {/* Search */}
                     <div style={{ padding: "8px 8px 4px", borderBottom: `1px solid ${T.borderLight}` }}>
                         <div style={{ position: "relative" }}>
                             <input
@@ -341,7 +337,6 @@ const MultiSelectDropdown = memo(({ options, selected = [], onChange, placeholde
                         </div>
                     </div>
 
-                    {/* Options */}
                     <div style={{ maxHeight: 220, overflowY: "auto", padding: 4 }}>
                         {filtered.length === 0 && (
                             <div style={{ padding: "10px 12px", fontSize: 12, color: T.textFaint, fontFamily: T.sans, textAlign: "center" }}>No stories found</div>
@@ -359,7 +354,6 @@ const MultiSelectDropdown = memo(({ options, selected = [], onChange, placeholde
                                         background: sel ? T.greenLight : "transparent",
                                     }}
                                 >
-                                    {/* Checkbox */}
                                     <div style={{
                                         width: 16, height: 16, borderRadius: 4, flexShrink: 0,
                                         border: `1.5px solid ${sel ? T.green : T.border}`,
@@ -386,7 +380,6 @@ const MultiSelectDropdown = memo(({ options, selected = [], onChange, placeholde
                         })}
                     </div>
 
-                    {/* Footer */}
                     {selected.length > 0 && (
                         <div style={{ padding: "6px 10px", borderTop: `1px solid ${T.borderLight}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                             <span style={{ fontSize: 11, color: T.textMuted, fontFamily: T.sans }}>{selected.length} selected</span>
@@ -408,25 +401,29 @@ const PRIORITY_OPTIONS = [{ id: "High", name: "High" }, { id: "Medium", name: "M
 const STATUS_OPTIONS = [{ id: "Active", name: "Active" }, { id: "Draft", name: "Draft" }, { id: "Archived", name: "Archived" }];
 const FILTER_STATUS_OPT = [{ id: "", name: "All Status" }, { id: "Active", name: "Active" }, { id: "Draft", name: "Draft" }, { id: "Archived", name: "Archived" }];
 const PRIORITY_WITH_PH = [{ id: "", name: "Select Priority" }, ...PRIORITY_OPTIONS];
+const TEST_TYPE_OPTIONS = [
+    { id: "", name: "Select Type" },
+    { id: "Functional", name: "Functional" },
+    { id: "Integration", name: "Integration" },
+    { id: "Regression", name: "Regression" },
+    { id: "Smoke", name: "Smoke" },
+    { id: "Sanity", name: "Sanity" },
+    { id: "Performance", name: "Performance" },
+    { id: "Security", name: "Security" },
+    { id: "UI/UX", name: "UI/UX" },
+    { id: "API", name: "API" },
+    { id: "Exploratory", name: "Exploratory" },
+];
 
-const emptyForm = { id: "", name: "", description: "", preconditions: "", steps: "", expected: "", assignee: "", status: "Active", priority: "", tags: "", userStoryIds: [] };
-const emptyFeatureForm = { moduleId: "", name: "", code: "", user_stories: [], description: "", assign_to: "" };
-const emptyEditFeatureForm = { id: "", moduleId: "", name: "", code: "", user_stories: [], description: "", assign_to: "" };
+const emptyForm = { id: "", name: "", description: "", test_type: "", test_scenario: "", pre_requisites: "", test_steps: "", expected_result: "", assignee: "", status: "Active", priority: "", tags: "", userStoryIds: [] };
+const emptyFeatureForm = { moduleId: "", name: "", code: "", user_story: "", description: "", assign_to: "" };
+const emptyEditFeatureForm = { id: "", moduleId: "", name: "", code: "", user_story: "", description: "", assign_to: "" };
 
 const generateUUID = () =>
     'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
         const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
     });
-
-const generateNextTcId = (allTestCases) => {
-    let max = 0;
-    for (const tc of allTestCases) {
-        const m = (tc.tcId || tc.id || "").match(/^TC-(\d+)$/i);
-        if (m) max = Math.max(max, parseInt(m[1], 10));
-    }
-    return `TC-${String(max + 1).padStart(3, "0")}`;
-};
 
 const generateNextFeatCode = (allFeatures) => {
     let max = 0;
@@ -437,6 +434,32 @@ const generateNextFeatCode = (allFeatures) => {
     }
     return `FEAT-${String(max + 1).padStart(3, "0")}`;
 };
+
+// ─── CSV template column definitions ──────────────────────────────────────────
+const FEATURE_IMPORT_COLUMNS = [
+    { name: "Module name", req: true, hint: "Exact module name e.g. Authentication" },
+    { name: "Feature Name", req: true, hint: "e.g. Two-Factor Authentication" },
+    { name: "Feature Code", req: true, hint: "e.g. FEAT-001" },
+    { name: "User Story", req: true, hint: "e.g. US-015" },
+    { name: "Description", req: true, hint: "Brief description of the feature" },
+    { name: "Assign To", req: true, hint: "Full name of assignee (must match a user in the system)" },
+    { name: "Status", req: true, hint: "Active / Draft / Archived" },
+];
+
+const TC_IMPORT_COLUMNS = [
+    { name: "Feature Code", req: true, hint: "e.g. FEAT-001 (must exist in the system)" },
+    { name: "TC Name", req: true, hint: "Short descriptive name" },
+    { name: "Priority", req: true, hint: "High / Medium / Low" },
+    { name: "Status", req: true, hint: "Active / Draft / Archived" },
+    { name: "Test Type", req: true, hint: "Functional / Integration / Regression / Smoke / Sanity / Performance / Security / UI/UX / API / Exploratory" },
+    { name: "Description", req: true, hint: "Brief description of what is being tested" },
+    { name: "Test Scenario", req: true, hint: "High-level scenario narrative" },
+    { name: "Pre-Requisites", req: true, hint: "Conditions that must be true before running" },
+    { name: "Test Steps", req: true, hint: "Numbered step-by-step instructions" },
+    { name: "Expected Result", req: true, hint: "What should happen if the test passes" },
+    { name: "Assigned To", req: true, hint: "Tester full name" },
+    { name: "User Story IDs", req: false, hint: "Optional · Semicolon-separated story_id codes e.g. US-001;US-002" },
+];
 
 // ─── Stat Card ─────────────────────────────────────────────────────────────────
 const STAT_COLORS = {
@@ -467,56 +490,126 @@ const StatCard = ({ stat }) => {
     );
 };
 
-// ─── Test Case Row ──────────────────────────────────────────────────────────────
-const TestCaseRow = memo(({ tc, onEdit, onDelete }) => (
-    <tr className="fl-tc-row" style={{ borderBottom: `1px solid ${T.borderLight}` }}>
-        <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "2px 8px", borderRadius: 5 }}>{tc.tcId}</span>
-        </td>
-        <td style={{ padding: "10px 16px" }}>
-            <p style={{ fontSize: 12, color: T.text, fontWeight: 500, margin: 0, fontFamily: T.sans }}>{tc.name}</p>
-            {tc.description && <p style={{ fontSize: 11, color: T.textMuted, marginTop: 1, fontFamily: T.sans, lineHeight: 1.4 }}>{tc.description}</p>}
-        </td>
-        <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
-            <Chip label={tc.priority} style={PRIORITY_STYLE[tc.priority] || {}} mono />
-        </td>
-        <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
-            <Chip label={tc.status} style={STATUS_STYLE[tc.status] || STATUS_STYLE["Active"]} />
-        </td>
-        <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
-            {tc.assignee
-                ? <span style={{ fontSize: 11, color: T.textMid, fontFamily: T.sans, display: "flex", alignItems: "center", gap: 5 }}>
-                    <i className="fa-solid fa-user" style={{ fontSize: 9, color: T.textFaint }}></i>{tc.assignee}
-                </span>
-                : <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>—</span>
-            }
-        </td>
-        {/* ── FIX: show linked user stories ── */}
-        <td style={{ padding: "10px 16px" }}>
-            {tc.userStoryIds && tc.userStoryIds.length > 0 ? (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-                    {tc.userStoryCodes && tc.userStoryCodes.length > 0
-                        ? tc.userStoryCodes.map((code, i) => (
-                            <span key={i} style={{ fontSize: 10, fontWeight: 700, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "1px 6px", borderRadius: 4 }}>{code}</span>
-                        ))
-                        : tc.userStoryIds.map((id, i) => (
-                            <span key={i} style={{ fontSize: 10, fontWeight: 700, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "1px 6px", borderRadius: 4 }}>US</span>
-                        ))
+// ─── Test Case Row ─────────────────────────────────────────────────────────────
+const TEST_TYPE_COLORS = {
+    Functional: { bg: "rgba(37,99,235,0.08)", fg: "#1D4ED8" },
+    Integration: { bg: "rgba(124,58,237,0.08)", fg: "#7C3AED" },
+    Regression: { bg: "rgba(217,119,6,0.08)", fg: "#B45309" },
+    Smoke: { bg: "rgba(20,184,166,0.08)", fg: "#0F766E" },
+    Sanity: { bg: "rgba(34,197,94,0.08)", fg: "#15803D" },
+    Performance: { bg: "rgba(239,68,68,0.08)", fg: "#DC2626" },
+    Security: { bg: "rgba(239,68,68,0.12)", fg: "#B91C1C" },
+    "UI/UX": { bg: "rgba(236,72,153,0.08)", fg: "#BE185D" },
+    API: { bg: "rgba(14,165,233,0.08)", fg: "#0369A1" },
+    Exploratory: { bg: "rgba(107,114,128,0.08)", fg: "#4B5563" },
+};
+
+const DetailSection = ({ icon, label, value }) => value ? (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: T.textFaint, textTransform: "uppercase", letterSpacing: "0.07em", fontFamily: T.sans, display: "flex", alignItems: "center", gap: 5 }}>
+            <i className={`fa-solid ${icon}`} style={{ fontSize: 9 }}></i>{label}
+        </span>
+        <p style={{ fontSize: 12, color: T.textMid, margin: 0, fontFamily: T.sans, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{value}</p>
+    </div>
+) : null;
+
+const TestCaseRow = memo(({ tc, onEdit, onDelete }) => {
+    const [expanded, setExpanded] = useState(false);
+    const hasDetails = tc.test_type || tc.test_scenario || tc.pre_requisites || tc.test_steps || tc.expected_result;
+    const typeStyle = TEST_TYPE_COLORS[tc.test_type] || {};
+
+    return (
+        <>
+            <tr className="fl-tc-row" style={{ borderBottom: expanded ? "none" : `1px solid ${T.borderLight}` }}>
+                <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "2px 8px", borderRadius: 5 }}>{tc.tcId}</span>
+                </td>
+                <td style={{ padding: "10px 16px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <p style={{ fontSize: 12, color: T.text, fontWeight: 500, margin: 0, fontFamily: T.sans }}>{tc.name}</p>
+                        {tc.test_type && (
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 4, fontFamily: T.mono, background: typeStyle.bg, color: typeStyle.fg }}>{tc.test_type}</span>
+                        )}
+                    </div>
+                    {tc.description && <p style={{ fontSize: 11, color: T.textMuted, marginTop: 1, fontFamily: T.sans, lineHeight: 1.4 }}>{tc.description}</p>}
+                </td>
+                <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                    <Chip label={tc.priority} style={PRIORITY_STYLE[tc.priority] || {}} mono />
+                </td>
+                <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                    <Chip label={tc.status} style={STATUS_STYLE[tc.status] || STATUS_STYLE["Active"]} />
+                </td>
+                <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                    {tc.assignee
+                        ? <span style={{ fontSize: 11, color: T.textMid, fontFamily: T.sans, display: "flex", alignItems: "center", gap: 5 }}>
+                            <i className="fa-solid fa-user" style={{ fontSize: 9, color: T.textFaint }}></i>{tc.assignee}
+                        </span>
+                        : <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>—</span>
                     }
-                </div>
-            ) : (
-                <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>—</span>
+                </td>
+                <td style={{ padding: "10px 16px" }}>
+                    {tc.userStoryIds && tc.userStoryIds.length > 0 ? (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                            {tc.userStoryCodes && tc.userStoryCodes.length > 0
+                                ? tc.userStoryCodes.map((code, i) => (
+                                    <span key={i} style={{ fontSize: 10, fontWeight: 700, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "1px 6px", borderRadius: 4 }}>{code}</span>
+                                ))
+                                : tc.userStoryIds.map((id, i) => (
+                                    <span key={i} style={{ fontSize: 10, fontWeight: 700, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "1px 6px", borderRadius: 4 }}>US</span>
+                                ))
+                            }
+                        </div>
+                    ) : (
+                        <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>—</span>
+                    )}
+                </td>
+                <td style={{ padding: "10px 16px", whiteSpace: "nowrap", fontSize: 11, color: T.textMuted, fontFamily: T.mono }}>{tc.updated}</td>
+                <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                        {hasDetails && (
+                            <button
+                                className="fl-icon-btn"
+                                onClick={() => setExpanded(p => !p)}
+                                title={expanded ? "Hide details" : "Show details"}
+                                style={{ color: expanded ? T.blue : T.textFaint }}
+                            >
+                                <i className={`fa-solid fa-chevron-${expanded ? "up" : "down"}`} style={{ fontSize: 10 }}></i>
+                            </button>
+                        )}
+                        <button className="fl-icon-btn edit" onClick={onEdit} title="Edit"><i className="fa-solid fa-pen-to-square"></i></button>
+                        <button className="fl-icon-btn delete" onClick={onDelete} title="Delete"><i className="fa-solid fa-trash"></i></button>
+                    </div>
+                </td>
+            </tr>
+            {expanded && hasDetails && (
+                <tr style={{ borderBottom: `1px solid ${T.borderLight}` }}>
+                    <td colSpan={8} style={{ padding: 0, background: "#FAFBF8" }}>
+                        <div style={{ padding: "16px 20px", borderTop: `1px dashed ${T.border}` }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                                <div style={{ width: 24, height: 24, borderRadius: 6, background: T.greenLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    <i className="fa-solid fa-file-lines" style={{ color: T.green, fontSize: 10 }}></i>
+                                </div>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: T.green, textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: T.sans }}>Test Case Template</span>
+                                <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.mono }}>{tc.tcId}</span>
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                                    <DetailSection icon="fa-tag" label="Test Type" value={tc.test_type} />
+                                    <DetailSection icon="fa-align-left" label="Test Scenario" value={tc.test_scenario} />
+                                    <DetailSection icon="fa-list-check" label="Pre-Requisites" value={tc.pre_requisites} />
+                                </div>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                                    <DetailSection icon="fa-shoe-prints" label="Test Steps" value={tc.test_steps} />
+                                    <DetailSection icon="fa-circle-check" label="Expected Result" value={tc.expected_result} />
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
             )}
-        </td>
-        <td style={{ padding: "10px 16px", whiteSpace: "nowrap", fontSize: 11, color: T.textMuted, fontFamily: T.mono }}>{tc.updated}</td>
-        <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-                <button className="fl-icon-btn edit" onClick={onEdit} title="Edit"><i className="fa-solid fa-pen-to-square"></i></button>
-                <button className="fl-icon-btn delete" onClick={onDelete} title="Delete"><i className="fa-solid fa-trash"></i></button>
-            </div>
-        </td>
-    </tr>
-));
+        </>
+    );
+});
 
 // ─── Feature Card ──────────────────────────────────────────────────────────────
 const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEdit, onDelete }) => (
@@ -578,7 +671,6 @@ const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEdit, onDelete })
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
                         <thead>
                             <tr style={{ background: T.surfaceAlt, borderBottom: `1px solid ${T.border}` }}>
-                                {/* ── FIX: added User Stories column header ── */}
                                 {["ID", "Name", "Priority", "Status", "Assignee", "User Stories", "Updated", ""].map(h => (
                                     <th key={h} style={{ padding: "8px 16px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.07em", fontFamily: T.sans }}>{h}</th>
                                 ))}
@@ -673,19 +765,29 @@ export default function FeaturesLibrary() {
     const [deleteFeatureTarget, setDeleteFeatureTarget] = useState(null);
     const [form, setForm] = useState(emptyForm);
 
+    // ── Import state ──
+    const [importModal, setImportModal] = useState({ open: false });
+    const [importFile, setImportFile] = useState(null);
+    const [importRows, setImportRows] = useState([]);
+    const [importType, setImportType] = useState("features");
+    const [importLoading, setImportLoading] = useState(false);
+    const [importError, setImportError] = useState("");
+    const [importSuccess, setImportSuccess] = useState("");
+    const importFileRef = useRef(null);
+
+    // ─── Data fetching ────────────────────────────────────────────────────────
     const fetchModulesWithFeatures = useCallback(async () => {
         try {
             setLoading(true); setError(null);
             const [
                 { data: modulesData, error: modulesError },
                 { data: featuresData, error: featuresError },
-                // ── FIX: also fetch user_story_ids from test_cases ──
                 { data: testCasesData, error: testCasesError },
                 { data: storiesData, error: storiesError },
             ] = await Promise.all([
                 supabase.from("modules").select("*").order("module_code", { ascending: false }),
                 supabase.from("features").select("*"),
-                supabase.from("test_cases").select("id, test_case_id, name, description, priority, status, updated_at, feature_id, module_id, assigned_to, user_story_ids"),
+                supabase.from("test_cases").select("id, test_case_id, name, description, priority, status, updated_at, feature_id, module_id, assigned_to, user_story_ids, test_type, test_scenario, pre_requisites, test_steps, expected_result"),
                 supabase.from("user_stories").select("id, story_id, story_title"),
             ]);
             if (modulesError) throw modulesError;
@@ -693,11 +795,8 @@ export default function FeaturesLibrary() {
             if (testCasesError) console.warn("Test cases:", testCasesError.message);
             if (storiesError) console.warn("User stories:", storiesError.message);
 
-            // ── Build a UUID → story_id code lookup map ──
             const storyCodeMap = {};
-            for (const s of (storiesData || [])) {
-                storyCodeMap[s.id] = s.story_id;
-            }
+            for (const s of (storiesData || [])) storyCodeMap[s.id] = s.story_id;
 
             const feats = featuresData || [];
             const tcs = testCasesData || [];
@@ -705,7 +804,6 @@ export default function FeaturesLibrary() {
             for (const tc of tcs) {
                 if (!tc.feature_id) continue;
                 if (!tcsByFeature[tc.feature_id]) tcsByFeature[tc.feature_id] = [];
-                // ── FIX: include user_story_ids and resolve to codes ──
                 const userStoryIds = Array.isArray(tc.user_story_ids) ? tc.user_story_ids : [];
                 const userStoryCodes = userStoryIds.map(uid => storyCodeMap[uid]).filter(Boolean);
                 tcsByFeature[tc.feature_id].push({
@@ -717,6 +815,11 @@ export default function FeaturesLibrary() {
                     updated: new Date(tc.updated_at).toLocaleDateString(),
                     userStoryIds,
                     userStoryCodes,
+                    test_type: tc.test_type || "",
+                    test_scenario: tc.test_scenario || "",
+                    pre_requisites: tc.pre_requisites || "",
+                    test_steps: tc.test_steps || "",
+                    expected_result: tc.expected_result || "",
                 });
             }
             const featsByModule = {};
@@ -764,13 +867,7 @@ export default function FeaturesLibrary() {
                 .select("id, story_id, story_title")
                 .order("story_id", { ascending: true });
             if (error) { console.warn("User stories:", error.message); return; }
-            setUserStories(
-                (data || []).map(s => ({
-                    id: s.id,
-                    code: s.story_id,
-                    name: s.story_title || s.story_id,
-                }))
-            );
+            setUserStories((data || []).map(s => ({ id: s.id, code: s.story_id, name: s.story_title || s.story_id })));
         } catch (err) { console.error(err); }
     }, []);
 
@@ -778,6 +875,7 @@ export default function FeaturesLibrary() {
         Promise.all([fetchModulesWithFeatures(), fetchUsers(), fetchUserStories()]);
     }, [fetchModulesWithFeatures, fetchUsers, fetchUserStories]);
 
+    // ─── Derived data ─────────────────────────────────────────────────────────
     const flatFeatures = useMemo(() =>
         modules.flatMap(mod => mod.features.map(feat => {
             const assignedUser = users.find(u => u.id === feat.assign_to);
@@ -807,7 +905,6 @@ export default function FeaturesLibrary() {
                 f.testCases.some(tc =>
                     (tc.tcId || tc.id).toLowerCase().includes(q) ||
                     tc.name.toLowerCase().includes(q) ||
-                    // ── FIX: also search by linked story codes ──
                     (tc.userStoryCodes || []).some(code => code.toLowerCase().includes(q))
                 )
             );
@@ -831,13 +928,24 @@ export default function FeaturesLibrary() {
         setAddFeatureModal(true);
     }, [flatFeatures]);
 
-    const openAddModal = useCallback((e, moduleId, featureId) => {
+    const getNextTcId = useCallback(async () => {
+        try {
+            const { data } = await supabase.from("test_cases").select("test_case_id");
+            let max = 0;
+            for (const row of (data || [])) {
+                const m = (row.test_case_id || "").match(/^TC-(\d+)$/i);
+                if (m) max = Math.max(max, parseInt(m[1], 10));
+            }
+            return `TC-${String(max + 1).padStart(3, "0")}`;
+        } catch (_) { return `TC-${Date.now()}`; }
+    }, []);
+
+    const openAddModal = useCallback(async (e, moduleId, featureId) => {
         e.stopPropagation();
-        const allTCs = modules.flatMap(m => m.features.flatMap(f => f.testCases));
-        const nextId = generateNextTcId(allTCs);
+        const nextId = await getNextTcId();
         setForm({ ...emptyForm, id: nextId });
         setAddModal({ open: true, featureId, moduleId });
-    }, [modules]);
+    }, [getNextTcId]);
 
     const openEditModal = useCallback((e, moduleId, featureId, tc) => {
         e.stopPropagation();
@@ -845,12 +953,15 @@ export default function FeaturesLibrary() {
             id: tc.tcId,
             name: tc.name,
             description: tc.description,
-            preconditions: "", steps: "", expected: "",
+            test_type: tc.test_type || "",
+            test_scenario: tc.test_scenario || "",
+            pre_requisites: tc.pre_requisites || "",
+            test_steps: tc.test_steps || "",
+            expected_result: tc.expected_result || "",
             assignee: tc.assignee || "",
             status: tc.status,
             priority: tc.priority,
             tags: "",
-            // ── FIX: preserve userStoryIds on edit ──
             userStoryIds: tc.userStoryIds || [],
         });
         setEditModal({ open: true, tc, featureId, moduleId });
@@ -862,27 +973,24 @@ export default function FeaturesLibrary() {
 
     const openEditFeatureModal = useCallback((e, feat) => {
         e.stopPropagation();
-        const storyCodes = (feat.user_story || "").split(",").map(s => s.trim()).filter(Boolean);
-        const matchedIds = storyCodes.map(code => {
-            const s = userStories.find(st => st.code === code || st.name === code);
-            return s ? s.id : null;
-        }).filter(Boolean);
-        setEditFeatureForm({ id: feat.id, moduleId: feat.moduleId, name: feat.feature_name || feat.name || "", code: feat.feature_code || feat.code || "", user_stories: matchedIds, description: feat.description || "", assign_to: feat.assign_to || "" });
+        setEditFeatureForm({ id: feat.id, moduleId: feat.moduleId, name: feat.feature_name || feat.name || "", code: feat.feature_code || feat.code || "", user_story: feat.user_story || "", description: feat.description || "", assign_to: feat.assign_to || "" });
         setEditFeatureModal(true);
-    }, [userStories]);
+    }, []);
 
     const openDeleteFeatureModal = useCallback((e, feat) => {
         e.stopPropagation(); setDeleteFeatureTarget(feat); setDeleteFeatureModal(true);
     }, []);
 
+    // ─── CRUD handlers ────────────────────────────────────────────────────────
     const handleAddTestCase = useCallback(async () => {
         if (!form.name || !form.priority) { alert("Name and Priority required"); return; }
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) { alert("Must be logged in"); return; }
+            const freshId = await getNextTcId();
             const { error } = await supabase.from("test_cases").insert([{
                 id: generateUUID(),
-                test_case_id: form.id,
+                test_case_id: freshId,
                 name: form.name,
                 description: form.description,
                 feature_id: addModal.featureId || null,
@@ -891,15 +999,19 @@ export default function FeaturesLibrary() {
                 status: form.status,
                 created_by: user.id,
                 assigned_to: form.assignee || null,
-                // ── FIX: save user_story_ids as uuid array ──
                 user_story_ids: form.userStoryIds.length > 0 ? form.userStoryIds : null,
+                test_type: form.test_type || null,
+                test_scenario: form.test_scenario || null,
+                pre_requisites: form.pre_requisites || null,
+                test_steps: form.test_steps || null,
+                expected_result: form.expected_result || null,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
             }]);
             if (error) throw error;
             setAddModal({ open: false }); fetchModulesWithFeatures();
         } catch (err) { alert(`Error: ${err.message}`); }
-    }, [form, addModal.featureId, addModal.moduleId, fetchModulesWithFeatures]);
+    }, [form, addModal.featureId, addModal.moduleId, fetchModulesWithFeatures, getNextTcId]);
 
     const handleEditTestCase = useCallback(async () => {
         if (!form.name || !form.priority) { alert("Name and Priority required"); return; }
@@ -909,8 +1021,12 @@ export default function FeaturesLibrary() {
                 description: form.description,
                 priority: form.priority,
                 status: form.status,
-                // ── FIX: also update user_story_ids on edit ──
                 user_story_ids: form.userStoryIds.length > 0 ? form.userStoryIds : null,
+                test_type: form.test_type || null,
+                test_scenario: form.test_scenario || null,
+                pre_requisites: form.pre_requisites || null,
+                test_steps: form.test_steps || null,
+                expected_result: form.expected_result || null,
                 updated_at: new Date().toISOString(),
             }).eq("id", editModal.tc.id);
             if (error) throw error;
@@ -934,19 +1050,13 @@ export default function FeaturesLibrary() {
                 feature_code: featureForm.code, description: featureForm.description,
                 created_at: new Date().toISOString(),
             };
-            if (featureForm.user_stories && featureForm.user_stories.length > 0) {
-                const codes = featureForm.user_stories.map(id => {
-                    const s = userStories.find(st => st.id === id);
-                    return s ? (s.code || s.name) : id;
-                });
-                ins.user_story = codes.join(", ");
-            }
+            if (featureForm.user_story) ins.user_story = featureForm.user_story;
             if (featureForm.assign_to) ins.assign_to = featureForm.assign_to;
             const { error } = await supabase.from("features").insert([ins]);
             if (error) throw error;
             setAddFeatureModal(false); setFeatureForm(emptyFeatureForm); fetchModulesWithFeatures();
         } catch (err) { alert(`Error: ${err.message}`); }
-    }, [featureForm, userStories, fetchModulesWithFeatures]);
+    }, [featureForm, fetchModulesWithFeatures]);
 
     const handleEditFeature = useCallback(async () => {
         if (!editFeatureForm.name || !editFeatureForm.code) { alert("Name and Code required"); return; }
@@ -954,21 +1064,14 @@ export default function FeaturesLibrary() {
             const { error } = await supabase.from("features").update({
                 feature_name: editFeatureForm.name, feature_code: editFeatureForm.code,
                 description: editFeatureForm.description,
-                user_story: (() => {
-                    if (!editFeatureForm.user_stories || editFeatureForm.user_stories.length === 0) return null;
-                    const codes = editFeatureForm.user_stories.map(id => {
-                        const s = userStories.find(st => st.id === id);
-                        return s ? (s.code || s.name) : id;
-                    });
-                    return codes.join(", ");
-                })(),
+                user_story: editFeatureForm.user_story || null,
                 assign_to: editFeatureForm.assign_to || null,
                 module_id: editFeatureForm.moduleId,
             }).eq("id", editFeatureForm.id);
             if (error) throw error;
             setEditFeatureModal(false); setEditFeatureForm(emptyEditFeatureForm); fetchModulesWithFeatures();
         } catch (err) { alert(`Error: ${err.message}`); }
-    }, [editFeatureForm, userStories, fetchModulesWithFeatures]);
+    }, [editFeatureForm, fetchModulesWithFeatures]);
 
     const handleDeleteFeature = useCallback(async () => {
         if (!deleteFeatureTarget) return;
@@ -980,17 +1083,250 @@ export default function FeaturesLibrary() {
         } catch (err) { alert(`Error: ${err.message}`); }
     }, [deleteFeatureTarget, fetchModulesWithFeatures]);
 
+    // ─── CSV Import ───────────────────────────────────────────────────────────
+    const parseCSV = useCallback((text) => {
+        const lines = text.trim().split(/\r?\n/);
+        if (lines.length < 2) return [];
+        const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim());
+        return lines.slice(1).map(line => {
+            const vals = [];
+            let cur = "", inQ = false;
+            for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                if (ch === '"') { inQ = !inQ; }
+                else if (ch === "," && !inQ) { vals.push(cur.trim()); cur = ""; }
+                else { cur += ch; }
+            }
+            vals.push(cur.trim());
+            const row = {};
+            headers.forEach((h, i) => { row[h] = vals[i] || ""; });
+            return row;
+        }).filter(row => Object.values(row).some(v => v));
+    }, []);
+
+    const validateImportRows = useCallback((rows, type) => {
+        const requiredCols = type === "features"
+            ? FEATURE_IMPORT_COLUMNS.filter(c => c.req).map(c => c.name)
+            : TC_IMPORT_COLUMNS.filter(c => c.req).map(c => c.name);
+
+        const missingHeaders = requiredCols.filter(col => !(col in rows[0]));
+        if (missingHeaders.length) {
+            return `Missing required column(s): ${missingHeaders.join(", ")}`;
+        }
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const emptyFields = requiredCols.filter(col => !row[col] || !row[col].trim());
+            if (emptyFields.length) {
+                return `Row ${i + 2}: required field(s) are empty — ${emptyFields.join(", ")}`;
+            }
+        }
+        return null;
+    }, []);
+
+    const handleImportFile = useCallback((e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setImportFile(file);
+        setImportError("");
+        setImportSuccess("");
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const rows = parseCSV(ev.target.result);
+                if (!rows.length) { setImportError("No data rows found in the CSV."); setImportRows([]); return; }
+                setImportRows(rows);
+            } catch (err) { setImportError("Failed to parse CSV: " + err.message); setImportRows([]); }
+        };
+        reader.readAsText(file);
+    }, [parseCSV]);
+
+    // ── FIX: corrected handleImportSubmit ─────────────────────────────────────
+    const handleImportSubmit = useCallback(async () => {
+        if (!importRows.length) return;
+
+        const validationError = validateImportRows(importRows, importType);
+        if (validationError) { setImportError(validationError); return; }
+
+        setImportLoading(true); setImportError(""); setImportSuccess("");
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error("Must be logged in");
+
+            if (importType === "features") {
+                // Build module lookup: both name (lowercase) and code → UUID
+                const modMap = {};
+                for (const m of modules) {
+                    const code = String(m.module_code || "").trim();
+                    if (code) modMap[code.toLowerCase()] = m.id;
+                    const name = String(m.module_name || m.name || "").trim();
+                    if (name) modMap[name.toLowerCase()] = m.id;
+                }
+
+                // Build user name → UUID map
+                const userMap = {};
+                for (const u of users) {
+                    if (u.name) userMap[u.name.toLowerCase()] = u.id;
+                }
+
+                // ── STEP 1: Check all module names resolve — block import if any don't ──
+                const VALID_STATUSES = ["active", "draft", "archived"];
+                const rowErrors = [];
+                importRows.forEach((row, i) => {
+                    const moduleKey = String(row["Module name"] || "").trim().toLowerCase();
+                    if (!modMap[moduleKey]) {
+                        rowErrors.push(`Row ${i + 2}: Module "${row["Module name"]}" not found. Available modules: ${modules.map(m => m.module_name || m.name).join(", ")}`);
+                    }
+                    const status = (row["Status"] || "").trim().toLowerCase();
+                    if (status && !VALID_STATUSES.includes(status)) {
+                        rowErrors.push(`Row ${i + 2}: Status "${row["Status"]}" is invalid. Use: Active, Draft, or Archived`);
+                    }
+                });
+                if (rowErrors.length) {
+                    setImportError(rowErrors.join("\n"));
+                    return;
+                }
+
+                // ── STEP 2: Check for duplicate feature codes ──
+                const { data: existingFeatures } = await supabase.from("features").select("feature_code");
+                const existingCodes = new Set((existingFeatures || []).map(f => (f.feature_code || "").trim().toLowerCase()));
+
+                const skippedDuplicates = [];
+                const inserts = importRows
+                    .map(row => {
+                        const moduleKey = String(row["Module name"] || "").trim().toLowerCase();
+                        const moduleId = modMap[moduleKey];
+                        const assignToName = String(row["Assign To"] || "").trim().toLowerCase();
+                        const assignToId = userMap[assignToName] || null;
+                        const rawStatus = (row["Status"] || "Active").trim();
+                        // Normalize status to proper case
+                        const status = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase();
+                        return {
+                            module_id: moduleId,
+                            feature_name: row["Feature Name"].trim(),
+                            feature_code: row["Feature Code"].trim(),
+                            user_story: row["User Story"].trim() || null,
+                            description: row["Description"].trim() || null,
+                            assign_to: assignToId,
+                            status: status || "Active",
+                            created_at: new Date().toISOString(),
+                        };
+                    })
+                    .filter(row => {
+                        const isDuplicate = existingCodes.has((row.feature_code || "").toLowerCase());
+                        if (isDuplicate) skippedDuplicates.push(row.feature_code);
+                        return !isDuplicate;
+                    });
+
+                if (!inserts.length) {
+                    setImportError(`All ${importRows.length} row(s) were skipped — feature codes already exist: ${skippedDuplicates.join(", ")}`);
+                    return;
+                }
+
+                const { error } = await supabase.from("features").insert(inserts);
+                if (error) throw error;
+
+                const skippedMsg = skippedDuplicates.length
+                    ? ` (${skippedDuplicates.length} duplicate(s) skipped: ${skippedDuplicates.join(", ")})`
+                    : "";
+                setImportSuccess(`✓ Successfully imported ${inserts.length} feature(s).${skippedMsg}`);
+
+            } else {
+                // Test cases
+                const featMap = {};
+                for (const m of modules) {
+                    for (const f of m.features) {
+                        featMap[(f.code || "").trim()] = { id: f.id, moduleId: m.id };
+                    }
+                }
+
+                // FIX 3: build story_id code → UUID map so user_story_ids stores UUIDs
+                const storyUUIDMap = {};
+                for (const s of userStories) {
+                    if (s.code) storyUUIDMap[s.code] = s.id;   // s.code = "US-001", s.id = UUID
+                }
+
+                const { data: allTcIds } = await supabase.from("test_cases").select("test_case_id");
+                let tcCounter = 0;
+                for (const row of (allTcIds || [])) {
+                    const m = (row.test_case_id || "").match(/^TC-(\d+)$/i);
+                    if (m) tcCounter = Math.max(tcCounter, parseInt(m[1], 10));
+                }
+
+                const inserts = importRows.map(row => {
+                    const feat = featMap[(row["Feature Code"] || "").trim()] || {};
+                    tcCounter++;
+
+                    // FIX: convert semicolon-separated story codes to actual UUIDs
+                    const rawStoryCodes = row["User Story IDs"]
+                        ? row["User Story IDs"].split(/[;,]/).map(s => s.trim()).filter(Boolean)
+                        : [];
+                    const storyUUIDs = rawStoryCodes
+                        .map(code => storyUUIDMap[code])
+                        .filter(Boolean);   // drop any codes with no matching UUID
+
+                    return {
+                        id: generateUUID(),
+                        test_case_id: `TC-${String(tcCounter).padStart(3, "0")}`,
+                        name: row["TC Name"].trim(),
+                        description: row["Description"].trim() || null,
+                        priority: row["Priority"].trim() || "Medium",
+                        status: row["Status"].trim() || "Active",
+                        feature_id: feat.id || null,
+                        module_id: feat.moduleId || null,
+                        test_type: row["Test Type"].trim() || null,
+                        test_scenario: row["Test Scenario"].trim() || null,
+                        pre_requisites: row["Pre-Requisites"].trim() || null,
+                        test_steps: row["Test Steps"].trim() || null,
+                        expected_result: row["Expected Result"].trim() || null,
+                        assigned_to: row["Assigned To"].trim() || null,
+                        user_story_ids: storyUUIDs.length > 0 ? storyUUIDs : null,  // ✅ UUIDs
+                        created_by: user.id,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                    };
+                });
+
+                const { error } = await supabase.from("test_cases").insert(inserts);
+                if (error) throw error;
+                setImportSuccess(`✓ Successfully imported ${inserts.length} test case(s).`);
+            }
+
+            fetchModulesWithFeatures();
+        } catch (err) { setImportError(err.message); }
+        finally { setImportLoading(false); }
+    }, [importRows, importType, modules, users, userStories, fetchModulesWithFeatures, validateImportRows]);
+
+    const openImportModal = useCallback((type = "features") => {
+        setImportModal({ open: true });
+        setImportFile(null); setImportRows([]); setImportError(""); setImportSuccess("");
+        setImportType(type);
+    }, []);
+
+    const downloadSampleTemplate = useCallback((type) => {
+        const cols = type === "features" ? FEATURE_IMPORT_COLUMNS : TC_IMPORT_COLUMNS;
+        const headers = cols.map(c => c.name);
+        const escape = (v) => {
+            const s = String(v ?? "");
+            return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+        };
+        const csvLines = [headers.join(",")];
+        const blob = new Blob([csvLines.join("\n")], { type: "text/csv" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `${type}_import_template.csv`;
+        a.click();
+    }, []);
+
     const exportToCSV = useCallback(() => {
         if (!flatFeatures.length) { alert("No data"); return; }
         const rows = [];
         flatFeatures.forEach(feat => {
-            rows.push({ Module: feat.moduleName, "Module Code": feat.moduleCode, Feature: feat.name, "Feature Code": feat.code, "User Story": feat.user_story || "", Status: feat.status || "Active", Type: "FEATURE" });
+            rows.push({ Module: feat.moduleName, "Module name": feat.moduleCode, Feature: feat.name, "Feature Code": feat.code, "User Story": feat.user_story || "", Status: feat.status || "Active", Type: "FEATURE" });
             feat.testCases.forEach(tc => rows.push({
-                Module: feat.moduleName, "Module Code": feat.moduleCode,
+                Module: feat.moduleName, "Module name": feat.moduleCode,
                 Feature: feat.name, "Feature Code": feat.code,
                 "TC ID": tc.tcId, "TC Name": tc.name,
                 Priority: tc.priority, Status: tc.status,
-                // ── FIX: include linked stories in CSV export ──
                 "User Stories": (tc.userStoryCodes || []).join("; "),
                 Type: "TEST_CASE",
             }));
@@ -1020,6 +1356,7 @@ export default function FeaturesLibrary() {
         <div className="fl-root" style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, background: T.bg }}>
             <style>{GLOBAL_STYLES}</style>
 
+            {/* ── Header ── */}
             <header style={{ background: T.surface, borderBottom: `1px solid ${T.border}`, zIndex: 40, position: "sticky", top: 0 }}>
                 <div style={{ padding: "14px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
                     <div>
@@ -1027,6 +1364,12 @@ export default function FeaturesLibrary() {
                         <p style={{ fontSize: 12, color: T.textMuted, margin: "2px 0 0", lineHeight: 1.5 }}>All features with linked modules and test cases</p>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <button className="fl-btn-ghost" onClick={() => openImportModal("features")} style={{ padding: "8px 14px", fontSize: 13 }}>
+                            <i className="fa-solid fa-upload" style={{ fontSize: 11 }}></i> Import Features
+                        </button>
+                        <button className="fl-btn-ghost" onClick={() => openImportModal("testcases")} style={{ padding: "8px 14px", fontSize: 13 }}>
+                            <i className="fa-solid fa-upload" style={{ fontSize: 11 }}></i> Import Test Cases
+                        </button>
                         <button className="fl-btn-ghost" onClick={exportToCSV} style={{ padding: "8px 14px", fontSize: 13 }}>
                             <i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Export
                         </button>
@@ -1037,6 +1380,7 @@ export default function FeaturesLibrary() {
                 </div>
             </header>
 
+            {/* ── Main content ── */}
             <main style={{ flex: 1, overflowY: "auto" }}>
                 <div style={{ padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
 
@@ -1101,22 +1445,12 @@ export default function FeaturesLibrary() {
                             <Field label="Feature Name" required>
                                 <input className="fl-input" type="text" placeholder="e.g., Two-Factor Authentication" value={featureForm.name} onChange={e => setFeatureForm(f => ({ ...f, name: e.target.value }))} />
                             </Field>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                                <Field label="Feature Code">
-                                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 13px", background: T.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 8 }}>
-                                        <span style={{ fontSize: 13, fontWeight: 700, color: T.purple, fontFamily: T.mono }}>{featureForm.code}</span>
-                                        <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>Auto-generated</span>
-                                    </div>
-                                </Field>
-                                <Field label="User Stories">
-                                    <MultiSelectDropdown
-                                        options={userStories.map(s => ({ id: s.id, code: s.code, name: s.code ? `${s.code} – ${s.name}` : s.name }))}
-                                        selected={featureForm.user_stories}
-                                        onChange={ids => setFeatureForm(f => ({ ...f, user_stories: ids }))}
-                                        placeholder={userStories.length === 0 ? "No user stories available" : "Select User Stories…"}
-                                    />
-                                </Field>
-                            </div>
+                            <Field label="Feature Code">
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 13px", background: T.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 8 }}>
+                                    <span style={{ fontSize: 13, fontWeight: 700, color: T.purple, fontFamily: T.mono }}>{featureForm.code}</span>
+                                    <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>Auto-generated</span>
+                                </div>
+                            </Field>
                             <Field label="Description">
                                 <textarea className="fl-input" rows="3" placeholder="Brief description…" value={featureForm.description} onChange={e => setFeatureForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "none" }} />
                             </Field>
@@ -1156,13 +1490,8 @@ export default function FeaturesLibrary() {
                                 <Field label="Feature Code" required>
                                     <input className="fl-input" type="text" value={editFeatureForm.code} onChange={e => setEditFeatureForm(f => ({ ...f, code: e.target.value }))} />
                                 </Field>
-                                <Field label="User Stories">
-                                    <MultiSelectDropdown
-                                        options={userStories.map(s => ({ id: s.id, code: s.code, name: s.code ? `${s.code} – ${s.name}` : s.name }))}
-                                        selected={editFeatureForm.user_stories}
-                                        onChange={ids => setEditFeatureForm(f => ({ ...f, user_stories: ids }))}
-                                        placeholder={userStories.length === 0 ? "No user stories available" : "Select User Stories…"}
-                                    />
+                                <Field label="User Story">
+                                    <input className="fl-input" type="text" value={editFeatureForm.user_story} onChange={e => setEditFeatureForm(f => ({ ...f, user_story: e.target.value }))} />
                                 </Field>
                             </div>
                             <Field label="Description">
@@ -1224,31 +1553,49 @@ export default function FeaturesLibrary() {
             {/* ── Add Test Case Modal ── */}
             {addModal.open && (
                 <div style={OVERLAY} onClick={() => setAddModal({ open: false })}>
-                    <div className="fl-modal-enter" style={modalBox("620px")} onClick={e => e.stopPropagation()}>
+                    <div className="fl-modal-enter" style={modalBox("680px")} onClick={e => e.stopPropagation()}>
                         <div style={MODAL_HEADER}>
                             <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, margin: 0 }}>Add Test Case</h3>
                             <button onClick={() => setAddModal({ open: false })} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 16 }}><i className="fa-solid fa-times"></i></button>
                         </div>
                         <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
+                            <div style={{ background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 8, padding: "12px 14px" }}>
+                                <p style={{ fontSize: 10, fontWeight: 700, color: T.textFaint, textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 10px", fontFamily: T.sans }}>Identifiers</p>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                                    <Field label="Test Case ID">
+                                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 13px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8 }}>
+                                            <span style={{ fontSize: 13, fontWeight: 700, color: T.purple, fontFamily: T.mono }}>{form.id}</span>
+                                            <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>Auto</span>
+                                        </div>
+                                    </Field>
+                                    <Field label="Priority" required>
+                                        <Dropdown options={PRIORITY_WITH_PH} selected={form.priority} onChange={v => setForm(f => ({ ...f, priority: v }))} placeholder="Select Priority" />
+                                    </Field>
+                                </div>
+                            </div>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                                <Field label="Test Case ID">
-                                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 13px", background: T.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 8 }}>
-                                        <span style={{ fontSize: 13, fontWeight: 700, color: T.purple, fontFamily: T.mono }}>{form.id}</span>
-                                        <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>Auto-generated</span>
-                                    </div>
+                                <Field label="Test Case Name" required>
+                                    <input className="fl-input" type="text" placeholder="e.g., Valid login with correct credentials" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
                                 </Field>
-                                <Field label="Priority" required>
-                                    <Dropdown options={PRIORITY_WITH_PH} selected={form.priority} onChange={v => setForm(f => ({ ...f, priority: v }))} placeholder="Select Priority" />
+                                <Field label="Test Type">
+                                    <Dropdown options={TEST_TYPE_OPTIONS} selected={form.test_type} onChange={v => setForm(f => ({ ...f, test_type: v }))} placeholder="Select Type" />
                                 </Field>
                             </div>
-                            <Field label="Test Case Name" required>
-                                <input className="fl-input" type="text" placeholder="e.g., Valid login with correct credentials" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-                            </Field>
                             <Field label="Description">
-                                <textarea className="fl-input" rows="3" placeholder="Brief description…" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "none" }} />
+                                <textarea className="fl-input" rows="2" placeholder="Brief description…" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "none" }} />
                             </Field>
-
-                            {/* ── User Stories multi-select ── */}
+                            <Field label="Test Scenario">
+                                <textarea className="fl-input" rows="2" placeholder="Describe the scenario being tested…" value={form.test_scenario} onChange={e => setForm(f => ({ ...f, test_scenario: e.target.value }))} style={{ resize: "none" }} />
+                            </Field>
+                            <Field label="Pre-Requisites">
+                                <textarea className="fl-input" rows="2" placeholder="List all conditions that must be met before running this test…" value={form.pre_requisites} onChange={e => setForm(f => ({ ...f, pre_requisites: e.target.value }))} style={{ resize: "none" }} />
+                            </Field>
+                            <Field label="Test Steps">
+                                <textarea className="fl-input" rows="4" placeholder={"1. Navigate to login page\n2. Enter valid credentials\n3. Click Sign In…"} value={form.test_steps} onChange={e => setForm(f => ({ ...f, test_steps: e.target.value }))} style={{ resize: "vertical" }} />
+                            </Field>
+                            <Field label="Expected Result">
+                                <textarea className="fl-input" rows="2" placeholder="Describe what the expected outcome should be…" value={form.expected_result} onChange={e => setForm(f => ({ ...f, expected_result: e.target.value }))} style={{ resize: "none" }} />
+                            </Field>
                             <Field label="User Stories">
                                 <MultiSelectDropdown
                                     options={userStories}
@@ -1257,7 +1604,6 @@ export default function FeaturesLibrary() {
                                     placeholder={userStories.length === 0 ? "No user stories available" : "Select user stories…"}
                                 />
                             </Field>
-
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                                 <Field label="Assigned To">
                                     <Dropdown options={testerOptions} selected={form.assignee} onChange={v => setForm(f => ({ ...f, assignee: v }))} placeholder="Select Tester" />
@@ -1278,28 +1624,46 @@ export default function FeaturesLibrary() {
             {/* ── Edit Test Case Modal ── */}
             {editModal.open && (
                 <div style={OVERLAY} onClick={() => setEditModal({ open: false })}>
-                    <div className="fl-modal-enter" style={modalBox("620px")} onClick={e => e.stopPropagation()}>
+                    <div className="fl-modal-enter" style={modalBox("680px")} onClick={e => e.stopPropagation()}>
                         <div style={MODAL_HEADER}>
                             <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, margin: 0 }}>Edit Test Case</h3>
                             <button onClick={() => setEditModal({ open: false })} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 16 }}><i className="fa-solid fa-times"></i></button>
                         </div>
                         <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
+                            <div style={{ background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 8, padding: "12px 14px" }}>
+                                <p style={{ fontSize: 10, fontWeight: 700, color: T.textFaint, textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 10px", fontFamily: T.sans }}>Identifiers</p>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                                    <Field label="Test Case ID">
+                                        <input className="fl-input" type="text" value={form.id} readOnly style={{ background: T.surface, color: T.textMuted, cursor: "default" }} />
+                                    </Field>
+                                    <Field label="Priority" required>
+                                        <Dropdown options={PRIORITY_OPTIONS} selected={form.priority} onChange={v => setForm(f => ({ ...f, priority: v }))} placeholder="Select Priority" />
+                                    </Field>
+                                </div>
+                            </div>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                                <Field label="Test Case ID">
-                                    <input className="fl-input" type="text" value={form.id} readOnly style={{ background: T.surfaceAlt, color: T.textMuted, cursor: "default" }} />
+                                <Field label="Test Case Name" required>
+                                    <input className="fl-input" type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
                                 </Field>
-                                <Field label="Priority" required>
-                                    <Dropdown options={PRIORITY_OPTIONS} selected={form.priority} onChange={v => setForm(f => ({ ...f, priority: v }))} placeholder="Select Priority" />
+                                <Field label="Test Type">
+                                    <Dropdown options={TEST_TYPE_OPTIONS} selected={form.test_type} onChange={v => setForm(f => ({ ...f, test_type: v }))} placeholder="Select Type" />
                                 </Field>
                             </div>
-                            <Field label="Test Case Name" required>
-                                <input className="fl-input" type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-                            </Field>
                             <Field label="Description">
-                                <textarea className="fl-input" rows="3" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "none" }} />
+                                <textarea className="fl-input" rows="2" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "none" }} />
                             </Field>
-
-                            {/* ── FIX: added User Stories to edit modal too ── */}
+                            <Field label="Test Scenario">
+                                <textarea className="fl-input" rows="2" placeholder="Describe the scenario being tested…" value={form.test_scenario} onChange={e => setForm(f => ({ ...f, test_scenario: e.target.value }))} style={{ resize: "none" }} />
+                            </Field>
+                            <Field label="Pre-Requisites">
+                                <textarea className="fl-input" rows="2" placeholder="List all conditions that must be met before running this test…" value={form.pre_requisites} onChange={e => setForm(f => ({ ...f, pre_requisites: e.target.value }))} style={{ resize: "none" }} />
+                            </Field>
+                            <Field label="Test Steps">
+                                <textarea className="fl-input" rows="4" placeholder={"1. Navigate to login page\n2. Enter valid credentials\n3. Click Sign In…"} value={form.test_steps} onChange={e => setForm(f => ({ ...f, test_steps: e.target.value }))} style={{ resize: "vertical" }} />
+                            </Field>
+                            <Field label="Expected Result">
+                                <textarea className="fl-input" rows="2" placeholder="Describe what the expected outcome should be…" value={form.expected_result} onChange={e => setForm(f => ({ ...f, expected_result: e.target.value }))} style={{ resize: "none" }} />
+                            </Field>
                             <Field label="User Stories">
                                 <MultiSelectDropdown
                                     options={userStories}
@@ -1308,7 +1672,6 @@ export default function FeaturesLibrary() {
                                     placeholder={userStories.length === 0 ? "No user stories available" : "Select user stories…"}
                                 />
                             </Field>
-
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                                 <Field label="Status" required>
                                     <Dropdown options={STATUS_OPTIONS} selected={form.status} onChange={v => setForm(f => ({ ...f, status: v }))} placeholder="Select Status" />
@@ -1345,6 +1708,189 @@ export default function FeaturesLibrary() {
                                 <button onClick={() => setDeleteModal({ open: false })} style={BTN_CANCEL}>Cancel</button>
                                 <button onClick={handleDeleteTestCase} style={BTN_DANGER}>Delete</button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Import CSV Modal ── */}
+            {importModal.open && (
+                <div style={OVERLAY} onClick={() => setImportModal({ open: false })}>
+                    <div className="fl-modal-enter" style={{ ...modalBox("640px"), maxHeight: "92vh" }} onClick={e => e.stopPropagation()}>
+
+                        {/* Header */}
+                        <div style={{ padding: "22px 24px 18px", borderBottom: `1px solid ${T.borderLight}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                                <div style={{ width: 42, height: 42, background: T.greenLight, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                    <i className={`fa-solid ${importType === "features" ? "fa-list-check" : "fa-vial"}`} style={{ color: T.green, fontSize: 17 }}></i>
+                                </div>
+                                <div>
+                                    <h3 style={{ fontSize: 17, fontWeight: 700, color: T.text, margin: "0 0 2px", letterSpacing: "-0.01em" }}>
+                                        Import {importType === "features" ? "Features" : "Test Cases"} via CSV
+                                    </h3>
+                                    <p style={{ fontSize: 12, color: T.textMuted, margin: 0 }}>
+                                        All columns are <strong style={{ color: T.red }}>required</strong> — download the template for correct formatting
+                                    </p>
+                                </div>
+                            </div>
+                            <button onClick={() => setImportModal({ open: false })} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 4, marginTop: -2 }}>
+                                <i className="fa-solid fa-times"></i>
+                            </button>
+                        </div>
+
+                        <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16, overflowY: "auto" }}>
+
+                            {/* Template banner */}
+                            <div style={{ background: "#EFF6FF", border: `1px solid #BFDBFE`, borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                    <i className="fa-solid fa-circle-info" style={{ color: T.blue, fontSize: 15, flexShrink: 0 }}></i>
+                                    <p style={{ fontSize: 13, fontWeight: 600, color: "#1E40AF", margin: 0 }}>Download the CSV template to get started</p>
+                                </div>
+                                <button
+                                    onClick={() => downloadSampleTemplate(importType)}
+                                    style={{
+                                        flexShrink: 0, padding: "7px 14px", borderRadius: 7, cursor: "pointer",
+                                        fontSize: 12, fontWeight: 600, fontFamily: T.sans,
+                                        background: T.surface, border: `1.5px solid #93C5FD`, color: "#1D4ED8",
+                                        display: "inline-flex", alignItems: "center", gap: 6, transition: "all 0.13s", whiteSpace: "nowrap",
+                                    }}
+                                >
+                                    <i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Template
+                                </button>
+                            </div>
+
+                            {/* Expected columns */}
+                            <div style={{ border: `1px solid ${T.border}`, borderRadius: 10, padding: "14px 16px" }}>
+                                <p style={{ fontSize: 10, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 10px", fontFamily: T.sans }}>
+                                    Required Columns <span style={{ color: T.red }}>*</span>
+                                </p>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                                    {(importType === "features" ? FEATURE_IMPORT_COLUMNS : TC_IMPORT_COLUMNS).map(col => (
+                                        <span key={col.name} style={{
+                                            display: "inline-flex", alignItems: "center", gap: 2,
+                                            padding: "4px 10px", borderRadius: 6, fontSize: 12, fontWeight: 500,
+                                            background: T.greenLight, border: `1px solid ${T.greenTint}`,
+                                            color: T.green, fontFamily: T.sans,
+                                        }}>
+                                            {col.name}<span style={{ color: T.red, marginLeft: 1, fontWeight: 700 }}>*</span>
+                                        </span>
+                                    ))}
+                                </div>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                                    {(importType === "features" ? FEATURE_IMPORT_COLUMNS : TC_IMPORT_COLUMNS).map(col => (
+                                        <p key={col.name} style={{ fontSize: 11, color: T.textFaint, margin: 0, fontFamily: T.sans }}>
+                                            <span style={{ fontWeight: 600, color: T.textMuted }}>{col.name}:</span> {col.hint}
+                                        </p>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Drop zone */}
+                            <div
+                                style={{
+                                    border: `2px dashed ${importFile ? T.green : "#D1D5DB"}`,
+                                    borderRadius: 12, padding: "36px 24px", textAlign: "center",
+                                    background: importFile ? T.greenLight : "#FAFAFA",
+                                    cursor: "pointer", transition: "all 0.15s",
+                                }}
+                                onClick={() => importFileRef.current?.click()}
+                                onDragOver={e => { e.preventDefault(); }}
+                                onDrop={e => {
+                                    e.preventDefault();
+                                    const f = e.dataTransfer.files[0];
+                                    if (f) { if (importFileRef.current) importFileRef.current.value = ""; handleImportFile({ target: { files: [f] } }); setImportFile(f); }
+                                }}
+                            >
+                                <input ref={importFileRef} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={handleImportFile} />
+                                {importFile ? (
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
+                                        <i className="fa-solid fa-file-csv" style={{ fontSize: 28, color: T.green }}></i>
+                                        <div style={{ textAlign: "left" }}>
+                                            <p style={{ fontSize: 13, fontWeight: 600, color: T.green, margin: "0 0 2px" }}>{importFile.name}</p>
+                                            <p style={{ fontSize: 11, color: T.textMuted, margin: 0 }}>{importRows.length} row{importRows.length !== 1 ? "s" : ""} detected</p>
+                                        </div>
+                                        <button
+                                            onClick={e => { e.stopPropagation(); setImportFile(null); setImportRows([]); setImportError(""); setImportSuccess(""); if (importFileRef.current) importFileRef.current.value = ""; }}
+                                            style={{ marginLeft: 6, background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 15, padding: 4 }}
+                                        >
+                                            <i className="fa-solid fa-times"></i>
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+                                            <i className="fa-solid fa-cloud-arrow-up" style={{ fontSize: 20, color: "#9CA3AF" }}></i>
+                                        </div>
+                                        <p style={{ fontSize: 14, fontWeight: 600, color: T.textMid, margin: "0 0 4px", fontFamily: T.sans }}>Drop your CSV file here</p>
+                                        <p style={{ fontSize: 12, color: T.textFaint, margin: 0, fontFamily: T.sans }}>or click to browse · .csv files only</p>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Preview table */}
+                            {importRows.length > 0 && (
+                                <div>
+                                    <p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 8px", fontFamily: T.sans }}>
+                                        Preview <span style={{ fontWeight: 400, textTransform: "none", color: T.textFaint }}>· first {Math.min(5, importRows.length)} of {importRows.length} rows</span>
+                                    </p>
+                                    <div style={{ overflowX: "auto", border: `1px solid ${T.border}`, borderRadius: 8 }}>
+                                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: T.sans }}>
+                                            <thead>
+                                                <tr style={{ background: T.surfaceAlt, borderBottom: `1px solid ${T.border}` }}>
+                                                    {Object.keys(importRows[0]).map(h => (
+                                                        <th key={h} style={{ padding: "7px 12px", textAlign: "left", fontWeight: 600, color: T.textMuted, whiteSpace: "nowrap", textTransform: "uppercase", fontSize: 10, letterSpacing: "0.05em" }}>{h}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {importRows.slice(0, 5).map((row, i) => (
+                                                    <tr key={i} style={{ borderBottom: `1px solid ${T.borderLight}`, background: i % 2 === 0 ? T.surface : T.surfaceAlt }}>
+                                                        {Object.values(row).map((v, j) => (
+                                                            <td key={j} style={{ padding: "7px 12px", color: T.textMid, whiteSpace: "nowrap", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis" }}>
+                                                                {v || <span style={{ color: T.textFaint }}>—</span>}
+                                                            </td>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Error / Success banners */}
+                            {importError && (
+                                <div style={{ background: T.redTint, border: `1px solid rgba(220,38,38,0.2)`, color: T.red, padding: "10px 14px", borderRadius: 8, fontSize: 12 }}>
+                                    {importError.split("\n").map((line, i) => (
+                                        <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: i < importError.split("\n").length - 1 ? 6 : 0 }}>
+                                            <i className="fa-solid fa-circle-exclamation" style={{ marginTop: 2, flexShrink: 0 }}></i>
+                                            <span>{line}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {importSuccess && (
+                                <div style={{ background: "rgba(34,197,94,0.08)", border: `1px solid rgba(34,197,94,0.25)`, color: "#15803D", padding: "10px 14px", borderRadius: 8, fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                                    <i className="fa-solid fa-circle-check"></i> {importSuccess}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div style={{ padding: "14px 24px", borderTop: `1px solid ${T.borderLight}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: T.surface }}>
+                            <button onClick={() => setImportModal({ open: false })} style={BTN_CANCEL}>Cancel</button>
+                            {importRows.length > 0 && (
+                                <button
+                                    onClick={handleImportSubmit}
+                                    disabled={importLoading}
+                                    style={{ ...BTN_PRIMARY, padding: "9px 20px", fontSize: 13, opacity: importLoading ? 0.7 : 1, cursor: importLoading ? "not-allowed" : "pointer" }}
+                                >
+                                    {importLoading
+                                        ? <><i className="fa-solid fa-spinner fa-spin" style={{ fontSize: 11 }}></i> Importing…</>
+                                        : <><i className="fa-solid fa-upload" style={{ fontSize: 11 }}></i> Import {importRows.length} Row{importRows.length !== 1 ? "s" : ""}</>
+                                    }
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
