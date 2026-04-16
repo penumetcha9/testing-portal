@@ -90,66 +90,115 @@ function MyAssignments({ userId }) {
 
     async function fetchMyAssignments() {
         setLoading(true);
-        await Promise.all([
-            fetchMyTestCases(),
-            fetchMyModules(),
-            fetchMyVersions(),
-            fetchMyFeatures(),
-        ]);
+        try {
+            // First get the user's profile to resolve their full_name and email
+            // (some tables store name string, others store UUID)
+            const { data: profileData } = await supabase
+                .from("profiles")
+                .select("full_name, email")
+                .eq("id", userId)
+                .single();
+
+            const userName = profileData?.full_name || profileData?.email || null;
+
+            await Promise.all([
+                fetchMyTestCases(userName),
+                fetchMyModules(userName),
+                fetchMyVersions(),
+                fetchMyFeatures(userName),
+            ]);
+        } catch (e) {
+            console.error("fetchMyAssignments error:", e);
+        }
         setLoading(false);
     }
 
-    async function fetchMyTestCases() {
-        const { data, error } = await supabase
-            .from("test_cases")
-            .select(`
-                id, name, test_case_id, status, priority,
-                modules ( module_name ),
-                versions ( version_number )
-            `)
-            .eq("assigned_to", userId.toString())
-            .order("created_at", { ascending: false })
-            .limit(20);
+    async function fetchMyTestCases(userName) {
+        // test_cases.assigned_to stores the profile name string (from our FeaturesLibrary)
+        const queries = [];
 
-        if (error) console.error("fetchMyTestCases error:", error);
-        if (!error && data) setMyTestCases(data);
+        // Match by UUID (some records may use UUID)
+        queries.push(
+            supabase
+                .from("test_cases")
+                .select("id, name, test_case_id, status, priority, feature_id, features(feature_name), modules(module_name)")
+                .eq("assigned_to", userId)
+                .order("created_at", { ascending: false })
+                .limit(50)
+        );
+
+        // Match by name string
+        if (userName) {
+            queries.push(
+                supabase
+                    .from("test_cases")
+                    .select("id, name, test_case_id, status, priority, feature_id, features(feature_name), modules(module_name)")
+                    .eq("assigned_to", userName)
+                    .order("created_at", { ascending: false })
+                    .limit(50)
+            );
+        }
+
+        const results = await Promise.all(queries);
+        const allTCs = results.flatMap(r => r.data || []);
+        const unique = Array.from(new Map(allTCs.map(tc => [tc.id, tc])).values());
+        setMyTestCases(unique);
     }
 
-    async function fetchMyModules() {
-        const { data: tcData, error: tcError } = await supabase
+    async function fetchMyModules(userName) {
+        // modules.module_owner stores name string directly
+        const queries = [];
+
+        if (userName) {
+            queries.push(
+                supabase
+                    .from("modules")
+                    .select("id, module_name, status, priority, description")
+                    .eq("module_owner", userName)
+                    .order("module_name")
+            );
+        }
+
+        // Also get modules where user's test cases belong
+        const { data: tcData } = await supabase
             .from("test_cases")
             .select("module_id")
-            .eq("assigned_to", userId.toString());
+            .or(`assigned_to.eq.${userId}${userName ? `,assigned_to.eq.${userName}` : ""}`);
 
-        if (tcError || !tcData) return;
+        const moduleIds = [...new Set((tcData || []).map(tc => tc.module_id).filter(Boolean))];
 
-        const moduleIds = [...new Set(tcData.map(tc => tc.module_id).filter(Boolean))];
-        if (moduleIds.length === 0) { setMyModules([]); return; }
+        if (moduleIds.length > 0) {
+            queries.push(
+                supabase
+                    .from("modules")
+                    .select("id, module_name, status, priority, description")
+                    .in("id", moduleIds)
+                    .order("module_name")
+            );
+        }
 
-        const { data, error } = await supabase
-            .from("modules")
-            .select("id, module_name, status, description")
-            .in("id", moduleIds)
-            .order("module_name");
+        if (queries.length === 0) { setMyModules([]); return; }
 
-        if (error) console.error("fetchMyModules error:", error);
-        if (!error && data) setMyModules(data);
+        const results = await Promise.all(queries);
+        const all = results.flatMap(r => r.data || []);
+        const unique = Array.from(new Map(all.map(m => [m.id, m])).values());
+        setMyModules(unique);
     }
 
     async function fetchMyVersions() {
-        const { data: tcData, error: tcError } = await supabase
-            .from("test_cases")
+        // versions assigned via version_testers table (tester_id = auth UUID)
+        const { data: vtData } = await supabase
+            .from("version_testers")
             .select("version_id")
-            .eq("assigned_to", userId.toString());
+            .eq("tester_id", userId);
 
-        if (tcError || !tcData) return;
+        const versionIds = [...new Set((vtData || []).map(r => r.version_id).filter(Boolean))];
 
-        const versionIds = [...new Set(tcData.map(tc => tc.version_id).filter(Boolean))];
         if (versionIds.length === 0) { setMyVersions([]); return; }
 
         const { data, error } = await supabase
             .from("versions")
-            .select("id, version_number, status, release_date, description")
+            .select("id, version_number, status, release_date, description, version_type")
             .in("id", versionIds)
             .order("created_date", { ascending: false });
 
@@ -157,37 +206,47 @@ function MyAssignments({ userId }) {
         if (!error && data) setMyVersions(data);
     }
 
-    async function fetchMyFeatures() {
-        const { data: tcData, error: tcError } = await supabase
-            .from("test_cases")
-            .select("feature_id")
-            .eq("assigned_to", userId.toString());
-
-        if (tcError || !tcData) return;
-
-        const featureIds = [...new Set(tcData.map(tc => tc.feature_id).filter(Boolean))];
-
+    async function fetchMyFeatures(userName) {
+        // features.assign_to stores UUID (profile id)
         const queries = [
             supabase
                 .from("features")
-                .select("id, feature_name, status, priority, modules ( module_name )")
-                .eq("assign_to", userId.toString())
+                .select("id, feature_name, feature_code, status, priority, modules(module_name)")
+                .eq("assign_to", userId)
                 .order("feature_name"),
         ];
 
+        // Also match by name if stored as string
+        if (userName) {
+            queries.push(
+                supabase
+                    .from("features")
+                    .select("id, feature_name, feature_code, status, priority, modules(module_name)")
+                    .eq("assign_to", userName)
+                    .order("feature_name")
+            );
+        }
+
+        // Also get features where user's test cases belong
+        const { data: tcData } = await supabase
+            .from("test_cases")
+            .select("feature_id")
+            .or(`assigned_to.eq.${userId}${userName ? `,assigned_to.eq.${userName}` : ""}`);
+
+        const featureIds = [...new Set((tcData || []).map(tc => tc.feature_id).filter(Boolean))];
         if (featureIds.length > 0) {
             queries.push(
                 supabase
                     .from("features")
-                    .select("id, feature_name, status, priority, modules ( module_name )")
+                    .select("id, feature_name, feature_code, status, priority, modules(module_name)")
                     .in("id", featureIds)
                     .order("feature_name")
             );
         }
 
         const results = await Promise.all(queries);
-        const allFeatures = results.flatMap(r => r.data || []);
-        const unique = Array.from(new Map(allFeatures.map(f => [f.id, f])).values());
+        const all = results.flatMap(r => r.data || []);
+        const unique = Array.from(new Map(all.map(f => [f.id, f])).values());
         setMyFeatures(unique);
     }
 
@@ -260,7 +319,7 @@ function MyAssignments({ userId }) {
                                         <p className="text-xs text-muted-foreground">
                                             {tc.test_case_id}
                                             {tc.modules?.module_name && ` · ${tc.modules.module_name}`}
-                                            {tc.versions?.version_number && ` · ${tc.versions.version_number}`}
+                                            {tc.features?.feature_name && ` · ${tc.features.feature_name}`}
                                         </p>
                                     </div>
                                 </div>
@@ -293,7 +352,14 @@ function MyAssignments({ userId }) {
                                         {m.description && <p className="text-xs text-muted-foreground truncate">{m.description}</p>}
                                     </div>
                                 </div>
-                                {m.status && <AssignmentBadge status={m.status} />}
+                                <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                                    {m.priority && (
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${m.priority === "High" ? "bg-red-100 text-red-600" : m.priority === "Medium" ? "bg-yellow-100 text-yellow-600" : "bg-gray-100 text-gray-500"}`}>
+                                            {m.priority}
+                                        </span>
+                                    )}
+                                    {m.status && <AssignmentBadge status={m.status} />}
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -309,11 +375,10 @@ function MyAssignments({ userId }) {
                                     </div>
                                     <div className="min-w-0">
                                         <p className="text-sm font-medium text-foreground truncate">{v.version_number}</p>
-                                        {v.release_date && (
-                                            <p className="text-xs text-muted-foreground">
-                                                Release: {new Date(v.release_date).toLocaleDateString()}
-                                            </p>
-                                        )}
+                                        <p className="text-xs text-muted-foreground">
+                                            {v.version_type && `${v.version_type}`}
+                                            {v.release_date && ` · Release: ${new Date(v.release_date).toLocaleDateString()}`}
+                                        </p>
                                     </div>
                                 </div>
                                 {v.status && <AssignmentBadge status={v.status} />}
@@ -332,9 +397,10 @@ function MyAssignments({ userId }) {
                                     </div>
                                     <div className="min-w-0">
                                         <p className="text-sm font-medium text-foreground truncate">{f.feature_name}</p>
-                                        {f.modules?.module_name && (
-                                            <p className="text-xs text-muted-foreground">{f.modules.module_name}</p>
-                                        )}
+                                        <p className="text-xs text-muted-foreground">
+                                            {f.feature_code && <span className="font-mono">{f.feature_code}</span>}
+                                            {f.modules?.module_name && ` · ${f.modules.module_name}`}
+                                        </p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 flex-shrink-0 ml-3">
@@ -414,8 +480,6 @@ export default function Dashboard() {
     useEffect(() => { fetchAll(); }, [fetchAll]);
 
     async function fetchStats() {
-        // Total, Passed, Failed — all from test_cases table by status
-        // Executions count — from test_executions table
         const [
             { count: total },
             { count: passed },
@@ -423,8 +487,8 @@ export default function Dashboard() {
             { count: executions },
         ] = await Promise.all([
             supabase.from("test_cases").select("*", { count: "exact", head: true }),
-            supabase.from("test_cases").select("*", { count: "exact", head: true }).eq("status", "Passed"),
-            supabase.from("test_cases").select("*", { count: "exact", head: true }).eq("status", "Failed"),
+            supabase.from("test_executions").select("*", { count: "exact", head: true }).eq("execution_status", "pass"),
+            supabase.from("test_executions").select("*", { count: "exact", head: true }).eq("execution_status", "fail"),
             supabase.from("test_executions").select("*", { count: "exact", head: true }),
         ]);
 
@@ -432,8 +496,7 @@ export default function Dashboard() {
         const p = passed || 0;
         const f = failed || 0;
         const exec = executions || 0;
-        // Pass rate based on test cases (passed out of total)
-        const passRate = t > 0 ? Math.round((p / t) * 100) : 0;
+        const passRate = exec > 0 ? Math.round((p / exec) * 100) : 0;
 
         setStats({
             total: t,
@@ -679,7 +742,7 @@ export default function Dashboard() {
                             icon="fa-circle-check"
                             iconBg="bg-green-500/10"
                             iconColor="text-green-500"
-                            label="Passed Test Cases"
+                            label="Passed Attempts"
                             value={stats.passed}
                             sub={`${stats.passRate}% pass rate`}
                             subColor="text-green-500"
@@ -689,7 +752,7 @@ export default function Dashboard() {
                             icon="fa-circle-xmark"
                             iconBg="bg-destructive/10"
                             iconColor="text-destructive"
-                            label="Failed Test Cases"
+                            label="Failed Attempts"
                             value={stats.failed}
                             sub="Needs attention"
                             subColor="text-destructive"
@@ -795,10 +858,10 @@ export default function Dashboard() {
                                 {!loading && stats.total > 0 ? (
                                     <div className="space-y-4">
                                         {[
-                                            { label: "Passed Test Cases", value: stats.passed, color: "bg-green-500", textColor: "text-green-600" },
-                                            { label: "Failed Test Cases", value: stats.failed, color: "bg-destructive", textColor: "text-destructive" },
+                                            { label: "Passed Attempts", value: stats.passed, color: "bg-green-500", textColor: "text-green-600" },
+                                            { label: "Failed Attempts", value: stats.failed, color: "bg-destructive", textColor: "text-destructive" },
                                         ].map(s => {
-                                            const base = stats.total > 0 ? stats.total : 1;
+                                            const base = stats.executions > 0 ? stats.executions : 1;
                                             const pct = Math.min(Math.round((s.value / base) * 100), 100);
                                             return (
                                                 <div key={s.label}>

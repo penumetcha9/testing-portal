@@ -147,7 +147,7 @@ const FilterPill = ({ label, icon, options, value, onChange }) => {
 };
 
 // ── Story Card (Grid view) ────────────────────────────────────────────────────
-const StoryCard = ({ story, onClick }) => {
+const StoryCard = ({ story, onClick, onEdit, onDelete }) => {
     const [hov, setHov] = useState(false);
     const sm = STATUS_META[story.current_status] || STATUS_META['Draft'];
     const cm = CRIT_META[story.criticality];
@@ -181,10 +181,26 @@ const StoryCard = ({ story, onClick }) => {
                         </span>
                     )}
                 </div>
-                <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
-                    <Badge text={story.current_status || 'Draft'} meta={sm} />
-                    {story.criticality && <Badge text={story.criticality} meta={cm} />}
+                {/* Action buttons — stop propagation so card click doesn't fire */}
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                    <button onClick={e => onEdit(e, story)} title="Edit story"
+                        style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 7, background: '#eff6ff', color: '#2563eb', cursor: 'pointer', fontSize: 12, transition: 'background 0.15s' }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#dbeafe'}
+                        onMouseLeave={e => e.currentTarget.style.background = '#eff6ff'}>
+                        <i className="fa-solid fa-pen-to-square" />
+                    </button>
+                    <button onClick={e => { e.stopPropagation(); onDelete(story); }} title="Delete story"
+                        style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 7, background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: 12, transition: 'background 0.15s' }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#fecaca'}
+                        onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}>
+                        <i className="fa-solid fa-trash" />
+                    </button>
                 </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 5, marginBottom: 6, flexWrap: 'wrap' }}>
+                <Badge text={story.current_status || 'Draft'} meta={sm} />
+                {story.criticality && <Badge text={story.criticality} meta={cm} />}
             </div>
 
             <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: '0 0 6px', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
@@ -197,7 +213,7 @@ const StoryCard = ({ story, onClick }) => {
                 </p>
             )}
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, paddingTop: 10, borderTop: '1px solid #f1f5f9' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, paddingTop: 10, borderTop: '1px solid #f1f5f9', marginTop: 'auto' }}>
                 {story.module && <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: '#64748b' }}><i className="fa-solid fa-cube" style={{ color: '#a78bfa', fontSize: 10 }} />{story.module}</span>}
                 {story.feature && <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: '#64748b' }}><i className="fa-solid fa-puzzle-piece" style={{ color: '#34d399', fontSize: 10 }} />{story.feature}</span>}
                 {story.planned_release && <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: '#64748b' }}><i className="fa-solid fa-tag" style={{ color: '#60a5fa', fontSize: 10 }} />{story.planned_release}</span>}
@@ -287,6 +303,13 @@ const UserStoriesList = () => {
     const [featureOpts, setFeatureOpts] = useState([]);
     const [versionOpts, setVersionOpts] = useState([]);
 
+    // ── Edit / Delete state ──
+    const [editingStory, setEditingStory] = useState(null);
+    const [editForm, setEditForm] = useState({});
+    const [editLoading, setEditLoading] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState(null);
+    const [deleteLoading, setDeleteLoading] = useState(false);
+
     useEffect(() => {
         (async () => {
             setLoading(true); setError(null);
@@ -308,6 +331,77 @@ const UserStoriesList = () => {
 
     const handleSelectStory = (story) => navigate(`/stories/${story.story_id}`);
     const handleNewStory = () => navigate('/stories/new');
+
+    const fetchStories = async () => {
+        const { data, error } = await supabase
+            .from('user_stories')
+            .select('id,story_id,story_type,story_title,story_summary,module,feature,planned_release,version_build,current_status,criticality,story_points,development_status,qa_status,release_status,approval_status,created_at,updated_at,created_by')
+            .order('updated_at', { ascending: false });
+        if (error) return;
+        const rows = data || [];
+        setStories(rows);
+        setModuleOpts([...new Set(rows.map(r => r.module).filter(Boolean))].sort());
+        setFeatureOpts([...new Set(rows.map(r => r.feature).filter(Boolean))].sort());
+        setVersionOpts([...new Set(rows.map(r => r.planned_release || r.version_build).filter(Boolean))].sort());
+    };
+
+    const openEditModal = (e, story) => {
+        e.stopPropagation();
+        setEditForm({
+            story_title: story.story_title || '',
+            story_summary: story.story_summary || '',
+            story_type: story.story_type || '',
+            current_status: story.current_status || 'Draft',
+            criticality: story.criticality || '',
+            module: story.module || '',
+            feature: story.feature || '',
+            planned_release: story.planned_release || '',
+            story_points: story.story_points || '',
+            development_status: story.development_status || '',
+            qa_status: story.qa_status || '',
+            release_status: story.release_status || '',
+        });
+        setEditingStory(story);
+    };
+
+    const handleUpdateStory = async () => {
+        if (!editForm.story_title) { alert('Story title is required'); return; }
+        setEditLoading(true);
+        const { data: updated, error } = await supabase
+            .from('user_stories')
+            .update({
+                story_title: editForm.story_title,
+                story_summary: editForm.story_summary || null,
+                story_type: editForm.story_type || null,
+                current_status: editForm.current_status || 'Draft',
+                criticality: editForm.criticality || null,
+                module: editForm.module || null,
+                feature: editForm.feature || null,
+                planned_release: editForm.planned_release || null,
+                story_points: editForm.story_points ? parseInt(editForm.story_points) : null,
+                development_status: editForm.development_status || null,
+                qa_status: editForm.qa_status || null,
+                release_status: editForm.release_status || null,
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', editingStory.id)
+            .select();
+        setEditLoading(false);
+        if (error) { alert(`Error: ${error.message}`); return; }
+        if (!updated || updated.length === 0) { alert('Update blocked — check RLS policies on user_stories table.'); return; }
+        setEditingStory(null);
+        fetchStories();
+    };
+
+    const handleDeleteStory = async () => {
+        if (!deleteTarget) return;
+        setDeleteLoading(true);
+        const { error } = await supabase.from('user_stories').delete().eq('id', deleteTarget.id);
+        setDeleteLoading(false);
+        if (error) { alert(`Error: ${error.message}`); return; }
+        setDeleteTarget(null);
+        fetchStories();
+    };
 
     const filtered = stories
         .filter(s => {
@@ -470,7 +564,7 @@ const UserStoriesList = () => {
                         }}>
                             {filtered.map((story, i) => (
                                 <div key={story.id} style={{ animation: `fadeUp 0.25s ease ${Math.min(i * 0.04, 0.5)}s both` }}>
-                                    <StoryCard story={story} onClick={handleSelectStory} />
+                                    <StoryCard story={story} onClick={handleSelectStory} onEdit={openEditModal} onDelete={setDeleteTarget} />
                                 </div>
                             ))}
                         </div>
@@ -479,34 +573,235 @@ const UserStoriesList = () => {
                     {/* List view */}
                     {!loading && !error && filtered.length > 0 && viewMode === 'list' && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 140px 110px 100px 100px', gap: 12, padding: '8px 18px', background: '#f1f5f9', borderRadius: 8 }}>
-                                {['Story ID', 'Title', 'Module / Feature', 'Status', 'Criticality', 'Version'].map(h => (
+                            <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 140px 110px 100px 100px 72px', gap: 12, padding: '8px 18px', background: '#f1f5f9', borderRadius: 8 }}>
+                                {['Story ID', 'Title', 'Module / Feature', 'Status', 'Criticality', 'Version', ''].map(h => (
                                     <span key={h} style={{ fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</span>
                                 ))}
                             </div>
                             {filtered.map((s, i) => (
-                                <div key={s.id} className="list-row" onClick={() => handleSelectStory(s)}
-                                    style={{ animation: `fadeUp 0.2s ease ${Math.min(i * 0.03, 0.4)}s both`, display: 'grid', gridTemplateColumns: '110px 1fr 140px 110px 100px 100px', gap: 12, alignItems: 'center', padding: '12px 18px', background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 12, cursor: 'pointer', transition: 'all 0.15s' }}>
-                                    <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, fontWeight: 600, color: '#16a34a' }}>{s.story_id}</span>
-                                    <div style={{ minWidth: 0 }}>
+                                <div key={s.id} className="list-row"
+                                    style={{ animation: `fadeUp 0.2s ease ${Math.min(i * 0.03, 0.4)}s both`, display: 'grid', gridTemplateColumns: '110px 1fr 140px 110px 100px 100px 72px', gap: 12, alignItems: 'center', padding: '12px 18px', background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 12, transition: 'all 0.15s' }}>
+                                    <span onClick={() => handleSelectStory(s)} style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, fontWeight: 600, color: '#16a34a', cursor: 'pointer' }}>{s.story_id}</span>
+                                    <div style={{ minWidth: 0, cursor: 'pointer' }} onClick={() => handleSelectStory(s)}>
                                         <p style={{ fontSize: 13.5, fontWeight: 600, color: '#0f172a', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                             {s.story_title || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Untitled</span>}
                                         </p>
                                         {s.story_type && <span style={{ fontSize: 11, color: '#94a3b8' }}>{s.story_type}</span>}
                                     </div>
-                                    <div style={{ minWidth: 0 }}>
+                                    <div style={{ minWidth: 0, cursor: 'pointer' }} onClick={() => handleSelectStory(s)}>
                                         {s.module && <p style={{ fontSize: 12, color: '#64748b', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.module}</p>}
                                         {s.feature && <p style={{ fontSize: 11, color: '#94a3b8', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.feature}</p>}
                                     </div>
                                     <Badge text={s.current_status || 'Draft'} meta={STATUS_META[s.current_status] || STATUS_META['Draft']} />
                                     {s.criticality ? <Badge text={s.criticality} meta={CRIT_META[s.criticality]} /> : <span style={{ fontSize: 11, color: '#94a3b8' }}>—</span>}
                                     <span style={{ fontSize: 12, color: '#64748b' }}>{s.planned_release || s.version_build || '—'}</span>
+                                    {/* Edit / Delete */}
+                                    <div style={{ display: 'flex', gap: 4 }}>
+                                        <button onClick={e => openEditModal(e, s)} title="Edit"
+                                            style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 7, background: '#eff6ff', color: '#2563eb', cursor: 'pointer', fontSize: 11 }}
+                                            onMouseEnter={e => e.currentTarget.style.background = '#dbeafe'}
+                                            onMouseLeave={e => e.currentTarget.style.background = '#eff6ff'}>
+                                            <i className="fa-solid fa-pen-to-square" />
+                                        </button>
+                                        <button onClick={e => { e.stopPropagation(); setDeleteTarget(s); }} title="Delete"
+                                            style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 7, background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: 11 }}
+                                            onMouseEnter={e => e.currentTarget.style.background = '#fecaca'}
+                                            onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}>
+                                            <i className="fa-solid fa-trash" />
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
                         </div>
                     )}
                 </div>
             </div>
+
+            {/* ── Edit Story Modal ── */}
+            {editingStory && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+                    onClick={() => setEditingStory(null)}>
+                    <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.18)', width: '100%', maxWidth: 640, maxHeight: '90vh', overflowY: 'auto', fontFamily: "'DM Sans',sans-serif" }}
+                        onClick={e => e.stopPropagation()}>
+
+                        {/* Header */}
+                        <div style={{ padding: '20px 24px 16px', borderBottom: '1.5px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 14, position: 'sticky', top: 0, background: '#fff', zIndex: 10 }}>
+                            <div style={{ width: 38, height: 38, background: '#eff6ff', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <i className="fa-solid fa-pen-to-square" style={{ color: '#2563eb', fontSize: 15 }} />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0 }}>Edit User Story</h3>
+                                <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>{editingStory.story_id}</p>
+                            </div>
+                            <button onClick={() => setEditingStory(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 18, padding: 4 }}>
+                                <i className="fa-solid fa-times" />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                            {/* Story Title */}
+                            <div>
+                                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                    Story Title <span style={{ color: '#ef4444' }}>*</span>
+                                </label>
+                                <input value={editForm.story_title} onChange={e => setEditForm(f => ({ ...f, story_title: e.target.value }))}
+                                    placeholder="e.g., User can reset their password"
+                                    style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13.5, color: '#0f172a', outline: 'none', boxSizing: 'border-box' }}
+                                    onFocus={e => e.target.style.borderColor = '#22c55e'}
+                                    onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
+                            </div>
+
+                            {/* Summary */}
+                            <div>
+                                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Summary</label>
+                                <textarea value={editForm.story_summary} onChange={e => setEditForm(f => ({ ...f, story_summary: e.target.value }))}
+                                    rows={3} placeholder="Brief description…"
+                                    style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', resize: 'none', boxSizing: 'border-box' }}
+                                    onFocus={e => e.target.style.borderColor = '#22c55e'}
+                                    onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
+                            </div>
+
+                            {/* Row: Type + Status */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Story Type</label>
+                                    <select value={editForm.story_type} onChange={e => setEditForm(f => ({ ...f, story_type: e.target.value }))}
+                                        style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                                        <option value="">Select type…</option>
+                                        {['Feature', 'Bug Fix', 'Improvement', 'Technical', 'Research'].map(t => <option key={t} value={t}>{t}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</label>
+                                    <select value={editForm.current_status} onChange={e => setEditForm(f => ({ ...f, current_status: e.target.value }))}
+                                        style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                                        {Object.keys(STATUS_META).map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Row: Criticality + Story Points */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Criticality</label>
+                                    <select value={editForm.criticality} onChange={e => setEditForm(f => ({ ...f, criticality: e.target.value }))}
+                                        style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                                        <option value="">Select…</option>
+                                        {Object.keys(CRIT_META).map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Story Points</label>
+                                    <input type="number" min="0" value={editForm.story_points} onChange={e => setEditForm(f => ({ ...f, story_points: e.target.value }))}
+                                        placeholder="e.g., 5"
+                                        style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', boxSizing: 'border-box' }}
+                                        onFocus={e => e.target.style.borderColor = '#22c55e'}
+                                        onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
+                                </div>
+                            </div>
+
+                            {/* Row: Module + Feature */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Module</label>
+                                    <input value={editForm.module} onChange={e => setEditForm(f => ({ ...f, module: e.target.value }))}
+                                        placeholder="e.g., Billing"
+                                        style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', boxSizing: 'border-box' }}
+                                        onFocus={e => e.target.style.borderColor = '#22c55e'}
+                                        onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Feature</label>
+                                    <input value={editForm.feature} onChange={e => setEditForm(f => ({ ...f, feature: e.target.value }))}
+                                        placeholder="e.g., Invoice generation"
+                                        style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', boxSizing: 'border-box' }}
+                                        onFocus={e => e.target.style.borderColor = '#22c55e'}
+                                        onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
+                                </div>
+                            </div>
+
+                            {/* Row: Version + Dev/QA/Release status */}
+                            <div>
+                                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Planned Release / Version</label>
+                                <input value={editForm.planned_release} onChange={e => setEditForm(f => ({ ...f, planned_release: e.target.value }))}
+                                    placeholder="e.g., v2.1.0"
+                                    style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', boxSizing: 'border-box' }}
+                                    onFocus={e => e.target.style.borderColor = '#22c55e'}
+                                    onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+                                {[
+                                    { key: 'development_status', label: 'Dev Status', opts: ['Not Started', 'In Progress', 'On Hold', 'Completed'] },
+                                    { key: 'qa_status', label: 'QA Status', opts: ['Not Started', 'In Progress', 'Pass', 'Fail', 'Blocked'] },
+                                    { key: 'release_status', label: 'Release Status', opts: ['Not Released', 'Scheduled', 'Released', 'Rolled Back'] },
+                                ].map(({ key, label, opts }) => (
+                                    <div key={key}>
+                                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</label>
+                                        <select value={editForm[key]} onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))}
+                                            style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 12, color: '#374151', outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                                            <option value="">Select…</option>
+                                            {opts.map(o => <option key={o} value={o}>{o}</option>)}
+                                        </select>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div style={{ padding: '14px 24px', borderTop: '1.5px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', bottom: 0, background: '#fff' }}>
+                            <button onClick={() => setEditingStory(null)}
+                                style={{ padding: '9px 22px', border: '1.5px solid #e2e8f0', borderRadius: 9, background: '#fff', color: '#475569', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                                Cancel
+                            </button>
+                            <button onClick={handleUpdateStory} disabled={editLoading}
+                                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 24px', border: 'none', borderRadius: 9, background: '#15803d', color: '#fff', fontSize: 13, fontWeight: 600, cursor: editLoading ? 'not-allowed' : 'pointer', opacity: editLoading ? 0.7 : 1 }}>
+                                {editLoading ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : <><i className="fa-solid fa-check" /> Save Changes</>}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Delete Confirmation Modal ── */}
+            {deleteTarget && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+                    onClick={() => setDeleteTarget(null)}>
+                    <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.18)', width: '100%', maxWidth: 420, padding: 28, fontFamily: "'DM Sans',sans-serif" }}
+                        onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 20 }}>
+                            <div style={{ width: 44, height: 44, background: '#fef2f2', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <i className="fa-solid fa-trash" style={{ color: '#dc2626', fontSize: 18 }} />
+                            </div>
+                            <div>
+                                <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: '0 0 4px' }}>Delete User Story</h3>
+                                <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>This action cannot be undone.</p>
+                            </div>
+                        </div>
+                        <div style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 10, padding: '12px 16px', marginBottom: 20 }}>
+                            <p style={{ fontSize: 12, fontWeight: 700, color: '#16a34a', fontFamily: 'monospace', margin: '0 0 4px' }}>{deleteTarget.story_id}</p>
+                            <p style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', margin: 0 }}>{deleteTarget.story_title || 'Untitled Story'}</p>
+                        </div>
+                        <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginBottom: 24, display: 'flex', gap: 10 }}>
+                            <i className="fa-solid fa-triangle-exclamation" style={{ color: '#dc2626', fontSize: 13, marginTop: 1, flexShrink: 0 }} />
+                            <p style={{ fontSize: 12, color: '#b91c1c', margin: 0, lineHeight: 1.5 }}>
+                                Deleting this story will permanently remove it and all its associations including linked test cases.
+                            </p>
+                        </div>
+                        <div style={{ display: 'flex', gap: 12 }}>
+                            <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px', border: '1.5px solid #e2e8f0', borderRadius: 9, background: '#fff', color: '#475569', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                                Cancel
+                            </button>
+                            <button onClick={handleDeleteStory} disabled={deleteLoading}
+                                style={{ flex: 1, padding: '10px', border: 'none', borderRadius: 9, background: '#dc2626', color: '#fff', fontSize: 13, fontWeight: 600, cursor: deleteLoading ? 'not-allowed' : 'pointer', opacity: deleteLoading ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                                {deleteLoading ? <><i className="fa-solid fa-spinner fa-spin" /> Deleting…</> : <><i className="fa-solid fa-trash" /> Delete Story</>}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 };

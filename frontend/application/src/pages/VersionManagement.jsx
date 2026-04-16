@@ -106,8 +106,8 @@ const ChevronIcon = memo(({ open }) => (
 ));
 ChevronIcon.displayName = "ChevronIcon";
 
-const DropdownList = memo(({ children, upward }) => (
-    <div style={{ position: "absolute", ...(upward ? { bottom: "calc(100% + 6px)", top: "auto" } : { top: "calc(100% + 6px)" }), left: 0, right: 0, zIndex: 9999, background: "#fff", border: "1.5px solid #e8eaf6", borderRadius: "12px", boxShadow: "0 8px 32px rgba(99,102,241,0.13),0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden" }}>
+const DropdownList = memo(({ children }) => (
+    <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 9999, background: "#fff", border: "1.5px solid #e8eaf6", borderRadius: "12px", boxShadow: "0 8px 32px rgba(99,102,241,0.13),0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden" }}>
         <div style={{ padding: "6px", maxHeight: "300px", overflowY: "auto" }}>{children}</div>
     </div>
 ));
@@ -137,7 +137,7 @@ const SingleItem = memo(({ opt, isSel, onChange }) => (
 ));
 SingleItem.displayName = "SingleItem";
 
-const CustomDropdown = memo(({ options, selected, onChange, placeholder = "Select options...", upward = false }) => {
+const CustomDropdown = memo(({ options, selected, onChange, placeholder = "Select options..." }) => {
     const [isOpen, setIsOpen] = useState(false);
     const ref = useRef(null);
 
@@ -173,7 +173,7 @@ const CustomDropdown = memo(({ options, selected, onChange, placeholder = "Selec
                 <ChevronIcon open={isOpen} />
             </button>
             {isOpen && (
-                <DropdownList upward={upward}>
+                <DropdownList>
                     {options.map((opt) => (
                         <MultiItem key={opt.id} opt={opt} isSel={selected.includes(opt.id)} onSelect={handleSelect} />
                     ))}
@@ -407,6 +407,22 @@ const VersionCard = memo(({ v, onEdit, onArchive, onDelete, onViewDetails, onAss
                         <div className="flex flex-wrap gap-4 text-sm text-gray-500">
                             <span>📅 Release: {new Date(v.release_date).toLocaleDateString()}</span>
                             <span>🕐 Created: {new Date(v.created_date).toLocaleDateString()}</span>
+                            {v.linkedTesters && v.linkedTesters.length > 0 && (
+                                <span className="flex items-center gap-1.5">
+                                    <i className="fa-solid fa-user-check text-blue-500 text-xs" />
+                                    {v.linkedTesters.slice(0, 3).map((t, i) => (
+                                        <span key={t.id} className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 border border-blue-200 text-blue-700 text-xs rounded-full font-medium">
+                                            <span className="w-3.5 h-3.5 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold flex-shrink-0" style={{ fontSize: 8 }}>
+                                                {(t.name || "?")[0].toUpperCase()}
+                                            </span>
+                                            {t.name}
+                                        </span>
+                                    ))}
+                                    {v.linkedTesters.length > 3 && (
+                                        <span className="px-2 py-0.5 bg-gray-100 text-gray-500 text-xs rounded-full font-medium">+{v.linkedTesters.length - 3}</span>
+                                    )}
+                                </span>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -563,30 +579,74 @@ export default function VersionManagement() {
             setLoading(true);
             const { data: versionData, error: versionError } = await supabase.from("versions").select("*").order("created_date", { ascending: false });
             if (versionError) throw versionError;
+
+            // Fetch linked modules
             const { data: vmData } = await supabase.from("version_modules").select("version_id, modules(id, module_name, module_code)");
             const modulesByVersion = {};
             (vmData || []).forEach(row => {
                 if (!modulesByVersion[row.version_id]) modulesByVersion[row.version_id] = [];
                 if (row.modules) modulesByVersion[row.version_id].push(row.modules);
             });
-            setVersions((versionData || []).map(v => ({ ...v, linkedModules: modulesByVersion[v.id] || [] })));
+
+            // Fetch assigned testers — fetch version_testers and profiles separately
+            // (avoids FK join issues if relationship isn't defined in Supabase)
+            const { data: vtData } = await supabase
+                .from("version_testers")
+                .select("version_id, tester_id");
+
+            // Get all unique tester IDs
+            const allTesterIds = [...new Set((vtData || []).map(r => r.tester_id).filter(Boolean))];
+
+            // Fetch profile names for those IDs
+            let profileMap = {};
+            if (allTesterIds.length > 0) {
+                const { data: profilesData } = await supabase
+                    .from("profiles")
+                    .select("id, full_name, email")
+                    .in("id", allTesterIds);
+                (profilesData || []).forEach(p => {
+                    profileMap[p.id] = p.full_name || p.email || p.id;
+                });
+            }
+
+            const testersByVersion = {};
+            (vtData || []).forEach(row => {
+                if (!testersByVersion[row.version_id]) testersByVersion[row.version_id] = [];
+                testersByVersion[row.version_id].push({
+                    id: row.tester_id,
+                    name: profileMap[row.tester_id] || row.tester_id,
+                });
+            });
+
+            setVersions((versionData || []).map(v => ({
+                ...v,
+                linkedModules: modulesByVersion[v.id] || [],
+                linkedTesters: testersByVersion[v.id] || [],
+            })));
         } catch (err) { console.error(err); setError(err.message); }
         finally { setLoading(false); }
     }, []);
 
     const fetchUsers = useCallback(async () => {
         try {
-            const { data, error: e } = await supabase
-                .from("profiles")
-                .select("id, full_name, username, email")
-                .order("full_name");
-            if (e) throw e;
-            setUsers(
-                (data || []).map(p => ({
-                    id: p.id,
-                    name: p.full_name || p.username || p.email || "Unknown",
-                }))
-            );
+            // Fetch from profiles table (has full_name/email), fall back to users table
+            const [{ data: profilesData }, { data: usersData }] = await Promise.all([
+                supabase.from("profiles").select("id, full_name, email").order("full_name"),
+                supabase.from("users").select("id, name").order("name"),
+            ]);
+
+            const fromProfiles = (profilesData || [])
+                .map(p => ({ id: p.id, name: p.full_name || p.email || p.id }))
+                .filter(u => u.name);
+
+            const fromUsers = (usersData || [])
+                .map(u => ({ id: u.id, name: u.name || "" }))
+                .filter(u => u.name);
+
+            // Merge — profiles take priority, avoid duplicates by id
+            const seen = new Set(fromProfiles.map(u => u.id));
+            const merged = [...fromProfiles, ...fromUsers.filter(u => !seen.has(u.id))];
+            setUsers(merged);
         } catch (err) { console.error(err); }
     }, []);
 
@@ -599,6 +659,13 @@ export default function VersionManagement() {
     }, []);
 
     useEffect(() => { fetchVersions(); fetchUsers(); fetchModules(); }, [fetchVersions, fetchUsers, fetchModules]);
+
+    // Keep selectedVersion in sync with the latest versions data (so details modal reflects tester/module changes)
+    useEffect(() => {
+        if (!selectedVersion) return;
+        const updated = versions.find(v => v.id === selectedVersion.id);
+        if (updated) setSelectedVersion(updated);
+    }, [versions]); // eslint-disable-line
 
     const tabs = useMemo(() => [
         { key: "all", label: "All Versions", count: versions.length },
@@ -655,7 +722,13 @@ export default function VersionManagement() {
     }, [formData, resetForm, fetchVersions, showToast]);
 
     const handleViewDetails = useCallback((v) => { setSelectedVersion(v); setShowDetailsModal(true); }, []);
-    const handleAssignTesters = useCallback((v) => { setSelectedVersion(v); setShowAssignModal(true); }, []);
+    const handleAssignTesters = useCallback((v) => {
+        setSelectedVersion(v);
+        // Pre-populate with already-assigned tester IDs so they show as selected
+        const existingIds = (v.linkedTesters || []).map(t => t.id);
+        setFormData(prev => ({ ...prev, selectedTesters: existingIds }));
+        setShowAssignModal(true);
+    }, []);
     const handleAssignModules = useCallback((v) => { setShowDetailsModal(false); setAssignModulesVersion(v); }, []);
 
     const handleEditVersion = useCallback((v) => {
@@ -722,16 +795,18 @@ export default function VersionManagement() {
 
     const handleSaveAssignments = useCallback(async (assignments) => {
         if (!selectedVersion) return;
+        const versionId = selectedVersion.id;
         try {
-            const { error: de } = await supabase.from("version_testers").delete().eq("version_id", selectedVersion.id);
+            const { error: de } = await supabase.from("version_testers").delete().eq("version_id", versionId);
             if (de) throw de;
             if (assignments.length > 0) {
                 const { error: ie } = await supabase.from("version_testers").insert(
-                    assignments.map(tid => ({ version_id: selectedVersion.id, tester_id: tid }))
+                    assignments.map(tid => ({ version_id: versionId, tester_id: tid }))
                 );
                 if (ie) throw ie;
             }
-            setShowAssignModal(false); setSelectedVersion(null); await fetchVersions();
+            setShowAssignModal(false);
+            await fetchVersions();
             showToast("Testers assigned successfully! 👥");
         } catch (err) { showToast(err.message, "error"); }
     }, [selectedVersion, fetchVersions, showToast]);
@@ -830,7 +905,7 @@ export default function VersionManagement() {
                         <h3 className="text-lg font-semibold">Filters &amp; Search</h3>
                         <button onClick={handleResetFilters} className="text-sm text-green-700 hover:underline font-medium">Reset All</button>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
                             <label className="block text-sm font-medium mb-1">Search Version</label>
                             <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by version or build number..." className="w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300" />
@@ -838,6 +913,9 @@ export default function VersionManagement() {
                         <div>
                             <label className="block text-sm font-medium mb-1">Status</label>
                             <SingleDropdown options={STATUS_FILTER_OPTIONS} selected={statusFilter} onChange={setStatusFilter} placeholder="All Statuses" />
+                        </div>
+                        <div className="flex items-end">
+                            <button className="w-full px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:opacity-90">Apply Filters</button>
                         </div>
                     </div>
                 </div>
@@ -928,7 +1006,7 @@ export default function VersionManagement() {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-2">Assign Testers</label>
-                                <CustomDropdown options={users} selected={formData.selectedTesters} onChange={setTestersSel} placeholder="Select testers..." upward />
+                                <CustomDropdown options={users} selected={formData.selectedTesters} onChange={setTestersSel} placeholder="Select testers..." />
                                 {formData.selectedTesters.length > 0 && (
                                     <div className="mt-3 flex flex-wrap gap-2">
                                         {users.filter(u => formData.selectedTesters.includes(u.id)).map(user => (
@@ -1064,6 +1142,52 @@ export default function VersionManagement() {
                                 </div>
                             )}
 
+                            {/* Assigned Testers */}
+                            <div className="border border-gray-100 rounded-xl p-4">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-7 h-7 bg-blue-50 rounded-lg flex items-center justify-center">
+                                            <i className="fa-solid fa-user-check text-blue-600 text-xs" />
+                                        </div>
+                                        <p className="text-sm font-semibold text-gray-800">Assigned Testers</p>
+                                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">
+                                            {selectedVersion.linkedTesters?.length ?? 0}
+                                        </span>
+                                    </div>
+                                    {selectedVersion.status !== "archived" && (
+                                        <button
+                                            onClick={() => { setShowDetailsModal(false); handleAssignTesters(selectedVersion); }}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-300 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-50 transition-colors">
+                                            <i className="fa-solid fa-plus text-xs" /> Manage
+                                        </button>
+                                    )}
+                                </div>
+                                {!selectedVersion.linkedTesters?.length ? (
+                                    <div className="flex flex-col items-center justify-center py-6 gap-2 border-2 border-dashed border-gray-200 rounded-lg">
+                                        <i className="fa-solid fa-user-group text-gray-300 text-2xl" />
+                                        <p className="text-sm text-gray-400">No testers assigned yet</p>
+                                        {selectedVersion.status !== "archived" && (
+                                            <button
+                                                onClick={() => { setShowDetailsModal(false); handleAssignTesters(selectedVersion); }}
+                                                className="mt-1 px-4 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:opacity-90 transition-opacity">
+                                                Assign Testers
+                                            </button>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-wrap gap-2">
+                                        {selectedVersion.linkedTesters.map(t => (
+                                            <div key={t.id} className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 text-sm rounded-lg font-medium">
+                                                <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold flex-shrink-0" style={{ fontSize: 10 }}>
+                                                    {(t.name || "?")[0].toUpperCase()}
+                                                </span>
+                                                {t.name}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
                             {/* ── Modal footer actions ── */}
                             <div className="flex flex-wrap gap-3 pt-2 border-t">
                                 <button onClick={() => { setShowDetailsModal(false); handleEditVersion(selectedVersion); }}
@@ -1112,14 +1236,33 @@ export default function VersionManagement() {
                         <div className="p-6 space-y-4">
                             <p className="text-sm text-gray-600">Assign testers to <span className="font-semibold">{selectedVersion.version_number}</span></p>
                             <CustomDropdown options={users} selected={formData.selectedTesters} onChange={setTestersSel} placeholder="Select testers to assign..." />
-                            {formData.selectedTesters.length > 0 && (
+                            {formData.selectedTesters.length > 0 ? (
                                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                                    <p className="text-sm font-medium text-green-900 mb-2"><i className="fa-solid fa-check-circle mr-2" />{formData.selectedTesters.length} tester{formData.selectedTesters.length !== 1 ? "s" : ""} selected</p>
+                                    <p className="text-sm font-semibold text-green-800 mb-2 flex items-center gap-2">
+                                        <i className="fa-solid fa-user-check text-green-600" />
+                                        {formData.selectedTesters.length} tester{formData.selectedTesters.length !== 1 ? "s" : ""} assigned
+                                    </p>
                                     <div className="flex flex-wrap gap-2">
                                         {users.filter(u => formData.selectedTesters.includes(u.id)).map(user => (
-                                            <span key={user.id} className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">{user.name}</span>
+                                            <span key={user.id} className="inline-flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 bg-white border border-green-300 text-green-800 rounded-full text-xs font-medium shadow-sm">
+                                                <span className="w-5 h-5 rounded-full bg-green-600 text-white flex items-center justify-center font-bold flex-shrink-0" style={{ fontSize: 9 }}>
+                                                    {(user.name || "?")[0].toUpperCase()}
+                                                </span>
+                                                {user.name}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFormData(prev => ({ ...prev, selectedTesters: prev.selectedTesters.filter(id => id !== user.id) }))}
+                                                    className="ml-0.5 text-green-500 hover:text-red-500 transition-colors leading-none">
+                                                    <i className="fa-solid fa-times text-xs" />
+                                                </button>
+                                            </span>
                                         ))}
                                     </div>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center py-6 bg-gray-50 border-2 border-dashed border-gray-200 rounded-lg gap-2">
+                                    <i className="fa-solid fa-user-group text-gray-300 text-2xl" />
+                                    <p className="text-sm text-gray-400">No testers selected yet</p>
                                 </div>
                             )}
                             <div className="flex gap-3 pt-4">

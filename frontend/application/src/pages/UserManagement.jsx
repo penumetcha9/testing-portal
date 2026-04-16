@@ -126,7 +126,7 @@ function MultiSelect({ label, options, selected, onChange, placeholder = "Select
 }
 
 // ── User Detail Drawer ────────────────────────────────────────────────────────
-function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, addToast, refreshUsers }) {
+function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, addToast, refreshUsers, preloadedTestCases = [] }) {
     const [currentRole, setCurrentRole] = useState(user.role);
     const [newRole, setNewRole] = useState(user.role);
     const [isActive, setIsActive] = useState(user.is_active !== false);
@@ -145,8 +145,17 @@ function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, add
     const [loadingData, setLoadingData] = useState(false);
     const [reassignSuccess, setReassignSuccess] = useState(false);
 
-    const [userStats, setUserStats] = useState({ total: 0, passed: 0, failed: 0, pending: 0 });
-    const [userTests, setUserTests] = useState([]);
+    // Use preloaded data directly for stats/display — more accurate matching
+    const userTests = preloadedTestCases.map(t => ({
+        ...t,
+        displayName: `${t.test_case_id} — ${t.name}`,
+    }));
+    const userStats = {
+        total: userTests.length,
+        passed: userTests.filter(t => t.status === "pass" || t.status === "Passed").length,
+        failed: userTests.filter(t => t.status === "fail" || t.status === "Failed").length,
+        pending: userTests.filter(t => !t.status || t.status === "not-tested" || t.status === "Pending" || t.status === "Active").length,
+    };
 
     const rs = getRoleStyle(currentRole);
 
@@ -172,15 +181,6 @@ function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, add
                     module_id: t.module_id,
                     feature_id: t.feature_id,
                 })));
-
-                const mine = all.filter((t) => t.assigned_to === user.id || t.assigned_to === user.full_name);
-                setUserTests(mine.map((t) => ({ ...t, displayName: `${t.test_case_id} — ${t.name}` })));
-                setUserStats({
-                    total: mine.length,
-                    passed: mine.filter((t) => t.status === "pass").length,
-                    failed: mine.filter((t) => t.status === "fail").length,
-                    pending: mine.filter((t) => !t.status || t.status === "not-tested").length,
-                });
             } catch (e) {
                 console.error("Drawer load error:", e);
             }
@@ -281,6 +281,9 @@ function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, add
                         <div>
                             <p className="font-bold text-slate-900 text-base">{user.full_name || "—"}</p>
                             <p className="text-sm text-slate-500">{user.email}</p>
+                            <span className={`inline-flex items-center gap-1.5 mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${rs.badge}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${rs.dot}`} />{currentRole}
+                            </span>
                         </div>
                     </div>
 
@@ -298,6 +301,23 @@ function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, add
                                 ))}
                             </div>
                         )}
+                    </div>
+
+                    <div className="bg-white border border-slate-200 rounded-xl p-4">
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Change Role</p>
+                        <div className="flex gap-2">
+                            <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="flex-1 px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                                <option value="tester">Tester</option>
+                                <option value="developer">Developer</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                            <button type="button" onClick={handleRoleSave} disabled={savingRole || newRole === currentRole}
+                                className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${saveSuccess ? "bg-emerald-100 text-emerald-700" : "bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"}`}>
+                                {savingRole ? <><i className="fa-solid fa-spinner animate-spin" />Saving…</> : saveSuccess ? <><i className="fa-solid fa-check-double" />Saved!</> : <><i className="fa-solid fa-check" />Save</>}
+                            </button>
+                        </div>
+                        {newRole !== currentRole && !saveSuccess && <p className="text-xs text-amber-600 mt-2 flex items-center gap-1"><i className="fa-solid fa-triangle-exclamation" />Role changed to <strong>{newRole}</strong> — click Save to apply</p>}
+                        {saveSuccess && <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1"><i className="fa-solid fa-check-circle" />Role successfully updated to <strong>{currentRole}</strong></p>}
                     </div>
 
                     <div className="bg-white border border-slate-200 rounded-xl p-4">
@@ -385,6 +405,7 @@ export default function UserManagement() {
     const [searchTerm, setSearchTerm] = useState("");
     const [filterRole, setFilterRole] = useState("all");
     const [selectedUser, setSelectedUser] = useState(null);
+    const [testCasesByUser, setTestCasesByUser] = useState({}); // userId/email/name -> test cases array
 
     const [confirmDialog, setConfirmDialog] = useState({
         show: false, title: "", message: "", onConfirm: null, danger: false,
@@ -399,9 +420,34 @@ export default function UserManagement() {
 
     const fetchUsers = useCallback(async () => {
         setLoading(true);
-        const { data, error } = await supabase.from("profiles").select("id, full_name, email, role, avatar_url, updated_at, is_active").order("full_name");
-        if (error) { addToast("Failed to load users: " + error.message, "error"); }
-        else { setUsers(data || []); }
+        const { data: profilesData, error } = await supabase
+            .from("profiles")
+            .select("id, full_name, email, role, avatar_url, updated_at, is_active")
+            .order("full_name");
+        if (error) { addToast("Failed to load users: " + error.message, "error"); setLoading(false); return; }
+
+        const profiles = profilesData || [];
+        setUsers(profiles);
+
+        // Fetch all test cases and map them to users by id, email, or full_name
+        const { data: tcData } = await supabase
+            .from("test_cases")
+            .select("id, test_case_id, name, status, priority, assigned_to");
+
+        const allTCs = tcData || [];
+        const map = {};
+
+        profiles.forEach(p => {
+            // Match by UUID, email, or full_name — all possible storage formats
+            const matches = allTCs.filter(tc =>
+                tc.assigned_to === p.id ||
+                (p.email && tc.assigned_to === p.email) ||
+                (p.full_name && tc.assigned_to === p.full_name)
+            );
+            map[p.id] = matches;
+        });
+
+        setTestCasesByUser(map);
         setLoading(false);
     }, [addToast]);
 
@@ -535,6 +581,7 @@ export default function UserManagement() {
                     onStatusChange={handleStatusChange}
                     addToast={addToast}
                     refreshUsers={fetchUsers}
+                    preloadedTestCases={testCasesByUser[selectedUser.id] || []}
                 />
             )}
 
@@ -614,7 +661,7 @@ export default function UserManagement() {
                                 <table className="w-full">
                                     <thead className="bg-slate-50 border-b border-slate-200">
                                         <tr>
-                                            {["User", "Status", "Actions"].map((h) => (
+                                            {["User", "Role", "Status", "Test Cases", "Actions"].map((h) => (
                                                 <th key={h} className="px-5 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                                             ))}
                                         </tr>
@@ -642,9 +689,32 @@ export default function UserManagement() {
                                                         </div>
                                                     </td>
                                                     <td className="px-5 py-4">
+                                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${rs.badge}`}>
+                                                            <span className={`w-1.5 h-1.5 rounded-full ${rs.dot}`} />{user.role}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-5 py-4">
                                                         <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${inactive ? "bg-red-100 text-red-600" : "bg-emerald-100 text-emerald-700"}`}>
                                                             {inactive ? "Inactive" : "Active"}
                                                         </span>
+                                                    </td>
+                                                    <td className="px-5 py-4">
+                                                        {(() => {
+                                                            const tcs = testCasesByUser[user.id] || [];
+                                                            const passed = tcs.filter(t => t.status === "pass" || t.status === "Passed").length;
+                                                            const failed = tcs.filter(t => t.status === "fail" || t.status === "Failed").length;
+                                                            const pending = tcs.filter(t => !t.status || t.status === "not-tested" || t.status === "Pending" || t.status === "Active").length;
+                                                            return tcs.length === 0 ? (
+                                                                <span className="text-xs text-slate-400">—</span>
+                                                            ) : (
+                                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                                    <span className="text-xs font-bold text-slate-700">{tcs.length}</span>
+                                                                    {passed > 0 && <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-semibold rounded-full">{passed}P</span>}
+                                                                    {failed > 0 && <span className="px-1.5 py-0.5 bg-red-100 text-red-600 text-[10px] font-semibold rounded-full">{failed}F</span>}
+                                                                    {pending > 0 && <span className="px-1.5 py-0.5 bg-amber-100 text-amber-600 text-[10px] font-semibold rounded-full">{pending}Pnd</span>}
+                                                                </div>
+                                                            );
+                                                        })()}
                                                     </td>
                                                     <td className="px-5 py-4">
                                                         <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -668,7 +738,7 @@ export default function UserManagement() {
                                             );
                                         }) : (
                                             <tr>
-                                                <td colSpan={3} className="px-6 py-16 text-center">
+                                                <td colSpan={5} className="px-6 py-16 text-center">
                                                     <i className="fa-solid fa-users text-slate-300 text-3xl mb-3 block" />
                                                     <p className="text-slate-500 font-medium">No users found</p>
                                                     <p className="text-xs text-slate-400 mt-1">Try adjusting your filters</p>
