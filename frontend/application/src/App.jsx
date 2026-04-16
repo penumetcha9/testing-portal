@@ -4,6 +4,7 @@ import { useRole } from "./hooks/useRole";
 import Sidebar from "./components/Sidebar";
 
 const Login = lazy(() => import("./pages/Login"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const VersionManagement = lazy(() => import("./pages/VersionManagement"));
 const CreateVersion = lazy(() => import("./pages/CreateVersion"));
@@ -59,6 +60,7 @@ export default function App() {
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/*" element={<ProtectedLayout />} />
       </Routes>
     </Suspense>

@@ -250,12 +250,12 @@ export default function LoginPage() {
         if (authListenerRef.current) return
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'PASSWORD_RECOVERY') {
+                window.location.href = 'https://rmstesting.nextechltd.in/reset-password'
+                return
+            }
             if (event === 'SIGNED_IN' && session) {
-                // ── Option A: React Router (uncomment if using react-router-dom) ──
-                // navigate('/dashboard')
-
-                // ── Option B: Plain redirect (works with Next.js, Vite, CRA, etc.) ──
-                window.location.href = '/dashboard'
+                window.location.href = 'https://rmstesting.nextechltd.in/dashboard'
             }
         })
 
@@ -317,7 +317,7 @@ export default function LoginPage() {
         e.preventDefault()
         setLoading(true); reset()
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${window.location.origin}/reset-password`,
+            redirectTo: `https://rmstesting.nextechltd.in/reset-password`,
         })
         if (error) setError(error.message)
         else setSuccess('Password reset email sent! Check your inbox.')
@@ -330,7 +330,7 @@ export default function LoginPage() {
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: `${window.location.origin}/auth/callback`,
+                redirectTo: `https://rmstesting.nextechltd.in/auth/callback`,
                 queryParams: { access_type: 'offline', prompt: 'consent' },
             },
         })
@@ -344,7 +344,7 @@ export default function LoginPage() {
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'azure',
             options: {
-                redirectTo: `${window.location.origin}/auth/callback`,
+                redirectTo: `https://rmstesting.nextechltd.in/auth/callback`,
                 scopes: 'email profile openid',
             },
         })

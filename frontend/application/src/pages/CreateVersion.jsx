@@ -20,10 +20,65 @@ export default function CreateVersion() {
         description: "",
         notes: "",
     });
+    const [versionType, setVersionType] = useState("");
+    const [versionGenerating, setVersionGenerating] = useState(false);
+    const [duplicateError, setDuplicateError] = useState("");
 
     useEffect(() => {
         fetchData();
     }, []);
+
+    // ── Auto-generate version number when type is selected ──────
+    const handleVersionTypeChange = async (type) => {
+        setVersionType(type);
+        setDuplicateError("");
+        if (!type) {
+            setVersionForm(prev => ({ ...prev, version_number: "" }));
+            return;
+        }
+        setVersionGenerating(true);
+        try {
+            const { data, error } = await supabase
+                .from("versions")
+                .select("version_number")
+                .order("created_at", { ascending: false });
+
+            const allVersions = (data || []).map(v => v.version_number);
+
+            // Find the latest valid semver from existing versions
+            let major = 1, minor = 0, patch = 0;
+            for (const v of allVersions) {
+                const parts = v.split(".").map(Number);
+                if (parts.length === 3 && parts.every(n => !isNaN(n))) {
+                    major = parts[0]; minor = parts[1]; patch = parts[2];
+                    break; // already sorted desc, take first valid
+                }
+            }
+
+            let nextVersion;
+            if (allVersions.length === 0) {
+                nextVersion = type === "major" ? "1.0.0" : type === "minor" ? "0.1.0" : "0.0.1";
+            } else if (type === "major") {
+                nextVersion = `${major + 1}.0.0`;
+            } else if (type === "minor") {
+                nextVersion = `${major}.${minor + 1}.0`;
+            } else {
+                nextVersion = `${major}.${minor}.${patch + 1}`;
+            }
+
+            // Check for duplicate
+            if (allVersions.includes(nextVersion)) {
+                setDuplicateError(`Version ${nextVersion} already exists. Please choose a different type.`);
+                setVersionForm(prev => ({ ...prev, version_number: "" }));
+            } else {
+                setVersionForm(prev => ({ ...prev, version_number: nextVersion }));
+            }
+        } catch {
+            setVersionForm(prev => ({ ...prev, version_number: "1.0.0" }));
+        } finally {
+            setVersionGenerating(false);
+        }
+    };
 
     const fetchData = async () => {
         try {
@@ -61,8 +116,16 @@ export default function CreateVersion() {
     };
 
     const handleCreateVersion = async () => {
-        if (!versionForm.version_number || !versionForm.build_number) {
-            alert("Version Number and Build Number are required");
+        if (!versionType) {
+            alert("Please select a version type");
+            return;
+        }
+        if (!versionForm.version_number || duplicateError) {
+            alert(duplicateError || "Version Number is required");
+            return;
+        }
+        if (!versionForm.build_number) {
+            alert("Build Number is required");
             return;
         }
 
@@ -104,6 +167,8 @@ export default function CreateVersion() {
                 description: "",
                 notes: "",
             });
+            setVersionType("");
+            setDuplicateError("");
             setSelectedModules([]);
             setStep(1);
         } catch (error) {
@@ -161,19 +226,46 @@ export default function CreateVersion() {
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-900 mb-2">
-                                        Version Number <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        name="version_number"
-                                        placeholder="e.g., 5.2.1"
-                                        value={versionForm.version_number}
-                                        onChange={handleVersionChange}
-                                        className={inputClass}
-                                    />
-                                    <p className="text-xs text-gray-500 mt-1">Semantic versioning format</p>
+                                <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    {/* Version Type selector */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-900 mb-2">
+                                            Version Type <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            value={versionType}
+                                            onChange={e => handleVersionTypeChange(e.target.value)}
+                                            className={`${inputClass} appearance-none`}
+                                        >
+                                            <option value="">Select version type</option>
+                                            <option value="major">Major — breaking changes (x.0.0)</option>
+                                            <option value="minor">Minor — new features (x.y.0)</option>
+                                            <option value="patch">Patch — bug fixes (x.y.z)</option>
+                                        </select>
+                                        <p className="text-xs text-gray-500 mt-1">Determines how the version number is incremented</p>
+                                    </div>
+
+                                    {/* Auto-generated version number */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-900 mb-2">
+                                            Version Number <span className="text-red-500">*</span>
+                                        </label>
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                value={versionGenerating ? "Generating…" : (versionForm.version_number || "—")}
+                                                readOnly
+                                                className={`${inputClass} bg-gray-50 cursor-not-allowed pr-10 ${duplicateError ? "border-red-400 text-red-600" : "text-gray-700"}`}
+                                            />
+                                            <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                                                <i className="fa-solid fa-lock text-gray-400 text-sm"></i>
+                                            </span>
+                                        </div>
+                                        {duplicateError
+                                            ? <p className="text-xs text-red-500 mt-1">{duplicateError}</p>
+                                            : <p className="text-xs text-gray-500 mt-1">Auto-generated · cannot be changed</p>
+                                        }
+                                    </div>
                                 </div>
 
                                 <div>
@@ -394,10 +486,10 @@ export default function CreateVersion() {
                                                 <td className="py-4 px-4 text-sm text-gray-500">0</td>
                                                 <td className="py-4 px-4">
                                                     <span className={`px-2 py-1 text-xs font-medium rounded ${module.priority === "High"
-                                                            ? "bg-red-500 bg-opacity-10 text-red-600"
-                                                            : module.priority === "Medium"
-                                                                ? "bg-amber-500 bg-opacity-10 text-amber-600"
-                                                                : "bg-gray-500 bg-opacity-10 text-gray-600"
+                                                        ? "bg-red-500 bg-opacity-10 text-red-600"
+                                                        : module.priority === "Medium"
+                                                            ? "bg-amber-500 bg-opacity-10 text-amber-600"
+                                                            : "bg-gray-500 bg-opacity-10 text-gray-600"
                                                         }`}>
                                                         {module.priority}
                                                     </span>

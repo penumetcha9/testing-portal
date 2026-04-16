@@ -410,8 +410,8 @@ const FILTER_STATUS_OPT = [{ id: "", name: "All Status" }, { id: "Active", name:
 const PRIORITY_WITH_PH = [{ id: "", name: "Select Priority" }, ...PRIORITY_OPTIONS];
 
 const emptyForm = { id: "", name: "", description: "", preconditions: "", steps: "", expected: "", assignee: "", status: "Active", priority: "", tags: "", userStoryIds: [] };
-const emptyFeatureForm = { moduleId: "", name: "", code: "", user_story: "", description: "", assign_to: "" };
-const emptyEditFeatureForm = { id: "", moduleId: "", name: "", code: "", user_story: "", description: "", assign_to: "" };
+const emptyFeatureForm = { moduleId: "", name: "", code: "", user_stories: [], description: "", assign_to: "" };
+const emptyEditFeatureForm = { id: "", moduleId: "", name: "", code: "", user_stories: [], description: "", assign_to: "" };
 
 const generateUUID = () =>
     'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -662,16 +662,6 @@ export default function FeaturesLibrary() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const importFeatInputRef = useRef(null);
-    const importTCInputRef = useRef(null);
-    const [importFeatModal, setImportFeatModal] = useState(false);
-    const [importTCModal, setImportTCModal] = useState(false);
-    const [importFeatFile, setImportFeatFile] = useState(null);
-    const [importTCFile, setImportTCFile] = useState(null);
-    const [importFeatDragging, setImportFeatDragging] = useState(false);
-    const [importTCDragging, setImportTCDragging] = useState(false);
-    const [importLoading, setImportLoading] = useState(false);
-
     const [addModal, setAddModal] = useState({ open: false, featureId: null, moduleId: null });
     const [editModal, setEditModal] = useState({ open: false, tc: null, featureId: null, moduleId: null });
     const [deleteModal, setDeleteModal] = useState({ open: false, tc: null, featureId: null, moduleId: null });
@@ -835,13 +825,11 @@ export default function FeaturesLibrary() {
 
     const toggleFeature = useCallback(id => setOpenFeatures(p => ({ ...p, [id]: !p[id] })), []);
 
-    const openAddFeatureModal = useCallback(async () => {
-        // Fetch the latest feature codes directly from DB to avoid duplicate key conflicts
-        const { data } = await supabase.from("features").select("feature_code");
-        const nextCode = generateNextFeatCode(data || []);
+    const openAddFeatureModal = useCallback(() => {
+        const nextCode = generateNextFeatCode(flatFeatures);
         setFeatureForm({ ...emptyFeatureForm, code: nextCode });
         setAddFeatureModal(true);
-    }, []);
+    }, [flatFeatures]);
 
     const openAddModal = useCallback((e, moduleId, featureId) => {
         e.stopPropagation();
@@ -874,9 +862,14 @@ export default function FeaturesLibrary() {
 
     const openEditFeatureModal = useCallback((e, feat) => {
         e.stopPropagation();
-        setEditFeatureForm({ id: feat.id, moduleId: feat.moduleId, name: feat.feature_name || feat.name || "", code: feat.feature_code || feat.code || "", user_story: feat.user_story || "", description: feat.description || "", assign_to: feat.assign_to || "" });
+        const storyCodes = (feat.user_story || "").split(",").map(s => s.trim()).filter(Boolean);
+        const matchedIds = storyCodes.map(code => {
+            const s = userStories.find(st => st.code === code || st.name === code);
+            return s ? s.id : null;
+        }).filter(Boolean);
+        setEditFeatureForm({ id: feat.id, moduleId: feat.moduleId, name: feat.feature_name || feat.name || "", code: feat.feature_code || feat.code || "", user_stories: matchedIds, description: feat.description || "", assign_to: feat.assign_to || "" });
         setEditFeatureModal(true);
-    }, []);
+    }, [userStories]);
 
     const openDeleteFeatureModal = useCallback((e, feat) => {
         e.stopPropagation(); setDeleteFeatureTarget(feat); setDeleteFeatureModal(true);
@@ -936,21 +929,24 @@ export default function FeaturesLibrary() {
     const handleAddFeature = useCallback(async () => {
         if (!featureForm.moduleId || !featureForm.name) { alert("Module and Name required"); return; }
         try {
-            // Re-fetch latest codes from DB right before insert to guarantee uniqueness
-            const { data: latestCodes } = await supabase.from("features").select("feature_code");
-            const safeCode = generateNextFeatCode(latestCodes || []);
             const ins = {
                 module_id: featureForm.moduleId, feature_name: featureForm.name,
-                feature_code: safeCode, description: featureForm.description,
+                feature_code: featureForm.code, description: featureForm.description,
                 created_at: new Date().toISOString(),
             };
-            if (featureForm.user_story) ins.user_story = featureForm.user_story;
+            if (featureForm.user_stories && featureForm.user_stories.length > 0) {
+                const codes = featureForm.user_stories.map(id => {
+                    const s = userStories.find(st => st.id === id);
+                    return s ? (s.code || s.name) : id;
+                });
+                ins.user_story = codes.join(", ");
+            }
             if (featureForm.assign_to) ins.assign_to = featureForm.assign_to;
             const { error } = await supabase.from("features").insert([ins]);
             if (error) throw error;
             setAddFeatureModal(false); setFeatureForm(emptyFeatureForm); fetchModulesWithFeatures();
         } catch (err) { alert(`Error: ${err.message}`); }
-    }, [featureForm, fetchModulesWithFeatures]);
+    }, [featureForm, userStories, fetchModulesWithFeatures]);
 
     const handleEditFeature = useCallback(async () => {
         if (!editFeatureForm.name || !editFeatureForm.code) { alert("Name and Code required"); return; }
@@ -958,14 +954,21 @@ export default function FeaturesLibrary() {
             const { error } = await supabase.from("features").update({
                 feature_name: editFeatureForm.name, feature_code: editFeatureForm.code,
                 description: editFeatureForm.description,
-                user_story: editFeatureForm.user_story || null,
+                user_story: (() => {
+                    if (!editFeatureForm.user_stories || editFeatureForm.user_stories.length === 0) return null;
+                    const codes = editFeatureForm.user_stories.map(id => {
+                        const s = userStories.find(st => st.id === id);
+                        return s ? (s.code || s.name) : id;
+                    });
+                    return codes.join(", ");
+                })(),
                 assign_to: editFeatureForm.assign_to || null,
                 module_id: editFeatureForm.moduleId,
             }).eq("id", editFeatureForm.id);
             if (error) throw error;
             setEditFeatureModal(false); setEditFeatureForm(emptyEditFeatureForm); fetchModulesWithFeatures();
         } catch (err) { alert(`Error: ${err.message}`); }
-    }, [editFeatureForm, fetchModulesWithFeatures]);
+    }, [editFeatureForm, userStories, fetchModulesWithFeatures]);
 
     const handleDeleteFeature = useCallback(async () => {
         if (!deleteFeatureTarget) return;
@@ -1000,378 +1003,6 @@ export default function FeaturesLibrary() {
         a.click();
     }, [flatFeatures]);
 
-    // ── Load SheetJS dynamically ──
-    const loadXLSX = useCallback(() => new Promise((resolve, reject) => {
-        if (window.XLSX) { resolve(window.XLSX); return; }
-        const s = document.createElement("script");
-        s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-        s.onload = () => resolve(window.XLSX);
-        s.onerror = reject;
-        document.head.appendChild(s);
-    }), []);
-
-    // ── Download Feature template as xlsx with dropdowns ──
-    const downloadFeatureTemplate = useCallback(async () => {
-        try {
-            const XLSX = await loadXLSX();
-
-            // Fetch real modules and profiles for dropdowns
-            const [{ data: mods }, { data: profs }] = await Promise.all([
-                supabase.from("modules").select("module_code, module_name").eq("status", "Active").order("module_code"),
-                supabase.from("profiles").select("full_name, email").order("full_name"),
-            ]);
-
-            const moduleCodes = (mods || []).map(m => String(m.module_code));
-            const assignees = (profs || []).map(p => p.full_name || p.email).filter(Boolean);
-
-            const wb = XLSX.utils.book_new();
-
-            // ── Hidden ref sheet for dropdown lists ──
-            const refData = [
-                ["ModuleCodes", "Assignees", "StatusOptions"],
-                ...Array.from({ length: Math.max(moduleCodes.length, assignees.length, 3) }, (_, i) => [
-                    moduleCodes[i] || "",
-                    assignees[i] || "",
-                    ["Active", "Draft", "Archived"][i] || "",
-                ]),
-            ];
-            const refWs = XLSX.utils.aoa_to_sheet(refData);
-            XLSX.utils.book_append_sheet(wb, refWs, "_Ref");
-
-            // ── Main template sheet ──
-            // Columns (matching Add New Feature modal):
-            // A: Module Code*, B: Feature Name*, C: User Story, D: Description, E: Assign To
-            const headers = [["Module Code *", "Feature Name *", "User Story", "Description", "Assign To"]];
-            const exampleRow = [moduleCodes[0] || "1001", "Example Feature", "US-001", "This is an example feature description", assignees[0] || ""];
-            const ws = XLSX.utils.aoa_to_sheet([...headers, exampleRow]);
-
-            // Column widths
-            ws["!cols"] = [{ wch: 16 }, { wch: 30 }, { wch: 16 }, { wch: 40 }, { wch: 25 }];
-
-            // Data validations (module code dropdown, assign to dropdown)
-            ws["!dataValidation"] = [
-                {
-                    type: "list", sqref: "A2:A1000",
-                    formula1: `_Ref!$A$2:$A$${moduleCodes.length + 1}`,
-                    showDropDown: false, showErrorMessage: true,
-                    error: "Please select a valid Module Code from the list.",
-                    errorTitle: "Invalid Module Code",
-                },
-                {
-                    type: "list", sqref: "E2:E1000",
-                    formula1: `_Ref!$B$2:$B$${assignees.length + 1}`,
-                    showDropDown: false, showErrorMessage: false,
-                },
-            ];
-
-            // Style header row bold + green background
-            const headerStyle = { font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "1D3D2F" } }, alignment: { horizontal: "center" } };
-            ["A1", "B1", "C1", "D1", "E1"].forEach(cell => {
-                if (!ws[cell]) return;
-                ws[cell].s = headerStyle;
-            });
-
-            XLSX.utils.book_append_sheet(wb, ws, "Features");
-
-            // Reorder sheets so Features comes first
-            wb.SheetNames = ["Features", "_Ref"];
-
-            XLSX.writeFile(wb, "features_template.xlsx");
-        } catch (err) {
-            console.error("Template error:", err);
-            // Fallback to CSV if xlsx fails
-            const csv = `Module Code *,Feature Name *,User Story,Description,Assign To\n1001,Example Feature,US-001,This is an example description,`;
-            const a = document.createElement("a");
-            a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-            a.download = "features_template.csv"; a.click();
-        }
-    }, [loadXLSX]);
-
-    // ── Download Test Case template as xlsx with dropdowns ──
-    const downloadTCTemplate = useCallback(async () => {
-        try {
-            const XLSX = await loadXLSX();
-
-            const [{ data: feats }, { data: profs }] = await Promise.all([
-                supabase.from("features").select("feature_code, feature_name").order("feature_code"),
-                supabase.from("profiles").select("full_name, email").order("full_name"),
-            ]);
-
-            const featCodes = (feats || []).map(f => f.feature_code).filter(Boolean);
-            const assignees = (profs || []).map(p => p.full_name || p.email).filter(Boolean);
-            const priorities = ["High", "Medium", "Low"];
-            const statuses = ["Active", "Draft", "Archived"];
-
-            const wb = XLSX.utils.book_new();
-
-            // ── Hidden ref sheet ──
-            const maxLen = Math.max(featCodes.length, assignees.length, 3);
-            const refData = [
-                ["FeatureCodes", "Assignees", "Priorities", "Statuses"],
-                ...Array.from({ length: maxLen }, (_, i) => [
-                    featCodes[i] || "", assignees[i] || "",
-                    priorities[i] || "", statuses[i] || "",
-                ]),
-            ];
-            const refWs = XLSX.utils.aoa_to_sheet(refData);
-            XLSX.utils.book_append_sheet(wb, refWs, "_Ref");
-
-            // ── Main sheet ──
-            // Columns matching Add Test Case modal:
-            // A: Feature Code*, B: Test Case Name*, C: Description, D: Priority*, E: Status*, F: Assigned To
-            const headers = [["Feature Code *", "Test Case Name *", "Description", "Priority *", "Status *", "Assigned To"]];
-            const exampleRow = [featCodes[0] || "FEAT-001", "Example Test Case", "Verify that the feature works correctly", "High", "Active", assignees[0] || ""];
-            const ws = XLSX.utils.aoa_to_sheet([...headers, exampleRow]);
-
-            ws["!cols"] = [{ wch: 16 }, { wch: 35 }, { wch: 40 }, { wch: 14 }, { wch: 14 }, { wch: 25 }];
-
-            ws["!dataValidation"] = [
-                {
-                    type: "list", sqref: "A2:A1000",
-                    formula1: `_Ref!$A$2:$A$${featCodes.length + 1}`,
-                    showDropDown: false, showErrorMessage: true,
-                    error: "Please select a valid Feature Code from the list.", errorTitle: "Invalid Feature Code",
-                },
-                {
-                    type: "list", sqref: "D2:D1000",
-                    formula1: `"High,Medium,Low"`,
-                    showDropDown: false, showErrorMessage: true,
-                    error: "Priority must be High, Medium, or Low.", errorTitle: "Invalid Priority",
-                },
-                {
-                    type: "list", sqref: "E2:E1000",
-                    formula1: `"Active,Draft,Archived"`,
-                    showDropDown: false, showErrorMessage: true,
-                    error: "Status must be Active, Draft, or Archived.", errorTitle: "Invalid Status",
-                },
-                {
-                    type: "list", sqref: "F2:F1000",
-                    formula1: `_Ref!$B$2:$B$${assignees.length + 1}`,
-                    showDropDown: false, showErrorMessage: false,
-                },
-            ];
-
-            const headerStyle = { font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "1D3D2F" } }, alignment: { horizontal: "center" } };
-            ["A1", "B1", "C1", "D1", "E1", "F1"].forEach(cell => { if (ws[cell]) ws[cell].s = headerStyle; });
-
-            XLSX.utils.book_append_sheet(wb, ws, "Test Cases");
-            wb.SheetNames = ["Test Cases", "_Ref"];
-
-            XLSX.writeFile(wb, "test_cases_template.xlsx");
-        } catch (err) {
-            console.error("Template error:", err);
-            const csv = `Feature Code *,Test Case Name *,Description,Priority *,Status *,Assigned To\nFEAT-001,Example Test Case,Verify the feature works correctly,High,Active,`;
-            const a = document.createElement("a");
-            a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-            a.download = "test_cases_template.csv"; a.click();
-        }
-    }, [loadXLSX]);
-
-    // ── CSV parser (handles quoted fields) ──
-    const parseCSV = useCallback((text) => {
-        const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-        if (lines.length < 2) return { headers: [], rows: [] };
-        const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim().toLowerCase());
-        const rows = lines.slice(1).map(line => {
-            const cols = []; let cur = "", inQ = false;
-            for (const ch of line) {
-                if (ch === '"') { inQ = !inQ; }
-                else if (ch === "," && !inQ) { cols.push(cur.trim()); cur = ""; }
-                else { cur += ch; }
-            }
-            cols.push(cur.trim());
-            return Object.fromEntries(headers.map((h, i) => [h, (cols[i] || "").replace(/^"|"$/g, "").trim()]));
-        });
-        return { headers, rows };
-    }, []);
-
-    // ── Parse xlsx or csv file to rows ──
-    const parseFile = useCallback(async (file) => {
-        const name = file.name.toLowerCase();
-        if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
-            const XLSX = await loadXLSX();
-            const buf = await file.arrayBuffer();
-            const wb = XLSX.read(buf, { type: "array" });
-            // Use first non-_Ref sheet
-            const sheetName = wb.SheetNames.find(n => !n.startsWith("_")) || wb.SheetNames[0];
-            const ws = wb.Sheets[sheetName];
-            const data = XLSX.utils.sheet_to_json(ws, { defval: "" });
-            // Normalize keys to lowercase
-            return data.map(row => Object.fromEntries(Object.entries(row).map(([k, v]) => [k.toLowerCase().trim(), String(v).trim()])));
-        }
-        // CSV fallback
-        const text = await file.text();
-        const { rows } = parseCSV(text);
-        return rows;
-    }, [loadXLSX, parseCSV]);
-
-    // ── Import Features ──
-    const handleImportFeatures = useCallback(async () => {
-        if (!importFeatFile) { alert("Please select a file first."); return; }
-        setImportLoading(true);
-        try {
-            const rows = await parseFile(importFeatFile);
-            if (rows.length === 0) throw new Error("File is empty or has no data rows.");
-
-            const { data: modulesData } = await supabase.from("modules").select("id, module_name, module_code");
-            const { data: existingFeatures } = await supabase.from("features").select("feature_code, feature_name, module_id");
-            const { data: profsData } = await supabase.from("profiles").select("id, full_name, email");
-
-            // Module lookup by code and name
-            const moduleByCode = {}, moduleByName = {};
-            for (const m of (modulesData || [])) {
-                moduleByCode[String(m.module_code).toLowerCase()] = m.id;
-                moduleByName[(m.module_name || "").toLowerCase()] = m.id;
-            }
-
-            // Profile lookup by full_name and email
-            const profileByName = {};
-            for (const p of (profsData || [])) {
-                if (p.full_name) profileByName[p.full_name.toLowerCase()] = p.id;
-                if (p.email) profileByName[p.email.toLowerCase()] = p.id;
-            }
-
-            const existingKeys = new Set((existingFeatures || []).map(f => `${f.module_id}::${(f.feature_name || "").toLowerCase()}`));
-            let codeBase = (existingFeatures || []).reduce((max, f) => {
-                const m = (f.feature_code || "").match(/^FEAT-(\d+)$/i);
-                return m ? Math.max(max, parseInt(m[1], 10)) : max;
-            }, 0);
-
-            const toInsert = [], skipped = [];
-            for (const row of rows) {
-                // Column names matching the template: "module code *", "feature name *", "user story", "description", "assign to"
-                const moduleCodeVal = row["module code *"] || row["module code"] || row["module_code"] || "";
-                const featureName = row["feature name *"] || row["feature name"] || row["feature_name"] || "";
-                const userStory = row["user story"] || row["user_story"] || "";
-                const description = row["description"] || "";
-                const assignToRaw = row["assign to"] || row["assign_to"] || "";
-
-                if (!featureName) { skipped.push("(row with no Feature Name)"); continue; }
-
-                const moduleId = moduleByCode[moduleCodeVal.toLowerCase()] || moduleByName[moduleCodeVal.toLowerCase()];
-                if (!moduleId) { skipped.push(`"${featureName}" — module "${moduleCodeVal}" not found`); continue; }
-
-                const key = `${moduleId}::${featureName.toLowerCase()}`;
-                if (existingKeys.has(key)) { skipped.push(`"${featureName}" — already exists`); continue; }
-
-                codeBase += 1;
-                const featureCode = `FEAT-${String(codeBase).padStart(3, "0")}`;
-                existingKeys.add(key);
-
-                // Resolve assign_to to profile UUID if possible
-                const assignToId = profileByName[assignToRaw.toLowerCase()] || null;
-
-                toInsert.push({
-                    module_id: moduleId,
-                    feature_name: featureName,
-                    feature_code: featureCode,
-                    description: description || null,
-                    user_story: userStory || null,
-                    assign_to: assignToId,
-                    status: "Active",
-                    created_at: new Date().toISOString(),
-                });
-            }
-
-            if (toInsert.length === 0) throw new Error(`Nothing to import.\n\nSkipped (${skipped.length}):\n${skipped.slice(0, 8).join("\n")}`);
-
-            const { error } = await supabase.from("features").insert(toInsert);
-            if (error) throw error;
-
-            let msg = `✅ Imported ${toInsert.length} feature(s) successfully.`;
-            if (skipped.length > 0) msg += `\n\nSkipped (${skipped.length}):\n${skipped.slice(0, 5).join("\n")}${skipped.length > 5 ? "\n…" : ""}`;
-            alert(msg);
-            setImportFeatModal(false); setImportFeatFile(null);
-            fetchModulesWithFeatures();
-        } catch (err) { alert(`Import failed: ${err.message}`); }
-        finally { setImportLoading(false); }
-    }, [importFeatFile, parseFile, fetchModulesWithFeatures]);
-
-    // ── Import Test Cases ──
-    const handleImportTestCases = useCallback(async () => {
-        if (!importTCFile) { alert("Please select a file first."); return; }
-        setImportLoading(true);
-        try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error("Must be logged in.");
-
-            const rows = await parseFile(importTCFile);
-            if (rows.length === 0) throw new Error("File is empty or has no data rows.");
-
-            const { data: featuresData } = await supabase.from("features").select("id, feature_code, module_id");
-            const { data: existingTCs } = await supabase.from("test_cases").select("test_case_id");
-            const { data: profsData } = await supabase.from("profiles").select("id, full_name, email");
-
-            const featureByCode = {};
-            for (const f of (featuresData || [])) {
-                featureByCode[(f.feature_code || "").toLowerCase()] = f;
-            }
-
-            const profileByName = {};
-            for (const p of (profsData || [])) {
-                if (p.full_name) profileByName[p.full_name.toLowerCase()] = p.id;
-                if (p.email) profileByName[p.email.toLowerCase()] = p.id;
-            }
-
-            let tcNumBase = (existingTCs || []).reduce((max, tc) => {
-                const m = (tc.test_case_id || "").match(/^TC-(\d+)$/i);
-                return m ? Math.max(max, parseInt(m[1], 10)) : max;
-            }, 0);
-
-            const toInsert = [], skipped = [];
-            for (const row of rows) {
-                // Columns: "feature code *", "test case name *", "description", "priority *", "status *", "assigned to"
-                const featureCodeVal = row["feature code *"] || row["feature code"] || row["feature_code"] || "";
-                const tcName = row["test case name *"] || row["test case name"] || row["test_case_name"] || row["name"] || "";
-                const description = row["description"] || "";
-                const rawPriority = row["priority *"] || row["priority"] || "Medium";
-                const priority = ["High", "Medium", "Low"].find(p => p.toLowerCase() === rawPriority.toLowerCase()) || "Medium";
-                const rawStatus = row["status *"] || row["status"] || "Active";
-                const status = ["Active", "Draft", "Archived"].find(s => s.toLowerCase() === rawStatus.toLowerCase()) || "Active";
-                const assignedToRaw = row["assigned to"] || row["assigned_to"] || "";
-
-                if (!tcName) { skipped.push("(row with no Test Case Name)"); continue; }
-                if (!featureCodeVal) { skipped.push(`"${tcName}" — no Feature Code specified`); continue; }
-
-                const feat = featureByCode[featureCodeVal.toLowerCase()];
-                if (!feat) { skipped.push(`"${tcName}" — feature "${featureCodeVal}" not found`); continue; }
-
-                tcNumBase += 1;
-                const testCaseId = `TC-${String(tcNumBase).padStart(3, "0")}`;
-
-                const assignedToId = profileByName[assignedToRaw.toLowerCase()] || null;
-
-                toInsert.push({
-                    id: generateUUID(),
-                    test_case_id: testCaseId,
-                    name: tcName,
-                    description: description || null,
-                    feature_id: feat.id,
-                    module_id: feat.module_id,
-                    priority,
-                    status,
-                    created_by: user.id,
-                    assigned_to: assignedToId,
-                    user_story_ids: null,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                });
-            }
-
-            if (toInsert.length === 0) throw new Error(`Nothing to import.\n\nSkipped (${skipped.length}):\n${skipped.slice(0, 8).join("\n")}`);
-
-            const { error } = await supabase.from("test_cases").insert(toInsert);
-            if (error) throw error;
-
-            let msg = `✅ Imported ${toInsert.length} test case(s) successfully.`;
-            if (skipped.length > 0) msg += `\n\nSkipped (${skipped.length}):\n${skipped.slice(0, 5).join("\n")}${skipped.length > 5 ? "\n…" : ""}`;
-            alert(msg);
-            setImportTCModal(false); setImportTCFile(null);
-            fetchModulesWithFeatures();
-        } catch (err) { alert(`Import failed: ${err.message}`); }
-        finally { setImportLoading(false); }
-    }, [importTCFile, parseFile, fetchModulesWithFeatures]);
-
     const addTCHandler = useCallback((e, moduleId, featureId) => openAddModal(e, moduleId, featureId), [openAddModal]);
     addTCHandler.__editTC = openEditModal;
     addTCHandler.__deleteTC = openDeleteModal;
@@ -1396,14 +1027,6 @@ export default function FeaturesLibrary() {
                         <p style={{ fontSize: 12, color: T.textMuted, margin: "2px 0 0", lineHeight: 1.5 }}>All features with linked modules and test cases</p>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <input type="file" accept=".csv,.xlsx,.xls" ref={importFeatInputRef} style={{ display: "none" }} onChange={e => { if (e.target.files?.[0]) { setImportFeatFile(e.target.files[0]); setImportFeatModal(true); } e.target.value = ""; }} />
-                        <input type="file" accept=".csv,.xlsx,.xls" ref={importTCInputRef} style={{ display: "none" }} onChange={e => { if (e.target.files?.[0]) { setImportTCFile(e.target.files[0]); setImportTCModal(true); } e.target.value = ""; }} />
-                        <button className="fl-btn-ghost" onClick={() => setImportFeatModal(true)} style={{ padding: "8px 14px", fontSize: 13 }}>
-                            <i className="fa-solid fa-upload" style={{ fontSize: 11 }}></i> Import Features
-                        </button>
-                        <button className="fl-btn-ghost" onClick={() => setImportTCModal(true)} style={{ padding: "8px 14px", fontSize: 13 }}>
-                            <i className="fa-solid fa-upload" style={{ fontSize: 11 }}></i> Import Test Cases
-                        </button>
                         <button className="fl-btn-ghost" onClick={exportToCSV} style={{ padding: "8px 14px", fontSize: 13 }}>
                             <i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Export
                         </button>
@@ -1485,8 +1108,13 @@ export default function FeaturesLibrary() {
                                         <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>Auto-generated</span>
                                     </div>
                                 </Field>
-                                <Field label="User Story">
-                                    <input className="fl-input" type="text" placeholder="e.g., US-015" value={featureForm.user_story} onChange={e => setFeatureForm(f => ({ ...f, user_story: e.target.value }))} />
+                                <Field label="User Stories">
+                                    <MultiSelectDropdown
+                                        options={userStories.map(s => ({ id: s.id, code: s.code, name: s.code ? `${s.code} – ${s.name}` : s.name }))}
+                                        selected={featureForm.user_stories}
+                                        onChange={ids => setFeatureForm(f => ({ ...f, user_stories: ids }))}
+                                        placeholder={userStories.length === 0 ? "No user stories available" : "Select User Stories…"}
+                                    />
                                 </Field>
                             </div>
                             <Field label="Description">
@@ -1528,8 +1156,13 @@ export default function FeaturesLibrary() {
                                 <Field label="Feature Code" required>
                                     <input className="fl-input" type="text" value={editFeatureForm.code} onChange={e => setEditFeatureForm(f => ({ ...f, code: e.target.value }))} />
                                 </Field>
-                                <Field label="User Story">
-                                    <input className="fl-input" type="text" value={editFeatureForm.user_story} onChange={e => setEditFeatureForm(f => ({ ...f, user_story: e.target.value }))} />
+                                <Field label="User Stories">
+                                    <MultiSelectDropdown
+                                        options={userStories.map(s => ({ id: s.id, code: s.code, name: s.code ? `${s.code} – ${s.name}` : s.name }))}
+                                        selected={editFeatureForm.user_stories}
+                                        onChange={ids => setEditFeatureForm(f => ({ ...f, user_stories: ids }))}
+                                        placeholder={userStories.length === 0 ? "No user stories available" : "Select User Stories…"}
+                                    />
                                 </Field>
                             </div>
                             <Field label="Description">
@@ -1712,146 +1345,6 @@ export default function FeaturesLibrary() {
                                 <button onClick={() => setDeleteModal({ open: false })} style={BTN_CANCEL}>Cancel</button>
                                 <button onClick={handleDeleteTestCase} style={BTN_DANGER}>Delete</button>
                             </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* ── Import Features Modal ── */}
-            {importFeatModal && (
-                <div style={OVERLAY} onClick={() => { setImportFeatModal(false); setImportFeatFile(null); }}>
-                    <div className="fl-modal-enter" style={{ ...modalBox("620px"), maxHeight: "90vh" }} onClick={e => e.stopPropagation()}>
-                        <div style={{ padding: "22px 24px 18px", borderBottom: `1px solid ${T.borderLight}`, display: "flex", alignItems: "flex-start", gap: 14 }}>
-                            <div style={{ width: 40, height: 40, background: T.greenLight, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                <i className="fa-solid fa-list-check" style={{ color: T.green, fontSize: 16 }}></i>
-                            </div>
-                            <div style={{ flex: 1 }}>
-                                <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, margin: "0 0 3px" }}>Import Features via CSV</h3>
-                                <p style={{ fontSize: 12, color: T.textMuted, margin: 0 }}>Upload a .xlsx or .csv file to bulk-create features</p>
-                            </div>
-                            <button onClick={() => { setImportFeatModal(false); setImportFeatFile(null); }} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 16, padding: 4 }}><i className="fa-solid fa-times"></i></button>
-                        </div>
-                        <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
-                            <div style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                                    <i className="fa-solid fa-circle-info" style={{ color: "#3B82F6", fontSize: 14, marginTop: 1, flexShrink: 0 }}></i>
-                                    <div>
-                                        <p style={{ fontSize: 13, fontWeight: 600, color: "#1E40AF", margin: "0 0 2px" }}>Need a template?</p>
-                                        <p style={{ fontSize: 12, color: "#3B82F6", margin: 0 }}>Download an Excel file with dropdowns for modules &amp; profiles</p>
-                                    </div>
-                                </div>
-                                <button onClick={downloadFeatureTemplate} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "#fff", border: "1.5px solid #93C5FD", borderRadius: 8, color: "#1D4ED8", fontSize: 12, fontWeight: 600, cursor: "pointer", flexShrink: 0, fontFamily: T.sans }}>
-                                    <i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Template
-                                </button>
-                            </div>
-                            <div style={{ background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 10, padding: "14px 16px" }}>
-                                <p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 10px" }}>Expected Columns</p>
-                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-                                    {[{ name: "Module Code", req: true }, { name: "Feature Name", req: true }, { name: "User Story", req: false }, { name: "Description", req: false }, { name: "Assign To", req: false }].map(col => (
-                                        <span key={col.name} style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "4px 10px", borderRadius: 6, fontSize: 12, fontWeight: 600, background: col.req ? "rgba(220,38,38,0.08)" : T.surface, color: col.req ? T.red : T.textMid, border: `1px solid ${col.req ? "rgba(220,38,38,0.2)" : T.border}`, fontFamily: T.mono }}>
-                                            {col.name}{col.req && <span style={{ color: T.red }}>*</span>}
-                                        </span>
-                                    ))}
-                                </div>
-                                <p style={{ fontSize: 11, color: T.textMuted, margin: 0 }}>Module Code &amp; Feature Name are required · Assign To accepts profile name from the dropdown list</p>
-                            </div>
-                            <div
-                                onDragOver={e => { e.preventDefault(); setImportFeatDragging(true); }}
-                                onDragLeave={() => setImportFeatDragging(false)}
-                                onDrop={e => { e.preventDefault(); setImportFeatDragging(false); const f = e.dataTransfer.files?.[0]; if (f && (f.name.endsWith(".csv") || f.name.endsWith(".xlsx") || f.name.endsWith(".xls"))) setImportFeatFile(f); else alert("Please drop a .xlsx or .csv file."); }}
-                                onClick={() => importFeatInputRef.current?.click()}
-                                style={{ border: `2px dashed ${importFeatDragging ? T.green : importFeatFile ? "#22C55E" : T.border}`, borderRadius: 12, padding: "36px 20px", textAlign: "center", cursor: "pointer", background: importFeatDragging ? T.greenLight : importFeatFile ? "rgba(34,197,94,0.05)" : T.surfaceAlt, transition: "all 0.18s" }}
-                            >
-                                {importFeatFile ? (
-                                    <>
-                                        <i className="fa-solid fa-file-csv" style={{ fontSize: 32, color: "#22C55E", marginBottom: 8, display: "block" }}></i>
-                                        <p style={{ fontSize: 13, fontWeight: 700, color: T.text, margin: "0 0 4px" }}>{importFeatFile.name}</p>
-                                        <p style={{ fontSize: 11, color: T.textMuted, margin: 0 }}>{(importFeatFile.size / 1024).toFixed(1)} KB · Click to change</p>
-                                    </>
-                                ) : (
-                                    <>
-                                        <i className="fa-solid fa-cloud-arrow-up" style={{ fontSize: 32, color: T.textFaint, marginBottom: 8, display: "block" }}></i>
-                                        <p style={{ fontSize: 13, fontWeight: 600, color: T.text, margin: "0 0 4px" }}>Drop your file here</p>
-                                        <p style={{ fontSize: 11, color: T.textMuted, margin: 0 }}>or click to browse · .xlsx or .csv accepted</p>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                        <div style={{ padding: "14px 24px", borderTop: `1px solid ${T.borderLight}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                            <button onClick={() => { setImportFeatModal(false); setImportFeatFile(null); }} style={BTN_CANCEL}>Cancel</button>
-                            <button onClick={handleImportFeatures} disabled={!importFeatFile || importLoading} style={{ ...BTN_PRIMARY, opacity: (!importFeatFile || importLoading) ? 0.5 : 1, padding: "9px 20px", fontSize: 13 }}>
-                                {importLoading ? <><i className="fa-solid fa-spinner fa-spin"></i> Importing…</> : <><i className="fa-solid fa-upload" style={{ fontSize: 11 }}></i> Import Features</>}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* ── Import Test Cases Modal ── */}
-            {importTCModal && (
-                <div style={OVERLAY} onClick={() => { setImportTCModal(false); setImportTCFile(null); }}>
-                    <div className="fl-modal-enter" style={{ ...modalBox("620px"), maxHeight: "90vh" }} onClick={e => e.stopPropagation()}>
-                        <div style={{ padding: "22px 24px 18px", borderBottom: `1px solid ${T.borderLight}`, display: "flex", alignItems: "flex-start", gap: 14 }}>
-                            <div style={{ width: 40, height: 40, background: T.purpleTint, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                <i className="fa-solid fa-vial" style={{ color: T.purple, fontSize: 16 }}></i>
-                            </div>
-                            <div style={{ flex: 1 }}>
-                                <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, margin: "0 0 3px" }}>Import Test Cases via CSV</h3>
-                                <p style={{ fontSize: 12, color: T.textMuted, margin: 0 }}>Upload a .xlsx or .csv file to bulk-create test cases</p>
-                            </div>
-                            <button onClick={() => { setImportTCModal(false); setImportTCFile(null); }} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 16, padding: 4 }}><i className="fa-solid fa-times"></i></button>
-                        </div>
-                        <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
-                            <div style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                                    <i className="fa-solid fa-circle-info" style={{ color: "#3B82F6", fontSize: 14, marginTop: 1, flexShrink: 0 }}></i>
-                                    <div>
-                                        <p style={{ fontSize: 13, fontWeight: 600, color: "#1E40AF", margin: "0 0 2px" }}>Need a template?</p>
-                                        <p style={{ fontSize: 12, color: "#3B82F6", margin: 0 }}>Download an Excel file with dropdowns for features &amp; profiles</p>
-                                    </div>
-                                </div>
-                                <button onClick={downloadTCTemplate} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "#fff", border: "1.5px solid #93C5FD", borderRadius: 8, color: "#1D4ED8", fontSize: 12, fontWeight: 600, cursor: "pointer", flexShrink: 0, fontFamily: T.sans }}>
-                                    <i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Template
-                                </button>
-                            </div>
-                            <div style={{ background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 10, padding: "14px 16px" }}>
-                                <p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 10px" }}>Expected Columns</p>
-                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-                                    {[{ name: "Feature Code", req: true }, { name: "Test Case Name", req: true }, { name: "Description", req: false }, { name: "Priority", req: true }, { name: "Status", req: true }, { name: "Assigned To", req: false }].map(col => (
-                                        <span key={col.name} style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "4px 10px", borderRadius: 6, fontSize: 12, fontWeight: 600, background: col.req ? "rgba(220,38,38,0.08)" : T.surface, color: col.req ? T.red : T.textMid, border: `1px solid ${col.req ? "rgba(220,38,38,0.2)" : T.border}`, fontFamily: T.mono }}>
-                                            {col.name}{col.req && <span style={{ color: T.red }}>*</span>}
-                                        </span>
-                                    ))}
-                                </div>
-                                <p style={{ fontSize: 11, color: T.textMuted, margin: 0 }}>Feature Code &amp; Test Case Name are required · Priority: High / Medium / Low · Status: Active / Draft / Archived · Assigned To accepts profile name</p>
-                            </div>
-                            <div
-                                onDragOver={e => { e.preventDefault(); setImportTCDragging(true); }}
-                                onDragLeave={() => setImportTCDragging(false)}
-                                onDrop={e => { e.preventDefault(); setImportTCDragging(false); const f = e.dataTransfer.files?.[0]; if (f && (f.name.endsWith(".csv") || f.name.endsWith(".xlsx") || f.name.endsWith(".xls"))) setImportTCFile(f); else alert("Please drop a .xlsx or .csv file."); }}
-                                onClick={() => importTCInputRef.current?.click()}
-                                style={{ border: `2px dashed ${importTCDragging ? T.purple : importTCFile ? "#22C55E" : T.border}`, borderRadius: 12, padding: "36px 20px", textAlign: "center", cursor: "pointer", background: importTCDragging ? T.purpleTint : importTCFile ? "rgba(34,197,94,0.05)" : T.surfaceAlt, transition: "all 0.18s" }}
-                            >
-                                {importTCFile ? (
-                                    <>
-                                        <i className="fa-solid fa-file-csv" style={{ fontSize: 32, color: "#22C55E", marginBottom: 8, display: "block" }}></i>
-                                        <p style={{ fontSize: 13, fontWeight: 700, color: T.text, margin: "0 0 4px" }}>{importTCFile.name}</p>
-                                        <p style={{ fontSize: 11, color: T.textMuted, margin: 0 }}>{(importTCFile.size / 1024).toFixed(1)} KB · Click to change</p>
-                                    </>
-                                ) : (
-                                    <>
-                                        <i className="fa-solid fa-cloud-arrow-up" style={{ fontSize: 32, color: T.textFaint, marginBottom: 8, display: "block" }}></i>
-                                        <p style={{ fontSize: 13, fontWeight: 600, color: T.text, margin: "0 0 4px" }}>Drop your file here</p>
-                                        <p style={{ fontSize: 11, color: T.textMuted, margin: 0 }}>or click to browse · .xlsx or .csv accepted</p>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                        <div style={{ padding: "14px 24px", borderTop: `1px solid ${T.borderLight}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                            <button onClick={() => { setImportTCModal(false); setImportTCFile(null); }} style={BTN_CANCEL}>Cancel</button>
-                            <button onClick={handleImportTestCases} disabled={!importTCFile || importLoading} style={{ ...BTN_PRIMARY, opacity: (!importTCFile || importLoading) ? 0.5 : 1, padding: "9px 20px", fontSize: 13 }}>
-                                {importLoading ? <><i className="fa-solid fa-spinner fa-spin"></i> Importing…</> : <><i className="fa-solid fa-upload" style={{ fontSize: 11 }}></i> Import Test Cases</>}
-                            </button>
                         </div>
                     </div>
                 </div>
