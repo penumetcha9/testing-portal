@@ -90,115 +90,66 @@ function MyAssignments({ userId }) {
 
     async function fetchMyAssignments() {
         setLoading(true);
-        try {
-            // First get the user's profile to resolve their full_name and email
-            // (some tables store name string, others store UUID)
-            const { data: profileData } = await supabase
-                .from("profiles")
-                .select("full_name, email")
-                .eq("id", userId)
-                .single();
-
-            const userName = profileData?.full_name || profileData?.email || null;
-
-            await Promise.all([
-                fetchMyTestCases(userName),
-                fetchMyModules(userName),
-                fetchMyVersions(),
-                fetchMyFeatures(userName),
-            ]);
-        } catch (e) {
-            console.error("fetchMyAssignments error:", e);
-        }
+        await Promise.all([
+            fetchMyTestCases(),
+            fetchMyModules(),
+            fetchMyVersions(),
+            fetchMyFeatures(),
+        ]);
         setLoading(false);
     }
 
-    async function fetchMyTestCases(userName) {
-        // test_cases.assigned_to stores the profile name string (from our FeaturesLibrary)
-        const queries = [];
+    async function fetchMyTestCases() {
+        const { data, error } = await supabase
+            .from("test_cases")
+            .select(`
+                id, name, test_case_id, status, priority,
+                modules ( module_name ),
+                versions ( version_number )
+            `)
+            .eq("assigned_to", userId.toString())
+            .order("created_at", { ascending: false })
+            .limit(20);
 
-        // Match by UUID (some records may use UUID)
-        queries.push(
-            supabase
-                .from("test_cases")
-                .select("id, name, test_case_id, status, priority, feature_id, features(feature_name), modules(module_name)")
-                .eq("assigned_to", userId)
-                .order("created_at", { ascending: false })
-                .limit(50)
-        );
-
-        // Match by name string
-        if (userName) {
-            queries.push(
-                supabase
-                    .from("test_cases")
-                    .select("id, name, test_case_id, status, priority, feature_id, features(feature_name), modules(module_name)")
-                    .eq("assigned_to", userName)
-                    .order("created_at", { ascending: false })
-                    .limit(50)
-            );
-        }
-
-        const results = await Promise.all(queries);
-        const allTCs = results.flatMap(r => r.data || []);
-        const unique = Array.from(new Map(allTCs.map(tc => [tc.id, tc])).values());
-        setMyTestCases(unique);
+        if (error) console.error("fetchMyTestCases error:", error);
+        if (!error && data) setMyTestCases(data);
     }
 
-    async function fetchMyModules(userName) {
-        // modules.module_owner stores name string directly
-        const queries = [];
-
-        if (userName) {
-            queries.push(
-                supabase
-                    .from("modules")
-                    .select("id, module_name, status, priority, description")
-                    .eq("module_owner", userName)
-                    .order("module_name")
-            );
-        }
-
-        // Also get modules where user's test cases belong
-        const { data: tcData } = await supabase
+    async function fetchMyModules() {
+        const { data: tcData, error: tcError } = await supabase
             .from("test_cases")
             .select("module_id")
-            .or(`assigned_to.eq.${userId}${userName ? `,assigned_to.eq.${userName}` : ""}`);
+            .eq("assigned_to", userId.toString());
 
-        const moduleIds = [...new Set((tcData || []).map(tc => tc.module_id).filter(Boolean))];
+        if (tcError || !tcData) return;
 
-        if (moduleIds.length > 0) {
-            queries.push(
-                supabase
-                    .from("modules")
-                    .select("id, module_name, status, priority, description")
-                    .in("id", moduleIds)
-                    .order("module_name")
-            );
-        }
+        const moduleIds = [...new Set(tcData.map(tc => tc.module_id).filter(Boolean))];
+        if (moduleIds.length === 0) { setMyModules([]); return; }
 
-        if (queries.length === 0) { setMyModules([]); return; }
+        const { data, error } = await supabase
+            .from("modules")
+            .select("id, module_name, status, description")
+            .in("id", moduleIds)
+            .order("module_name");
 
-        const results = await Promise.all(queries);
-        const all = results.flatMap(r => r.data || []);
-        const unique = Array.from(new Map(all.map(m => [m.id, m])).values());
-        setMyModules(unique);
+        if (error) console.error("fetchMyModules error:", error);
+        if (!error && data) setMyModules(data);
     }
 
     async function fetchMyVersions() {
-        // versions assigned via version_testers table (tester_id = auth UUID)
-        const { data: vtData } = await supabase
-            .from("version_testers")
+        const { data: tcData, error: tcError } = await supabase
+            .from("test_cases")
             .select("version_id")
-            .eq("tester_id", userId);
+            .eq("assigned_to", userId.toString());
 
-        const versionIds = [...new Set((vtData || []).map(r => r.version_id).filter(Boolean))];
+        if (tcError || !tcData) return;
 
+        const versionIds = [...new Set(tcData.map(tc => tc.version_id).filter(Boolean))];
         if (versionIds.length === 0) { setMyVersions([]); return; }
 
         const { data, error } = await supabase
             .from("versions")
-            .select("id, version_number, status, release_date, description, version_type")
+            .select("id, version_number, status, release_date, description")
             .in("id", versionIds)
             .order("created_date", { ascending: false });
 
@@ -206,47 +157,37 @@ function MyAssignments({ userId }) {
         if (!error && data) setMyVersions(data);
     }
 
-    async function fetchMyFeatures(userName) {
-        // features.assign_to stores UUID (profile id)
+    async function fetchMyFeatures() {
+        const { data: tcData, error: tcError } = await supabase
+            .from("test_cases")
+            .select("feature_id")
+            .eq("assigned_to", userId.toString());
+
+        if (tcError || !tcData) return;
+
+        const featureIds = [...new Set(tcData.map(tc => tc.feature_id).filter(Boolean))];
+
         const queries = [
             supabase
                 .from("features")
-                .select("id, feature_name, feature_code, status, priority, modules(module_name)")
-                .eq("assign_to", userId)
+                .select("id, feature_name, status, priority, modules ( module_name )")
+                .eq("assign_to", userId.toString())
                 .order("feature_name"),
         ];
 
-        // Also match by name if stored as string
-        if (userName) {
-            queries.push(
-                supabase
-                    .from("features")
-                    .select("id, feature_name, feature_code, status, priority, modules(module_name)")
-                    .eq("assign_to", userName)
-                    .order("feature_name")
-            );
-        }
-
-        // Also get features where user's test cases belong
-        const { data: tcData } = await supabase
-            .from("test_cases")
-            .select("feature_id")
-            .or(`assigned_to.eq.${userId}${userName ? `,assigned_to.eq.${userName}` : ""}`);
-
-        const featureIds = [...new Set((tcData || []).map(tc => tc.feature_id).filter(Boolean))];
         if (featureIds.length > 0) {
             queries.push(
                 supabase
                     .from("features")
-                    .select("id, feature_name, feature_code, status, priority, modules(module_name)")
+                    .select("id, feature_name, status, priority, modules ( module_name )")
                     .in("id", featureIds)
                     .order("feature_name")
             );
         }
 
         const results = await Promise.all(queries);
-        const all = results.flatMap(r => r.data || []);
-        const unique = Array.from(new Map(all.map(f => [f.id, f])).values());
+        const allFeatures = results.flatMap(r => r.data || []);
+        const unique = Array.from(new Map(allFeatures.map(f => [f.id, f])).values());
         setMyFeatures(unique);
     }
 
@@ -308,7 +249,7 @@ function MyAssignments({ userId }) {
                     <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                         {myTestCases.map(tc => (
                             <div key={tc.id}
-                                onClick={() => navigate("/test-execution")}
+                                onClick={() => { sessionStorage.setItem("te_direct_open", tc.id); navigate("/test-execution"); }}
                                 className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -319,7 +260,7 @@ function MyAssignments({ userId }) {
                                         <p className="text-xs text-muted-foreground">
                                             {tc.test_case_id}
                                             {tc.modules?.module_name && ` · ${tc.modules.module_name}`}
-                                            {tc.features?.feature_name && ` · ${tc.features.feature_name}`}
+                                            {tc.versions?.version_number && ` · ${tc.versions.version_number}`}
                                         </p>
                                     </div>
                                 </div>
@@ -341,7 +282,7 @@ function MyAssignments({ userId }) {
                     <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                         {myModules.map(m => (
                             <div key={m.id}
-                                onClick={() => navigate("/modules")}
+                                onClick={() => { sessionStorage.setItem("modules_open_id", m.id); navigate("/modules"); }}
                                 className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className="w-8 h-8 bg-blue-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -352,14 +293,7 @@ function MyAssignments({ userId }) {
                                         {m.description && <p className="text-xs text-muted-foreground truncate">{m.description}</p>}
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                                    {m.priority && (
-                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${m.priority === "High" ? "bg-red-100 text-red-600" : m.priority === "Medium" ? "bg-yellow-100 text-yellow-600" : "bg-gray-100 text-gray-500"}`}>
-                                            {m.priority}
-                                        </span>
-                                    )}
-                                    {m.status && <AssignmentBadge status={m.status} />}
-                                </div>
+                                {m.status && <AssignmentBadge status={m.status} />}
                             </div>
                         ))}
                     </div>
@@ -367,7 +301,7 @@ function MyAssignments({ userId }) {
                     <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                         {myVersions.map(v => (
                             <div key={v.id}
-                                onClick={() => navigate("/versions")}
+                                onClick={() => { sessionStorage.setItem("versions_open_id", v.id); navigate("/versions"); }}
                                 className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -375,10 +309,11 @@ function MyAssignments({ userId }) {
                                     </div>
                                     <div className="min-w-0">
                                         <p className="text-sm font-medium text-foreground truncate">{v.version_number}</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {v.version_type && `${v.version_type}`}
-                                            {v.release_date && ` · Release: ${new Date(v.release_date).toLocaleDateString()}`}
-                                        </p>
+                                        {v.release_date && (
+                                            <p className="text-xs text-muted-foreground">
+                                                Release: {new Date(v.release_date).toLocaleDateString()}
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                                 {v.status && <AssignmentBadge status={v.status} />}
@@ -389,7 +324,7 @@ function MyAssignments({ userId }) {
                     <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                         {myFeatures.map(f => (
                             <div key={f.id}
-                                onClick={() => navigate("/features")}
+                                onClick={() => { sessionStorage.setItem("features_open_id", f.id); navigate("/features"); }}
                                 className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className="w-8 h-8 bg-purple-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -397,10 +332,9 @@ function MyAssignments({ userId }) {
                                     </div>
                                     <div className="min-w-0">
                                         <p className="text-sm font-medium text-foreground truncate">{f.feature_name}</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {f.feature_code && <span className="font-mono">{f.feature_code}</span>}
-                                            {f.modules?.module_name && ` · ${f.modules.module_name}`}
-                                        </p>
+                                        {f.modules?.module_name && (
+                                            <p className="text-xs text-muted-foreground">{f.modules.module_name}</p>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 flex-shrink-0 ml-3">

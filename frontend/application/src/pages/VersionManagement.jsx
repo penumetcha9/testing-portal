@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback, memo } from "react";
+import ReactDOM from "react-dom";
 import { useNavigate } from "react-router-dom";
 import supabase from "../services/supabaseClient";
 
@@ -106,13 +107,6 @@ const ChevronIcon = memo(({ open }) => (
 ));
 ChevronIcon.displayName = "ChevronIcon";
 
-const DropdownList = memo(({ children }) => (
-    <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 9999, background: "#fff", border: "1.5px solid #e8eaf6", borderRadius: "12px", boxShadow: "0 8px 32px rgba(99,102,241,0.13),0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden" }}>
-        <div style={{ padding: "6px", maxHeight: "300px", overflowY: "auto" }}>{children}</div>
-    </div>
-));
-DropdownList.displayName = "DropdownList";
-
 const MultiItem = memo(({ opt, isSel, onSelect }) => (
     <div onClick={() => onSelect(opt.id)}
         style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "13.5px", fontWeight: isSel ? 600 : 400, color: isSel ? "#4f46e5" : "#374151", background: isSel ? "linear-gradient(135deg,#eef2ff 0%,#f0f4ff 100%)" : "transparent", transition: "background 0.12s ease" }}
@@ -139,13 +133,34 @@ SingleItem.displayName = "SingleItem";
 
 const CustomDropdown = memo(({ options, selected, onChange, placeholder = "Select options..." }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const ref = useRef(null);
+    const [pos, setPos] = useState(null);
+    const btnRef = useRef(null);
+    const isOpenRef = useRef(false);
+    isOpenRef.current = isOpen;
 
     useEffect(() => {
-        const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setIsOpen(false); };
-        document.addEventListener("mousedown", handler);
-        return () => document.removeEventListener("mousedown", handler);
+        const h = (e) => {
+            if (!isOpenRef.current) return;
+            if (btnRef.current && btnRef.current.contains(e.target)) return;
+            const portal = document.getElementById("vm-dropdown-portal");
+            if (portal && portal.contains(e.target)) return;
+            setIsOpen(false);
+        };
+        document.addEventListener("mousedown", h);
+        return () => document.removeEventListener("mousedown", h);
     }, []);
+
+    const LIST_H = 220;
+
+    const handleOpen = () => {
+        if (btnRef.current) {
+            const r = btnRef.current.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - r.bottom;
+            const openUp = spaceBelow < LIST_H + 10;
+            setPos({ left: r.left, width: r.width, top: openUp ? r.top - LIST_H - 4 : r.bottom + 4 });
+        }
+        setIsOpen(p => !p);
+    };
 
     const handleSelect = useCallback((id) => {
         onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]);
@@ -155,77 +170,56 @@ const CustomDropdown = memo(({ options, selected, onChange, placeholder = "Selec
         options.filter(o => selected.includes(o.id)).map(o => o.name).join(", "),
         [options, selected]);
 
-    const btnStyle = useMemo(() => ({
+    const btnStyle = {
         ...DD_BTN_BASE,
         background: isOpen ? "linear-gradient(135deg,#f0f4ff 0%,#fafbff 100%)" : "linear-gradient(135deg,#fafbff 0%,#f4f6fb 100%)",
         border: isOpen ? "1.5px solid #6366f1" : "1.5px solid #e2e6f0",
         color: selected.length > 0 ? "#1e293b" : "#94a3b8",
         fontWeight: selected.length > 0 ? 500 : 400,
-        boxShadow: isOpen ? "0 0 0 3px rgba(99,102,241,0.12),0 2px 8px rgba(99,102,241,0.08)" : "0 1px 3px rgba(0,0,0,0.06)",
-    }), [isOpen, selected.length]);
+        boxShadow: isOpen ? "0 0 0 3px rgba(99,102,241,0.12)" : "0 1px 3px rgba(0,0,0,0.06)",
+        width: "100%",
+    };
 
     return (
-        <div className="relative" ref={ref}>
-            <button type="button" onClick={() => setIsOpen(p => !p)} style={btnStyle}>
+        <>
+            <button ref={btnRef} type="button" onClick={handleOpen} style={btnStyle}>
                 <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {selectedLabels || placeholder}
                 </span>
                 <ChevronIcon open={isOpen} />
             </button>
-            {isOpen && (
-                <DropdownList>
-                    {options.map((opt) => (
-                        <MultiItem key={opt.id} opt={opt} isSel={selected.includes(opt.id)} onSelect={handleSelect} />
-                    ))}
-                </DropdownList>
+            {isOpen && pos && ReactDOM.createPortal(
+                <div id="vm-dropdown-portal" style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 999999, background: "#fff", border: "1.5px solid #e8eaf6", borderRadius: "12px", boxShadow: "0 12px 40px rgba(0,0,0,0.22)", overflow: "hidden" }}>
+                    <div style={{ padding: "6px", maxHeight: `${LIST_H}px`, overflowY: "auto" }}>
+                        {options.map((opt) => (
+                            <MultiItem key={opt.id} opt={opt} isSel={selected.includes(opt.id)} onSelect={handleSelect} />
+                        ))}
+                    </div>
+                </div>,
+                document.body
             )}
-        </div>
+        </>
     );
 });
 CustomDropdown.displayName = "CustomDropdown";
 
+// Native-select based dropdown — immune to overflow clipping
 const SingleDropdown = memo(({ options, selected, onChange, placeholder = "Select..." }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const ref = useRef(null);
-
-    useEffect(() => {
-        const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setIsOpen(false); };
-        document.addEventListener("mousedown", handler);
-        return () => document.removeEventListener("mousedown", handler);
-    }, []);
-
-    const selectedLabel = useMemo(() => options.find(o => o.id === selected)?.name ?? null, [options, selected]);
-
-    const btnStyle = useMemo(() => ({
-        ...DD_BTN_BASE,
-        background: isOpen ? "linear-gradient(135deg,#f0f4ff 0%,#fafbff 100%)" : "linear-gradient(135deg,#fafbff 0%,#f4f6fb 100%)",
-        border: isOpen ? "1.5px solid #6366f1" : "1.5px solid #e2e6f0",
-        color: selected ? "#1e293b" : "#94a3b8",
-        fontWeight: selected ? 500 : 400,
-        boxShadow: isOpen ? "0 0 0 3px rgba(99,102,241,0.12),0 2px 8px rgba(99,102,241,0.08)" : "0 1px 3px rgba(0,0,0,0.06)",
-    }), [isOpen, selected]);
-
-    const handleChange = useCallback((id) => { onChange(id); setIsOpen(false); }, [onChange]);
-
+    const style = {
+        width: "100%", display: "block", padding: "10px 14px", borderRadius: "10px",
+        fontSize: "13.5px", cursor: "pointer", outline: "none", letterSpacing: "0.01em",
+        background: "linear-gradient(135deg,#fafbff 0%,#f4f6fb 100%)",
+        border: "1.5px solid #e2e6f0", color: selected ? "#1e293b" : "#94a3b8",
+        fontWeight: selected ? 500 : 400, appearance: "auto",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+    };
     return (
-        <div ref={ref} style={{ position: "relative", userSelect: "none" }}>
-            <button type="button" onClick={() => setIsOpen(p => !p)} style={btnStyle}>
-                <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {selectedLabel || placeholder}
-                </span>
-                <ChevronIcon open={isOpen} />
-            </button>
-            {isOpen && (
-                <DropdownList>
-                    {options.map((opt) => (
-                        <SingleItem key={opt.id} opt={opt} isSel={opt.id === selected} onChange={handleChange} />
-                    ))}
-                </DropdownList>
-            )}
-        </div>
+        <select style={style} value={selected || ""} onChange={e => onChange(e.target.value)}>
+            {placeholder && <option value="" disabled>{placeholder}</option>}
+            {options.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+        </select>
     );
 });
-SingleDropdown.displayName = "SingleDropdown";
 
 // ── Assign Modules Full Page ──────────────────────────────────────────────────
 const AssignModulesPage = memo(({ version, modules, onBack, onSuccess, showToast }) => {
@@ -389,115 +383,102 @@ const AssignModulesPage = memo(({ version, modules, onBack, onSuccess, showToast
 AssignModulesPage.displayName = "AssignModulesPage";
 
 // ── Version Card ──────────────────────────────────────────────────────────────
-const VersionCard = memo(({ v, users, onEdit, onArchive, onDelete, onViewDetails, onAssignTesters, onViewIssues, onExport, onRestore, onAssignModules }) => {
-    const assignedTesters = (users || []).filter(u => (v.assignedTesterIds || []).includes(u.id));
-    return (
-        <div className={`bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow ${v.status === "archived" ? "opacity-60" : ""}`}>
-            <div className="p-6">
-                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-4">
-                    <div className="flex items-start gap-4">
-                        <div className="w-16 h-16 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <span className="text-green-700 text-2xl">⑂</span>
+const VersionCard = memo(({ v, onEdit, onArchive, onDelete, onViewDetails, onAssignTesters, onViewIssues, onExport, onRestore, onAssignModules }) => (
+    <div className={`bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow ${v.status === "archived" ? "opacity-60" : ""}`}>
+        <div className="p-6">
+            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-4">
+                <div className="flex items-start gap-4">
+                    <div className="w-16 h-16 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <span className="text-green-700 text-2xl">⑂</span>
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-3 mb-1">
+                            <h3 className="text-xl font-bold">{v.version_number}</h3>
+                            <span className={`px-3 py-1 text-xs font-medium rounded-full ${STATUS_CONFIG[v.status].className}`}>{STATUS_CONFIG[v.status].label}</span>
+                            {v.critical_issues > 0 && <span className="px-3 py-1 text-xs font-medium bg-red-100 text-red-600 rounded-full">{v.critical_issues} Critical</span>}
                         </div>
-                        <div>
-                            <div className="flex items-center gap-3 mb-1">
-                                <h3 className="text-xl font-bold">{v.version_number}</h3>
-                                <span className={`px-3 py-1 text-xs font-medium rounded-full ${STATUS_CONFIG[v.status].className}`}>{STATUS_CONFIG[v.status].label}</span>
-                                {v.critical_issues > 0 && <span className="px-3 py-1 text-xs font-medium bg-red-100 text-red-600 rounded-full">{v.critical_issues} Critical</span>}
-                            </div>
-                            <p className="text-sm text-gray-500 mb-2">Build {v.build_number} • {v.version_type}</p>
-                            <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-gray-500 items-center">
-                                <span>📅 Release: {new Date(v.release_date).toLocaleDateString()}</span>
-                                <span>🕐 Created: {new Date(v.created_date).toLocaleDateString()}</span>
-                                {assignedTesters.length > 0 && (
-                                    <span className="flex items-center gap-1.5 flex-wrap">
-                                        <i className="fa-solid fa-user-check text-green-600 text-xs" />
-                                        {assignedTesters.map((t, i) => (
-                                            <span key={t.id} className="inline-flex items-center px-2 py-0.5 bg-green-50 border border-green-200 text-green-700 rounded-full text-xs font-medium">
-                                                {t.name}
-                                            </span>
-                                        ))}
-                                    </span>
-                                )}
-                            </div>
+                        <p className="text-sm text-gray-500 mb-2">Build {v.build_number} • {v.version_type}</p>
+                        <div className="flex flex-wrap gap-4 text-sm text-gray-500">
+                            <span>📅 Release: {new Date(v.release_date).toLocaleDateString()}</span>
+                            <span>🕐 Created: {new Date(v.created_date).toLocaleDateString()}</span>
                         </div>
                     </div>
+                </div>
 
-                    {/* ── Action icons ── */}
-                    <div className="flex items-center gap-1">
-                        <button onClick={(e) => { e.stopPropagation(); onEdit(v); }}
+                {/* ── Action icons ── */}
+                <div className="flex items-center gap-1">
+                    <button onClick={(e) => { e.stopPropagation(); onEdit(v); }}
+                        className="p-2 text-gray-400 hover:text-green-700 hover:bg-green-50 rounded-lg transition-all"
+                        title="Edit version">
+                        <i className="fa-solid fa-pen-to-square" />
+                    </button>
+
+                    {v.status !== "archived" ? (
+                        <button onClick={(e) => { e.stopPropagation(); onArchive(v); }}
+                            className="p-2 text-gray-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-all"
+                            title="Archive this version">
+                            <i className="fa-solid fa-box-archive" />
+                        </button>
+                    ) : (
+                        <button onClick={(e) => { e.stopPropagation(); onRestore(v); }}
                             className="p-2 text-gray-400 hover:text-green-700 hover:bg-green-50 rounded-lg transition-all"
-                            title="Edit version">
-                            <i className="fa-solid fa-pen-to-square" />
+                            title="Restore this version">
+                            <i className="fa-solid fa-rotate-left" />
                         </button>
-
-                        {v.status !== "archived" ? (
-                            <button onClick={(e) => { e.stopPropagation(); onArchive(v); }}
-                                className="p-2 text-gray-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-all"
-                                title="Archive this version">
-                                <i className="fa-solid fa-box-archive" />
-                            </button>
-                        ) : (
-                            <button onClick={(e) => { e.stopPropagation(); onRestore(v); }}
-                                className="p-2 text-gray-400 hover:text-green-700 hover:bg-green-50 rounded-lg transition-all"
-                                title="Restore this version">
-                                <i className="fa-solid fa-rotate-left" />
-                            </button>
-                        )}
-
-                        <button onClick={(e) => { e.stopPropagation(); onDelete(v); }}
-                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                            title="Delete version">
-                            <i className="fa-solid fa-trash" />
-                        </button>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-                    <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-1">Total Tests</p><p className="text-2xl font-bold">{v.total_tests}</p></div>
-                    <div className="p-3 bg-green-50 rounded-lg"><p className="text-xs text-green-700 mb-1">Passed</p><p className="text-2xl font-bold text-green-600">{v.passed_tests}</p></div>
-                    <div className="p-3 bg-red-50 rounded-lg"><p className="text-xs text-red-700 mb-1">Failed</p><p className="text-2xl font-bold text-red-500">{v.failed_tests}</p></div>
-                    <div className="p-3 bg-yellow-50 rounded-lg"><p className="text-xs text-yellow-700 mb-1">Pending</p><p className="text-2xl font-bold text-yellow-500">{v.pending_tests}</p></div>
-                </div>
-
-                <div className="mb-4">
-                    <div className="flex justify-between mb-1">
-                        <span className="text-sm font-medium">Overall Completion</span>
-                        <span className="text-sm font-bold">{v.completion_percentage}%</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-3">
-                        <div className={`h-3 rounded-full ${PROGRESS_COLOR[v.status]}`} style={{ width: `${v.completion_percentage}%` }} />
-                    </div>
-                </div>
-
-                {v.linkedModules && v.linkedModules.length > 0 && (
-                    <div className="mb-4 flex flex-wrap gap-2">
-                        {v.linkedModules.slice(0, 4).map(m => (
-                            <span key={m.id} className="px-2 py-1 bg-green-50 border border-green-200 text-green-700 text-xs rounded-full font-medium">{m.module_name}</span>
-                        ))}
-                        {v.linkedModules.length > 4 && <span className="px-2 py-1 bg-gray-100 text-gray-500 text-xs rounded-full font-medium">+{v.linkedModules.length - 4} more</span>}
-                    </div>
-                )}
-
-                <div className="flex flex-wrap gap-2">
-                    <button onClick={() => onViewDetails(v)} className="px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">View Details</button>
-                    {v.status !== "archived" && (
-                        <>
-                            <button onClick={() => onAssignTesters(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors flex items-center gap-1.5">
-                                <i className="fa-solid fa-users text-sm" /> Assign Testers
-                            </button>
-                            <button onClick={() => onAssignModules(v)} className="px-4 py-2 border border-green-300 text-green-700 rounded-lg text-sm hover:bg-green-50 transition-colors flex items-center gap-1.5">
-                                <i className="fa-solid fa-puzzle-piece" /> Assign Modules
-                            </button>
-                            <button onClick={() => onViewIssues(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors">View Issues</button>
-                        </>
                     )}
-                    <button onClick={() => onExport(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors">Export Report</button>
+
+                    <button onClick={(e) => { e.stopPropagation(); onDelete(v); }}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                        title="Delete version">
+                        <i className="fa-solid fa-trash" />
+                    </button>
                 </div>
             </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-1">Total Tests</p><p className="text-2xl font-bold">{v.total_tests}</p></div>
+                <div className="p-3 bg-green-50 rounded-lg"><p className="text-xs text-green-700 mb-1">Passed</p><p className="text-2xl font-bold text-green-600">{v.passed_tests}</p></div>
+                <div className="p-3 bg-red-50 rounded-lg"><p className="text-xs text-red-700 mb-1">Failed</p><p className="text-2xl font-bold text-red-500">{v.failed_tests}</p></div>
+                <div className="p-3 bg-yellow-50 rounded-lg"><p className="text-xs text-yellow-700 mb-1">Pending</p><p className="text-2xl font-bold text-yellow-500">{v.pending_tests}</p></div>
+            </div>
+
+            <div className="mb-4">
+                <div className="flex justify-between mb-1">
+                    <span className="text-sm font-medium">Overall Completion</span>
+                    <span className="text-sm font-bold">{v.completion_percentage}%</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-3">
+                    <div className={`h-3 rounded-full ${PROGRESS_COLOR[v.status]}`} style={{ width: `${v.completion_percentage}%` }} />
+                </div>
+            </div>
+
+            {v.linkedModules && v.linkedModules.length > 0 && (
+                <div className="mb-4 flex flex-wrap gap-2 cursor-pointer" onClick={() => onViewDetails(v, "modules")}>
+                    {v.linkedModules.slice(0, 4).map(m => (
+                        <span key={m.id} className="px-2 py-1 bg-green-50 border border-green-200 text-green-700 text-xs rounded-full font-medium hover:bg-green-100 transition-colors">{m.module_name}</span>
+                    ))}
+                    {v.linkedModules.length > 4 && <span className="px-2 py-1 bg-gray-100 text-gray-500 text-xs rounded-full font-medium">+{v.linkedModules.length - 4} more</span>}
+                </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+                <button onClick={() => onViewDetails(v)} className="px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">View Details</button>
+                {v.status !== "archived" && (
+                    <>
+                        <button onClick={() => onAssignTesters(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors flex items-center gap-1.5">
+                            <i className="fa-solid fa-users text-sm" /> Assign Testers
+                        </button>
+                        <button onClick={() => onAssignModules(v)} className="px-4 py-2 border border-green-300 text-green-700 rounded-lg text-sm hover:bg-green-50 transition-colors flex items-center gap-1.5">
+                            <i className="fa-solid fa-puzzle-piece" /> Assign Modules
+                        </button>
+                        <button onClick={() => onViewIssues(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors">View Issues</button>
+                    </>
+                )}
+                <button onClick={() => onExport(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors">Export Report</button>
+            </div>
         </div>
-    );
-});
+    </div>
+));
 VersionCard.displayName = "VersionCard";
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
@@ -511,6 +492,11 @@ export default function VersionManagement() {
     const [showAssignModal, setShowAssignModal] = useState(false);
     const [assignModulesVersion, setAssignModulesVersion] = useState(null);
     const [selectedVersion, setSelectedVersion] = useState(null);
+    const [detailsTab, setDetailsTab] = useState("overview");
+    const [expandedModuleId, setExpandedModuleId] = useState(null);
+    const [moduleTestCases, setModuleTestCases] = useState({}); // { [moduleId]: { loading, data } }
+    const [expandedFeatureId, setExpandedFeatureId] = useState(null);
+    const [featureTestCases, setFeatureTestCases] = useState({}); // { [featureId]: { loading, data } }
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState("");
     const [loading, setLoading] = useState(true);
@@ -582,13 +568,7 @@ export default function VersionManagement() {
                 if (!modulesByVersion[row.version_id]) modulesByVersion[row.version_id] = [];
                 if (row.modules) modulesByVersion[row.version_id].push(row.modules);
             });
-            const { data: vtData } = await supabase.from("version_testers").select("version_id, tester_id");
-            const testersByVersion = {};
-            (vtData || []).forEach(row => {
-                if (!testersByVersion[row.version_id]) testersByVersion[row.version_id] = [];
-                testersByVersion[row.version_id].push(row.tester_id);
-            });
-            setVersions((versionData || []).map(v => ({ ...v, linkedModules: modulesByVersion[v.id] || [], assignedTesterIds: testersByVersion[v.id] || [] })));
+            setVersions((versionData || []).map(v => ({ ...v, linkedModules: modulesByVersion[v.id] || [] })));
         } catch (err) { console.error(err); setError(err.message); }
         finally { setLoading(false); }
     }, []);
@@ -597,7 +577,7 @@ export default function VersionManagement() {
         try {
             const { data, error: e } = await supabase.from("profiles").select("id, full_name").order("full_name");
             if (e) throw e;
-            setUsers((data || []).map(u => ({ id: u.id, name: u.full_name })));
+            setUsers((data || []).map(u => ({ id: u.id, name: u.full_name || "Unnamed" })));
         } catch (err) { console.error(err); }
     }, []);
 
@@ -610,6 +590,15 @@ export default function VersionManagement() {
     }, []);
 
     useEffect(() => { fetchVersions(); fetchUsers(); fetchModules(); }, [fetchVersions, fetchUsers, fetchModules]);
+
+    // ── Deep-link: open a specific version when navigated from Dashboard ──
+    useEffect(() => {
+        const id = sessionStorage.getItem("versions_open_id");
+        if (!id || versions.length === 0) return;
+        sessionStorage.removeItem("versions_open_id");
+        const v = versions.find(v => v.id === id);
+        if (v) handleViewDetails(v);
+    }, [versions]); // eslint-disable-line
 
     const tabs = useMemo(() => [
         { key: "all", label: "All Versions", count: versions.length },
@@ -665,9 +654,51 @@ export default function VersionManagement() {
         } catch (err) { showToast(err.message, "error"); }
     }, [formData, resetForm, fetchVersions, showToast]);
 
-    const handleViewDetails = useCallback((v) => { setSelectedVersion(v); setShowDetailsModal(true); }, []);
+    const handleViewDetails = useCallback((v, initialTab = "overview") => { setSelectedVersion(v); setDetailsTab(initialTab); setExpandedModuleId(null); setExpandedFeatureId(null); setShowDetailsModal(true); }, []);
     const handleAssignTesters = useCallback((v) => { setSelectedVersion(v); setShowAssignModal(true); }, []);
     const handleAssignModules = useCallback((v) => { setShowDetailsModal(false); setAssignModulesVersion(v); }, []);
+
+    const handleToggleModuleTestCases = useCallback(async (moduleId) => {
+        if (expandedModuleId === moduleId) { setExpandedModuleId(null); setExpandedFeatureId(null); return; }
+        setExpandedModuleId(moduleId);
+        setExpandedFeatureId(null);
+        if (moduleTestCases[moduleId]) return;
+        setModuleTestCases(prev => ({ ...prev, [moduleId]: { loading: true, data: [] } }));
+        try {
+            const { data, error: e } = await supabase
+                .from("features")
+                .select("id, feature_code, feature_name, status, priority")
+                .eq("module_id", moduleId)
+                .order("feature_code", { ascending: true });
+            if (e) throw e;
+            setModuleTestCases(prev => ({ ...prev, [moduleId]: { loading: false, data: data || [] } }));
+        } catch (err) {
+            setModuleTestCases(prev => ({ ...prev, [moduleId]: { loading: false, data: [], error: err.message } }));
+        }
+    }, [expandedModuleId, moduleTestCases]);
+
+    const handleToggleFeatureTestCases = useCallback(async (featureId) => {
+        if (expandedFeatureId === featureId) { setExpandedFeatureId(null); return; }
+        setExpandedFeatureId(featureId);
+        if (featureTestCases[featureId]) return;
+        setFeatureTestCases(prev => ({ ...prev, [featureId]: { loading: true, data: [] } }));
+        try {
+            const { data, error: e } = await supabase
+                .from("test_cases")
+                .select("id, test_case_id, name, priority, status")
+                .eq("feature_id", featureId)
+                .order("test_case_id", { ascending: true });
+            if (e) throw e;
+            setFeatureTestCases(prev => ({ ...prev, [featureId]: { loading: false, data: data || [] } }));
+        } catch (err) {
+            setFeatureTestCases(prev => ({ ...prev, [featureId]: { loading: false, data: [], error: err.message } }));
+        }
+    }, [expandedFeatureId, featureTestCases]);
+
+    const handleOpenTestCase = useCallback((tcId) => {
+        sessionStorage.setItem("te_direct_open", tcId);
+        navigate("/test-execution");
+    }, [navigate]);
 
     const handleEditVersion = useCallback((v) => {
         editingVersionIdRef.current = v.id;
@@ -873,7 +904,6 @@ export default function VersionManagement() {
                     ) : (
                         filtered.map((v) => (
                             <VersionCard key={v.id} v={v}
-                                users={users}
                                 onEdit={handleEditVersion}
                                 onArchive={handleArchiveVersion}
                                 onDelete={handleDeleteVersion}
@@ -892,8 +922,8 @@ export default function VersionManagement() {
             {/* ── Create / Edit Modal ── */}
             {showModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => { setShowModal(false); setSelectedVersion(null); resetForm(); }}>
-                    <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-                        <div className="p-6 border-b flex items-center justify-between sticky top-0 bg-white z-10">
+                    <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full flex flex-col" style={{ maxHeight: "90vh" }} onClick={(e) => e.stopPropagation()}>
+                        <div className="p-6 border-b flex items-center justify-between flex-shrink-0">
                             <div>
                                 <h3 className="text-xl font-bold">{editingVersionIdRef.current ? "Edit Version" : "Create New Version"}</h3>
                                 <p className="text-sm text-gray-500 mt-1">Add or update a version/build for NexTech RMS</p>
@@ -902,7 +932,7 @@ export default function VersionManagement() {
                                 <i className="fa-solid fa-times" />
                             </button>
                         </div>
-                        <div className="p-6 space-y-4">
+                        <div className="p-6 space-y-4 overflow-y-auto flex-1">
                             <div>
                                 <label className="block text-sm font-medium mb-1">Version Type * <span className="text-gray-400 font-normal">(auto-generates version number)</span></label>
                                 <SingleDropdown options={VERSION_TYPE_OPTIONS} selected={formData.version_type} onChange={handleVersionTypeChange} placeholder="Select Type" />
@@ -989,94 +1019,287 @@ export default function VersionManagement() {
                             </button>
                         </div>
 
-                        <div className="p-6 space-y-5">
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                {[
-                                    { label: "Release Date", value: new Date(selectedVersion.release_date).toLocaleDateString(), icon: "fa-calendar", color: "text-blue-600", bg: "bg-blue-50" },
-                                    { label: "Created", value: new Date(selectedVersion.created_date).toLocaleDateString(), icon: "fa-clock", color: "text-purple-600", bg: "bg-purple-50" },
-                                    { label: "Type", value: selectedVersion.version_type, icon: "fa-tag", color: "text-orange-600", bg: "bg-orange-50" },
-                                    { label: "Status", value: STATUS_CONFIG[selectedVersion.status].label, icon: "fa-circle-dot", color: "text-green-600", bg: "bg-green-50" },
-                                ].map(item => (
-                                    <div key={item.label} className={`p-3 rounded-xl ${item.bg} flex flex-col gap-1`}>
-                                        <div className="flex items-center gap-1.5">
-                                            <i className={`fa-solid ${item.icon} ${item.color} text-xs`} />
-                                            <p className="text-xs text-gray-500 font-medium">{item.label}</p>
-                                        </div>
-                                        <p className={`text-sm font-bold ${item.color} capitalize`}>{item.value || "—"}</p>
-                                    </div>
-                                ))}
-                            </div>
+                        {/* ── Tabs ── */}
+                        <div className="flex border-b bg-white sticky top-[85px] z-10">
+                            <button
+                                onClick={() => setDetailsTab("overview")}
+                                className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${detailsTab === "overview" ? "border-green-600 text-green-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
+                                <i className="fa-solid fa-circle-info text-xs" /> Overview
+                            </button>
+                            <button
+                                onClick={() => setDetailsTab("modules")}
+                                className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${detailsTab === "modules" ? "border-green-600 text-green-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
+                                <i className="fa-solid fa-puzzle-piece text-xs" /> Modules
+                                <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${detailsTab === "modules" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                                    {selectedVersion.linkedModules?.length ?? 0}
+                                </span>
+                            </button>
+                        </div>
 
-                            <div className="bg-gray-50 rounded-xl p-4">
-                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Test Results</p>
-                                <div className="grid grid-cols-4 gap-3 mb-4">
+                        <div className="p-6 space-y-5">
+                            {detailsTab === "overview" && (<>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                     {[
-                                        { label: "Total", value: selectedVersion.total_tests, color: "text-gray-900", bg: "bg-white" },
-                                        { label: "Passed", value: selectedVersion.passed_tests, color: "text-green-600", bg: "bg-green-50" },
-                                        { label: "Failed", value: selectedVersion.failed_tests, color: "text-red-500", bg: "bg-red-50" },
-                                        { label: "Pending", value: selectedVersion.pending_tests, color: "text-yellow-500", bg: "bg-yellow-50" },
-                                    ].map(s => (
-                                        <div key={s.label} className={`${s.bg} rounded-lg p-3 text-center border border-gray-100`}>
-                                            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-                                            <p className="text-xs text-gray-500 mt-1">{s.label}</p>
+                                        { label: "Release Date", value: new Date(selectedVersion.release_date).toLocaleDateString(), icon: "fa-calendar", color: "text-blue-600", bg: "bg-blue-50" },
+                                        { label: "Created", value: new Date(selectedVersion.created_date).toLocaleDateString(), icon: "fa-clock", color: "text-purple-600", bg: "bg-purple-50" },
+                                        { label: "Type", value: selectedVersion.version_type, icon: "fa-tag", color: "text-orange-600", bg: "bg-orange-50" },
+                                        { label: "Status", value: STATUS_CONFIG[selectedVersion.status].label, icon: "fa-circle-dot", color: "text-green-600", bg: "bg-green-50" },
+                                    ].map(item => (
+                                        <div key={item.label} className={`p-3 rounded-xl ${item.bg} flex flex-col gap-1`}>
+                                            <div className="flex items-center gap-1.5">
+                                                <i className={`fa-solid ${item.icon} ${item.color} text-xs`} />
+                                                <p className="text-xs text-gray-500 font-medium">{item.label}</p>
+                                            </div>
+                                            <p className={`text-sm font-bold ${item.color} capitalize`}>{item.value || "—"}</p>
                                         </div>
                                     ))}
                                 </div>
-                                <div>
-                                    <div className="flex justify-between mb-1.5">
-                                        <span className="text-xs font-medium text-gray-600">Completion</span>
-                                        <span className="text-xs font-bold text-gray-900">{selectedVersion.completion_percentage}%</span>
-                                    </div>
-                                    <div className="w-full bg-gray-200 rounded-full h-2.5">
-                                        <div className={`h-2.5 rounded-full ${PROGRESS_COLOR[selectedVersion.status]} transition-all`} style={{ width: `${selectedVersion.completion_percentage}%` }} />
-                                    </div>
-                                </div>
-                            </div>
 
-                            <div className="border border-gray-100 rounded-xl p-4">
-                                <div className="flex items-center justify-between mb-3">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-7 h-7 bg-green-50 rounded-lg flex items-center justify-center">
-                                            <i className="fa-solid fa-puzzle-piece text-green-600 text-xs" />
-                                        </div>
-                                        <p className="text-sm font-semibold text-gray-800">Linked Modules</p>
-                                        <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full">{selectedVersion.linkedModules?.length ?? 0}</span>
-                                    </div>
-                                    {selectedVersion.status !== "archived" && (
-                                        <button onClick={() => handleAssignModules(selectedVersion)} className="flex items-center gap-1.5 px-3 py-1.5 border border-green-300 text-green-700 rounded-lg text-xs font-medium hover:bg-green-50 transition-colors">
-                                            <i className="fa-solid fa-plus text-xs" /> Manage
-                                        </button>
-                                    )}
-                                </div>
-                                {!selectedVersion.linkedModules?.length ? (
-                                    <div className="flex flex-col items-center justify-center py-6 gap-2 border-2 border-dashed border-gray-200 rounded-lg">
-                                        <i className="fa-solid fa-puzzle-piece text-gray-300 text-2xl" />
-                                        <p className="text-sm text-gray-400">No modules linked yet</p>
-                                        {selectedVersion.status !== "archived" && (
-                                            <button onClick={() => handleAssignModules(selectedVersion)} className="mt-1 px-4 py-1.5 bg-green-700 text-white rounded-lg text-xs font-medium hover:opacity-90 transition-opacity">Assign Modules</button>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-wrap gap-2">
-                                        {selectedVersion.linkedModules.map(m => (
-                                            <div key={m.id} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg font-medium">
-                                                <i className="fa-solid fa-puzzle-piece text-green-400 text-xs" />
-                                                {m.module_name}
-                                                {m.module_code && <span className="text-green-400 text-xs font-normal">· {m.module_code}</span>}
+                                <div className="bg-gray-50 rounded-xl p-4">
+                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Test Results</p>
+                                    <div className="grid grid-cols-4 gap-3 mb-4">
+                                        {[
+                                            { label: "Total", value: selectedVersion.total_tests, color: "text-gray-900", bg: "bg-white" },
+                                            { label: "Passed", value: selectedVersion.passed_tests, color: "text-green-600", bg: "bg-green-50" },
+                                            { label: "Failed", value: selectedVersion.failed_tests, color: "text-red-500", bg: "bg-red-50" },
+                                            { label: "Pending", value: selectedVersion.pending_tests, color: "text-yellow-500", bg: "bg-yellow-50" },
+                                        ].map(s => (
+                                            <div key={s.label} className={`${s.bg} rounded-lg p-3 text-center border border-gray-100`}>
+                                                <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+                                                <p className="text-xs text-gray-500 mt-1">{s.label}</p>
                                             </div>
                                         ))}
                                     </div>
-                                )}
-                            </div>
+                                    <div>
+                                        <div className="flex justify-between mb-1.5">
+                                            <span className="text-xs font-medium text-gray-600">Completion</span>
+                                            <span className="text-xs font-bold text-gray-900">{selectedVersion.completion_percentage}%</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                            <div className={`h-2.5 rounded-full ${PROGRESS_COLOR[selectedVersion.status]} transition-all`} style={{ width: `${selectedVersion.completion_percentage}%` }} />
+                                        </div>
+                                    </div>
+                                </div>
 
-                            {selectedVersion.description && (
-                                <div className="border border-gray-100 rounded-xl p-4">
-                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Description</p>
-                                    <p className="text-sm text-gray-700 leading-relaxed">{selectedVersion.description}</p>
+                                {selectedVersion.description && (
+                                    <div className="border border-gray-100 rounded-xl p-4">
+                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Description</p>
+                                        <p className="text-sm text-gray-700 leading-relaxed">{selectedVersion.description}</p>
+                                    </div>
+                                )}
+
+                                {/* Modules summary in overview */}
+                                <div className="border border-green-100 rounded-xl p-4 bg-green-50/40">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-7 h-7 bg-green-100 rounded-lg flex items-center justify-center">
+                                                <i className="fa-solid fa-puzzle-piece text-green-600 text-xs" />
+                                            </div>
+                                            <p className="text-sm font-semibold text-gray-800">Linked Modules</p>
+                                            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full">{selectedVersion.linkedModules?.length ?? 0}</span>
+                                        </div>
+                                        <button onClick={() => setDetailsTab("modules")} className="flex items-center gap-1.5 px-3 py-1.5 border border-green-300 text-green-700 rounded-lg text-xs font-medium hover:bg-green-100 transition-colors">
+                                            View All <i className="fa-solid fa-arrow-right text-xs" />
+                                        </button>
+                                    </div>
+                                    {!selectedVersion.linkedModules?.length ? (
+                                        <p className="text-sm text-gray-400 text-center py-3">No modules linked yet</p>
+                                    ) : (
+                                        <div className="flex flex-wrap gap-2">
+                                            {selectedVersion.linkedModules.slice(0, 6).map(m => (
+                                                <span key={m.id} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-green-200 text-green-700 text-xs rounded-lg font-medium">
+                                                    <i className="fa-solid fa-puzzle-piece text-green-400 text-xs" />
+                                                    {m.module_name}
+                                                    {m.module_code && <span className="text-green-400 font-mono">· {m.module_code}</span>}
+                                                </span>
+                                            ))}
+                                            {selectedVersion.linkedModules.length > 6 && (
+                                                <button onClick={() => setDetailsTab("modules")} className="px-3 py-1.5 bg-white border border-green-200 text-green-600 text-xs rounded-lg font-medium hover:bg-green-50 transition-colors">
+                                                    +{selectedVersion.linkedModules.length - 6} more
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </>)}
+
+                            {/* ── Modules Tab ── */}
+                            {detailsTab === "modules" && (
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h4 className="text-base font-semibold text-gray-800">Linked Modules</h4>
+                                            <p className="text-xs text-gray-500 mt-0.5">{selectedVersion.linkedModules?.length ?? 0} module{(selectedVersion.linkedModules?.length ?? 0) !== 1 ? "s" : ""} assigned to this version</p>
+                                        </div>
+                                        {selectedVersion.status !== "archived" && (
+                                            <button onClick={() => handleAssignModules(selectedVersion)} className="flex items-center gap-1.5 px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+                                                <i className="fa-solid fa-pen-to-square text-xs" /> Manage Modules
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {!selectedVersion.linkedModules?.length ? (
+                                        <div className="flex flex-col items-center justify-center py-16 gap-3 border-2 border-dashed border-gray-200 rounded-xl">
+                                            <div className="w-14 h-14 bg-gray-50 rounded-full flex items-center justify-center">
+                                                <i className="fa-solid fa-puzzle-piece text-gray-300 text-2xl" />
+                                            </div>
+                                            <div className="text-center">
+                                                <p className="text-sm font-medium text-gray-500">No modules linked yet</p>
+                                                <p className="text-xs text-gray-400 mt-1">Assign modules to track what's included in this version</p>
+                                            </div>
+                                            {selectedVersion.status !== "archived" && (
+                                                <button onClick={() => handleAssignModules(selectedVersion)} className="mt-1 px-5 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+                                                    <i className="fa-solid fa-plus mr-2" /> Assign Modules
+                                                </button>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {selectedVersion.linkedModules.map((m, idx) => {
+                                                const isExpanded = expandedModuleId === m.id;
+                                                const tcState = moduleTestCases[m.id];
+                                                return (
+                                                    <div key={m.id} className="border border-green-200 rounded-xl overflow-hidden">
+                                                        {/* Module header row — click to expand */}
+                                                        <button
+                                                            onClick={() => handleToggleModuleTestCases(m.id)}
+                                                            className="w-full flex items-center gap-3 p-4 bg-green-50 hover:bg-green-100 transition-colors text-left">
+                                                            <div className="w-9 h-9 bg-white border border-green-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                                <i className="fa-solid fa-puzzle-piece text-green-600 text-sm" />
+                                                            </div>
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="text-sm font-semibold text-green-800">{m.module_name}</p>
+                                                                {m.module_code && <p className="text-xs text-green-500 font-mono mt-0.5">{m.module_code}</p>}
+                                                            </div>
+                                                            <div className="flex items-center gap-2 flex-shrink-0">
+                                                                {tcState && !tcState.loading && (
+                                                                    <span className="px-2 py-0.5 bg-white border border-green-200 text-green-700 text-xs font-bold rounded-full">
+                                                                        {tcState.data.length} feature{tcState.data.length !== 1 ? "s" : ""}
+                                                                    </span>
+                                                                )}
+                                                                <span className="text-xs text-green-400 font-medium">#{idx + 1}</span>
+                                                                <i className={`fa-solid fa-chevron-down text-green-400 text-xs transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
+                                                            </div>
+                                                        </button>
+
+                                                        {/* Test cases panel */}
+                                                        {isExpanded && (
+                                                            <div className="border-t border-green-200 bg-white">
+                                                                {tcState?.loading ? (
+                                                                    <div className="flex items-center justify-center gap-2 py-8 text-gray-400">
+                                                                        <i className="fa-solid fa-spinner fa-spin text-sm" />
+                                                                        <span className="text-sm">Loading test cases…</span>
+                                                                    </div>
+                                                                ) : tcState?.error ? (
+                                                                    <div className="flex items-center gap-2 px-4 py-4 text-red-500 text-sm">
+                                                                        <i className="fa-solid fa-circle-exclamation" /> {tcState.error}
+                                                                    </div>
+                                                                ) : !tcState?.data?.length ? (
+                                                                    <div className="flex flex-col items-center justify-center py-8 gap-2 text-gray-400">
+                                                                        <i className="fa-solid fa-list-check text-2xl text-gray-200" />
+                                                                        <p className="text-sm">No features linked to this module</p>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="divide-y divide-gray-100">
+                                                                        {/* Table header */}
+                                                                        <div className="grid grid-cols-12 gap-2 px-4 py-2 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                                                            <span className="col-span-2">Code</span>
+                                                                            <span className="col-span-5">Feature Name</span>
+                                                                            <span className="col-span-2">Priority</span>
+                                                                            <span className="col-span-3">Status</span>
+                                                                        </div>
+                                                                        {tcState.data.map(feat => {
+                                                                            const priorityColor = feat.priority === "High" ? "text-red-600 bg-red-50 border-red-200" : feat.priority === "Medium" ? "text-yellow-600 bg-yellow-50 border-yellow-200" : "text-gray-500 bg-gray-50 border-gray-200";
+                                                                            const statusColor = feat.status === "Active" ? "text-green-700 bg-green-50 border-green-200" : feat.status === "Inactive" ? "text-gray-500 bg-gray-50 border-gray-200" : "text-blue-600 bg-blue-50 border-blue-200";
+                                                                            const isFeatExpanded = expandedFeatureId === feat.id;
+                                                                            const ftcState = featureTestCases[feat.id];
+                                                                            return (
+                                                                                <div key={feat.id} className="border-b border-gray-100 last:border-b-0">
+                                                                                    {/* Feature row — clickable */}
+                                                                                    <button
+                                                                                        onClick={() => handleToggleFeatureTestCases(feat.id)}
+                                                                                        className={`w-full grid grid-cols-12 gap-2 px-4 py-3 items-center text-left transition-colors ${isFeatExpanded ? "bg-indigo-50" : "hover:bg-gray-50"}`}>
+                                                                                        <span className="col-span-2 text-xs font-mono font-semibold text-indigo-600">{feat.feature_code || "—"}</span>
+                                                                                        <span className="col-span-5 text-sm text-gray-700 truncate" title={feat.feature_name}>{feat.feature_name}</span>
+                                                                                        <span className="col-span-2">
+                                                                                            <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full border ${priorityColor}`}>{feat.priority || "—"}</span>
+                                                                                        </span>
+                                                                                        <span className="col-span-3 flex items-center justify-between">
+                                                                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border ${statusColor}`}>
+                                                                                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${feat.status === "Active" ? "bg-green-500" : feat.status === "Inactive" ? "bg-gray-400" : "bg-blue-500"}`} />
+                                                                                                {feat.status || "—"}
+                                                                                            </span>
+                                                                                            <i className={`fa-solid fa-chevron-down text-gray-400 text-xs transition-transform duration-200 ${isFeatExpanded ? "rotate-180" : ""}`} />
+                                                                                        </span>
+                                                                                    </button>
+
+                                                                                    {/* Nested test cases */}
+                                                                                    {isFeatExpanded && (
+                                                                                        <div className="border-t border-indigo-100 bg-indigo-50/40">
+                                                                                            {ftcState?.loading ? (
+                                                                                                <div className="flex items-center gap-2 px-6 py-4 text-gray-400 text-sm">
+                                                                                                    <i className="fa-solid fa-spinner fa-spin text-xs" /> Loading test cases…
+                                                                                                </div>
+                                                                                            ) : ftcState?.error ? (
+                                                                                                <div className="flex items-center gap-2 px-6 py-3 text-red-500 text-xs">
+                                                                                                    <i className="fa-solid fa-circle-exclamation" /> {ftcState.error}
+                                                                                                </div>
+                                                                                            ) : !ftcState?.data?.length ? (
+                                                                                                <div className="flex items-center gap-2 px-6 py-4 text-gray-400 text-sm">
+                                                                                                    <i className="fa-solid fa-flask text-gray-300" /> No test cases for this feature
+                                                                                                </div>
+                                                                                            ) : (
+                                                                                                <div className="divide-y divide-indigo-100">
+                                                                                                    <div className="grid grid-cols-12 gap-2 px-6 py-1.5 text-xs font-semibold text-indigo-400 uppercase tracking-wide">
+                                                                                                        <span className="col-span-2">TC ID</span>
+                                                                                                        <span className="col-span-5">Test Case Name</span>
+                                                                                                        <span className="col-span-2">Priority</span>
+                                                                                                        <span className="col-span-3">Status</span>
+                                                                                                    </div>
+                                                                                                    {ftcState.data.map(tc => {
+                                                                                                        const tcPriColor = tc.priority === "High" ? "text-red-600 bg-red-50 border-red-200" : tc.priority === "Medium" ? "text-yellow-600 bg-yellow-50 border-yellow-200" : "text-gray-500 bg-gray-50 border-gray-200";
+                                                                                                        const tcStColor = tc.status === "pass" ? "text-green-700 bg-green-50 border-green-200" : tc.status === "fail" ? "text-red-600 bg-red-50 border-red-200" : "text-gray-500 bg-gray-50 border-gray-200";
+                                                                                                        const tcStLabel = tc.status === "pass" ? "Pass" : tc.status === "fail" ? "Fail" : tc.status === "not-tested" ? "Not Tested" : tc.status || "Pending";
+                                                                                                        return (
+                                                                                                            <button
+                                                                                                                key={tc.id}
+                                                                                                                onClick={() => handleOpenTestCase(tc.id)}
+                                                                                                                className="w-full grid grid-cols-12 gap-2 px-6 py-2.5 items-center hover:bg-indigo-100 transition-colors text-left group">
+                                                                                                                <span className="col-span-2 text-xs font-mono font-semibold text-indigo-500">{tc.test_case_id || "—"}</span>
+                                                                                                                <span className="col-span-5 text-xs text-gray-700 truncate group-hover:text-indigo-700 flex items-center gap-1" title={tc.name}>
+                                                                                                                    {tc.name}
+                                                                                                                    <i className="fa-solid fa-arrow-up-right-from-square text-indigo-300 group-hover:text-indigo-500 text-xs opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                                                                                                                </span>
+                                                                                                                <span className="col-span-2">
+                                                                                                                    <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full border ${tcPriColor}`}>{tc.priority || "—"}</span>
+                                                                                                                </span>
+                                                                                                                <span className="col-span-3">
+                                                                                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border ${tcStColor}`}>
+                                                                                                                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${tc.status === "pass" ? "bg-green-500" : tc.status === "fail" ? "bg-red-500" : "bg-gray-400"}`} />
+                                                                                                                        {tcStLabel}
+                                                                                                                    </span>
+                                                                                                                </span>
+                                                                                                            </button>
+                                                                                                        );
+                                                                                                    })}
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
                             )}
-
-                            {/* ── Modal footer actions ── */}
                             <div className="flex flex-wrap gap-3 pt-2 border-t">
                                 <button onClick={() => { setShowDetailsModal(false); handleEditVersion(selectedVersion); }}
                                     className="flex items-center gap-2 px-5 py-2.5 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity text-sm">

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import ReactDOM from "react-dom";
 import supabase from "../services/supabaseClient";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -72,100 +73,88 @@ const generateModuleCode = (existingCodes = []) => {
     return next;
 };
 
-// ─── Simple dropdown ───────────────────────────────────────────────────────────
-function SimpleDropdown({ options, value, onChange, placeholder = "Select..." }) {
-    const [open, setOpen] = useState(false);
-    const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
-    const btnRef = useRef(null);
-    const listRef = useRef(null);
+// ─── Simple dropdown matching Versions page style ──────────────────────────────
+const DD_BTN_BASE = { width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: "10px", fontSize: "13.5px", cursor: "pointer", outline: "none", letterSpacing: "0.01em", background: "none", border: "none" };
 
-    // Close when clicking outside both the button and the fixed list
+function ChevronIcon({ open }) {
+    return (
+        <span style={{ marginLeft: 8, display: "flex", alignItems: "center", transition: "transform 0.22s cubic-bezier(.4,0,.2,1)", transform: open ? "rotate(180deg)" : "rotate(0deg)", color: open ? "#6366f1" : "#94a3b8", flexShrink: 0 }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+        </span>
+    );
+}
+
+function SimpleDropdown({ options, value, onChange, placeholder = "Select..." }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [pos, setPos] = useState(null);
+    const btnRef = useRef(null);
+    const portalId = useRef(`ml-portal-${Math.random().toString(36).slice(2)}`);
+    const isOpenRef = useRef(false);
+    isOpenRef.current = isOpen;
+
     useEffect(() => {
         const h = (e) => {
-            if (
-                btnRef.current && !btnRef.current.contains(e.target) &&
-                listRef.current && !listRef.current.contains(e.target)
-            ) {
-                setOpen(false);
-            }
+            if (!isOpenRef.current) return;
+            if (btnRef.current && btnRef.current.contains(e.target)) return;
+            const portal = document.getElementById(portalId.current);
+            if (portal && portal.contains(e.target)) return;
+            setIsOpen(false);
         };
         document.addEventListener("mousedown", h);
         return () => document.removeEventListener("mousedown", h);
     }, []);
 
-    // Keep list position in sync with button on scroll/resize
-    useEffect(() => {
-        if (!open) return;
-        const update = () => {
-            if (btnRef.current) {
-                const r = btnRef.current.getBoundingClientRect();
-                setPos({ top: r.bottom + 4, left: r.left, width: r.width });
-            }
-        };
-        update();
-        window.addEventListener("scroll", update, true);
-        window.addEventListener("resize", update);
-        return () => {
-            window.removeEventListener("scroll", update, true);
-            window.removeEventListener("resize", update);
-        };
-    }, [open]);
+    const LIST_H = 220;
 
-    const handleToggle = () => {
+    const handleOpen = () => {
         if (btnRef.current) {
             const r = btnRef.current.getBoundingClientRect();
-            setPos({ top: r.bottom + 4, left: r.left, width: r.width });
+            const spaceBelow = window.innerHeight - r.bottom;
+            const openUp = spaceBelow < LIST_H + 10;
+            setPos({ left: r.left, width: r.width, top: openUp ? r.top - LIST_H - 4 : r.bottom + 4 });
         }
-        setOpen(p => !p);
+        setIsOpen(p => !p);
     };
 
-    const handleSelect = (id) => {
-        onChange(id);
-        setOpen(false);
-    };
+    const selectedLabel = options.find(o => o.id === value)?.name ?? null;
 
-    const label = options.find(o => o.id === value)?.name;
+    const btnStyle = {
+        ...DD_BTN_BASE,
+        background: isOpen ? "linear-gradient(135deg,#f0f4ff 0%,#fafbff 100%)" : "linear-gradient(135deg,#fafbff 0%,#f4f6fb 100%)",
+        border: isOpen ? "1.5px solid #6366f1" : "1.5px solid #e2e6f0",
+        color: value ? "#1e293b" : "#94a3b8",
+        fontWeight: value ? 500 : 400,
+        boxShadow: isOpen ? "0 0 0 3px rgba(99,102,241,0.12)" : "0 1px 3px rgba(0,0,0,0.06)",
+    };
 
     return (
         <>
-            <button
-                ref={btnRef}
-                type="button"
-                onClick={handleToggle}
-                className={`w-full flex items-center justify-between px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 bg-white ${open ? "border-green-600 ring-2 ring-green-100" : "border-gray-200"} ${label ? "text-gray-900" : "text-gray-400"}`}
-            >
-                <span className="truncate">{label || placeholder}</span>
-                <svg className={`w-4 h-4 ml-2 flex-shrink-0 transition-transform ${open ? "rotate-180 text-green-700" : "text-gray-400"}`} viewBox="0 0 14 14" fill="none">
-                    <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+            <button ref={btnRef} type="button" onClick={handleOpen} style={btnStyle}>
+                <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {selectedLabel || placeholder}
+                </span>
+                <ChevronIcon open={isOpen} />
             </button>
-
-            {open && (
-                <div
-                    ref={listRef}
-                    style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 99999 }}
-                    className="bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden"
-                >
-                    <div className="p-1.5 max-h-60 overflow-y-auto">
-                        {options.map(opt => {
-                            const sel = opt.id === value;
+            {isOpen && pos && ReactDOM.createPortal(
+                <div id={portalId.current} style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 999999, background: "#fff", border: "1.5px solid #e8eaf6", borderRadius: "12px", boxShadow: "0 12px 40px rgba(0,0,0,0.22)", overflow: "hidden" }}>
+                    <div style={{ padding: "6px", maxHeight: `${LIST_H}px`, overflowY: "auto" }}>
+                        {options.map((opt) => {
+                            const isSel = opt.id === value;
                             return (
-                                <div
-                                    key={opt.id}
-                                    onMouseDown={(e) => { e.preventDefault(); handleSelect(opt.id); }}
-                                    className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${sel ? "bg-green-50 text-green-700 font-semibold" : "text-gray-700 hover:bg-gray-50"}`}
-                                >
+                                <div key={opt.id} onClick={() => { onChange(opt.id); setIsOpen(false); }}
+                                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "13.5px", fontWeight: isSel ? 600 : 400, color: isSel ? "#4f46e5" : "#374151", background: isSel ? "linear-gradient(135deg,#eef2ff 0%,#f0f4ff 100%)" : "transparent", transition: "background 0.12s ease" }}
+                                    onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = "#f8fafc"; }}
+                                    onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = isSel ? "linear-gradient(135deg,#eef2ff 0%,#f0f4ff 100%)" : "transparent"; }}>
                                     <span>{opt.name}</span>
-                                    {sel && (
-                                        <svg className="w-3.5 h-3.5 text-green-700 flex-shrink-0" viewBox="0 0 14 14" fill="none">
-                                            <path d="M2.5 7l3.5 3.5 5.5-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                                        </svg>
-                                    )}
+                                    {isSel && <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, marginLeft: 8 }}><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#4f46e5" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                                 </div>
                             );
                         })}
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </>
     );
@@ -276,7 +265,7 @@ function EditModuleModal({ module, onClose, onSuccess, users }) {
     });
 
     const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-    const userOptions = [{ id: "", name: "Select Owner" }, ...users.map(u => ({ id: u.full_name, name: u.full_name }))];
+    const userOptions = [{ id: "", name: "Select Owner" }, ...users.map(u => ({ id: u.name, name: u.name }))];
 
     const handleUpdate = async () => {
         if (!form.module_name) { alert("Module Name required"); return; }
@@ -298,10 +287,10 @@ function EditModuleModal({ module, onClose, onSuccess, users }) {
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: "90vh" }} onClick={e => e.stopPropagation()}>
 
                 {/* Header */}
-                <div className="sticky top-0 bg-white z-10 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                <div className="flex-shrink-0 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
                             <i className="fa-solid fa-pen-to-square text-blue-500" />
@@ -317,7 +306,7 @@ function EditModuleModal({ module, onClose, onSuccess, users }) {
                 </div>
 
                 {/* Body */}
-                <div className="p-6 space-y-5">
+                <div className="p-6 space-y-5 overflow-y-auto flex-1">
                     <Field label="Module Name" required>
                         <input
                             type="text" value={form.module_name}
@@ -360,7 +349,7 @@ function EditModuleModal({ module, onClose, onSuccess, users }) {
                 </div>
 
                 {/* Footer */}
-                <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-3">
+                <div className="flex-shrink-0 bg-white border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-3">
                     <button onClick={onClose} disabled={loading}
                         className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
                         Cancel
@@ -383,7 +372,7 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
     const [form, setForm] = useState({ module_name: "", description: "", module_owner: "", priority: "", status: "Active" });
 
     const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-    const userOptions = [{ id: "", name: "Select Owner" }, ...users.map(u => ({ id: u.full_name, name: u.full_name }))];
+    const userOptions = [{ id: "", name: "Select Owner" }, ...users.map(u => ({ id: u.name, name: u.name }))];
 
     const handleCreate = async () => {
         if (!form.module_name) { alert("Module Name required"); return; }
@@ -405,10 +394,10 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: "90vh" }} onClick={e => e.stopPropagation()}>
 
                 {/* Header */}
-                <div className="sticky top-0 bg-white z-10 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                <div className="flex-shrink-0 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center">
                             <i className="fa-solid fa-plus text-green-700" />
@@ -424,7 +413,7 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
                 </div>
 
                 {/* Body */}
-                <div className="p-6 space-y-5">
+                <div className="p-6 space-y-5 overflow-y-auto flex-1">
                     <Field label="Module Name" required>
                         <input
                             type="text" value={form.module_name}
@@ -467,7 +456,7 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
                 </div>
 
                 {/* Footer */}
-                <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-3">
+                <div className="flex-shrink-0 bg-white border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-3">
                     <button onClick={onClose} disabled={loading}
                         className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
                         Cancel
@@ -710,253 +699,6 @@ function StatCard({ label, value, icon, colorClass, bgClass }) {
     );
 }
 
-
-// ─── Import Modules Modal ──────────────────────────────────────────────────────
-function ImportModulesModal({ onClose, onSuccess, existingModules, existingModuleCodes }) {
-    const fileInputRef = useRef(null);
-    const [selectedFile, setSelectedFile] = useState(null);
-    const [importing, setImporting] = useState(false);
-    const [dragOver, setDragOver] = useState(false);
-    const [importResult, setImportResult] = useState(null); // { imported, skipped }
-
-    const existingNames = new Set(existingModules.map(m => m.module_name.toLowerCase().trim()));
-
-    const COLUMNS = [
-        { name: "Module Name", required: true, hint: "Any text" },
-        { name: "Description", required: true, hint: "Brief description of the module" },
-        { name: "Module Owner", required: true, hint: "Must match an existing user name" },
-        { name: "Priority", required: true, hint: "High | Medium | Low" },
-        { name: "Status", required: true, hint: "Active | Inactive | Archived" },
-        { name: "Icon Color", required: false, hint: "blue | green | purple | red | indigo | pink | teal | orange" },
-    ];
-
-    const parseCSV = (text) => {
-        const lines = text.trim().split(/\r?\n/);
-        if (lines.length < 2) return [];
-        const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim().toLowerCase());
-        return lines.slice(1).map(line => {
-            const cols = [];
-            let cur = "", inQ = false;
-            for (let i = 0; i < line.length; i++) {
-                if (line[i] === '"') { inQ = !inQ; }
-                else if (line[i] === "," && !inQ) { cols.push(cur.trim()); cur = ""; }
-                else { cur += line[i]; }
-            }
-            cols.push(cur.trim());
-            const row = {};
-            headers.forEach((h, i) => { row[h] = (cols[i] || "").replace(/^"|"$/g, "").trim(); });
-            return row;
-        }).filter(r => r["module name"] || r["module_name"]);
-    };
-
-    const handleFileSelect = (file) => {
-        if (!file) return;
-        if (!file.name.endsWith(".csv")) { alert("Please upload a .csv file"); return; }
-        setSelectedFile(file);
-    };
-
-    const handleImport = async () => {
-        if (!selectedFile) { alert("Please select a CSV file first"); return; }
-        setImporting(true);
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            try {
-                const rows = parseCSV(e.target.result);
-                if (!rows.length) { alert("No valid rows found. Make sure the CSV has a header row and at least one data row."); setImporting(false); return; }
-
-                const VALID_PRIORITIES = ["High", "Medium", "Low"];
-                const VALID_STATUSES = ["Active", "Inactive", "Archived"];
-                const VALID_COLORS = ["blue", "green", "purple", "red", "indigo", "pink", "teal", "orange"];
-
-                const seen = new Set();
-                const toInsert = [];
-                const skipped = [];
-
-                let codePool = [...existingModuleCodes];
-
-                for (const r of rows) {
-                    const name = (r["module name"] || r["module_name"] || "").trim();
-                    if (!name) continue;
-                    if (existingNames.has(name.toLowerCase()) || seen.has(name.toLowerCase())) {
-                        skipped.push(name);
-                        continue;
-                    }
-                    seen.add(name.toLowerCase());
-
-                    const nums = codePool.map(c => parseInt(c, 10)).filter(c => !isNaN(c)).sort((a, b) => a - b);
-                    let next = 1001;
-                    for (const c of nums) { if (c >= next) next = c + 1; }
-                    codePool.push(next);
-
-                    toInsert.push({
-                        module_code: next,
-                        module_name: name,
-                        description: r["description"] || "",
-                        module_owner: r["module owner"] || r["owner"] || r["module_owner"] || null,
-                        priority: VALID_PRIORITIES.includes(r["priority"]) ? r["priority"] : "Low",
-                        status: VALID_STATUSES.includes(r["status"]) ? r["status"] : "Active",
-                        color: VALID_COLORS.includes((r["icon color"] || r["color"] || "").toLowerCase()) ? (r["icon color"] || r["color"]).toLowerCase() : "blue",
-                    });
-                }
-
-                if (!toInsert.length) {
-                    setImportResult({ imported: 0, skipped });
-                    setImporting(false);
-                    onSuccess();
-                    return;
-                }
-
-                const { error } = await supabase.from("modules").insert(toInsert);
-                if (error) throw error;
-
-                setImportResult({ imported: toInsert.length, skipped });
-                onSuccess();
-            } catch (err) {
-                alert(`Import error: ${err.message}`);
-            }
-            setImporting(false);
-        };
-        reader.readAsText(selectedFile);
-    };
-
-    const downloadTemplate = () => {
-        const csv = `"Module Name","Description","Module Owner","Priority","Status","Icon Color"\n"Example Module","A sample module description","John Smith","High","Active","blue"`;
-        const link = document.createElement("a");
-        link.setAttribute("href", URL.createObjectURL(new Blob([csv], { type: "text/csv" })));
-        link.setAttribute("download", "modules_import_template.csv");
-        link.click();
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-
-                {/* Header */}
-                <div className="sticky top-0 bg-white z-10 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
-                            <i className="fa-solid fa-upload text-blue-500" />
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-bold text-gray-900">Import Modules</h3>
-                            <p className="text-xs text-gray-400 mt-0.5">Upload a CSV file to bulk import modules</p>
-                        </div>
-                    </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-                        <i className="fa-solid fa-times text-lg" />
-                    </button>
-                </div>
-
-                <div className="p-6 space-y-5">
-
-                    {/* Template download banner */}
-                    <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-5 py-4">
-                        <div>
-                            <p className="text-sm font-semibold text-blue-800">Download Import Template</p>
-                            <p className="text-xs text-blue-600 mt-0.5">Get the CSV template with all required columns. Fill it in and upload below.</p>
-                        </div>
-                        <button onClick={downloadTemplate}
-                            className="flex items-center gap-2 px-4 py-2 bg-white border border-blue-200 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors whitespace-nowrap ml-4">
-                            <i className="fa-solid fa-download text-xs" /> Template
-                        </button>
-                    </div>
-
-                    {/* Column reference table */}
-                    <div className="border border-gray-200 rounded-xl overflow-hidden">
-                        <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Column Reference</p>
-                        </div>
-                        <div className="divide-y divide-gray-100">
-                            {COLUMNS.map(col => (
-                                <div key={col.name} className="flex items-center gap-4 px-4 py-3">
-                                    <span className="font-mono text-sm text-gray-800 w-36 flex-shrink-0">{col.name}</span>
-                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full w-16 text-center flex-shrink-0 ${col.required ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-500"}`}>
-                                        {col.required ? "Required" : "Optional"}
-                                    </span>
-                                    <span className="text-sm text-gray-500">{col.hint}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* File upload drop zone */}
-                    <div
-                        onDrop={e => { e.preventDefault(); setDragOver(false); handleFileSelect(e.dataTransfer.files[0]); }}
-                        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                        onDragLeave={() => setDragOver(false)}
-                        onClick={() => fileInputRef.current?.click()}
-                        className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center gap-3 cursor-pointer transition-colors ${dragOver ? "border-green-400 bg-green-50" : selectedFile ? "border-green-400 bg-green-50" : "border-gray-300 hover:border-gray-400 hover:bg-gray-50"}`}
-                    >
-                        <i className={`fa-solid fa-cloud-upload-alt text-4xl ${selectedFile ? "text-green-500" : "text-gray-300"}`} />
-                        {selectedFile ? (
-                            <>
-                                <p className="text-sm font-semibold text-green-700">{selectedFile.name}</p>
-                                <p className="text-xs text-gray-400">Click to change file</p>
-                            </>
-                        ) : (
-                            <>
-                                <p className="text-sm font-medium text-gray-600">Click to upload CSV</p>
-                                <p className="text-xs text-gray-400">Only .csv files are supported</p>
-                            </>
-                        )}
-                        <input ref={fileInputRef} type="file" accept=".csv" className="hidden"
-                            onChange={e => handleFileSelect(e.target.files[0])} />
-                    </div>
-                </div>
-
-                {/* Result feedback */}
-                {importResult && (
-                    <div className="px-6 pb-2 space-y-3">
-                        {importResult.imported > 0 && (
-                            <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-xl">
-                                <i className="fa-solid fa-check-circle text-green-600" />
-                                <p className="text-sm font-medium text-green-800">
-                                    {importResult.imported} module{importResult.imported !== 1 ? "s" : ""} imported successfully.
-                                </p>
-                            </div>
-                        )}
-                        {importResult.skipped.length > 0 && (
-                            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl space-y-2">
-                                <div className="flex items-center gap-2">
-                                    <i className="fa-solid fa-triangle-exclamation text-yellow-500" />
-                                    <p className="text-sm font-semibold text-yellow-800">
-                                        {importResult.skipped.length} duplicate{importResult.skipped.length !== 1 ? "s" : ""} skipped — name{importResult.skipped.length !== 1 ? "s" : ""} already exist{importResult.skipped.length === 1 ? "s" : ""}
-                                    </p>
-                                </div>
-                                <div className="flex flex-wrap gap-1.5">
-                                    {importResult.skipped.map((name, i) => (
-                                        <span key={i} className="px-2 py-0.5 bg-yellow-100 border border-yellow-300 text-yellow-700 rounded-full text-xs font-medium">{name}</span>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                        {importResult.imported === 0 && importResult.skipped.length === 0 && (
-                            <div className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-xl">
-                                <i className="fa-solid fa-circle-exclamation text-red-500" />
-                                <p className="text-sm font-medium text-red-800">No valid rows found to import.</p>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* Footer */}
-                <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-3">
-                    <button onClick={onClose} disabled={importing}
-                        className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
-                        {importResult ? "Close" : "Cancel"}
-                    </button>
-                    {!importResult && (
-                        <button onClick={handleImport} disabled={importing || !selectedFile}
-                            className="flex items-center gap-2 px-6 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
-                            {importing ? <><i className="fa-solid fa-spinner fa-spin" /> Importing…</> : <><i className="fa-solid fa-file-import" /> Import</>}
-                        </button>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-}
-
 // ─── Main Component ────────────────────────────────────────────────────────────
 export default function ModulesLibrary() {
     const [modules, setModules] = useState([]);
@@ -974,11 +716,10 @@ export default function ModulesLibrary() {
     const [searchTerm, setSearchTerm] = useState("");
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleteLoading, setDeleteLoading] = useState(false);
-    const [showImportModal, setShowImportModal] = useState(false);
 
     const fetchUsers = async () => {
         const { data } = await supabase.from("profiles").select("id, full_name").order("full_name", { ascending: true });
-        setUsers(data || []);
+        setUsers((data || []).map(u => ({ id: u.id, name: u.full_name || "Unnamed" })));
     };
 
     const fetchModules = async () => {
@@ -1025,6 +766,15 @@ export default function ModulesLibrary() {
 
     useEffect(() => { fetchUsers(); fetchModules(); }, []);
 
+    // ── Deep-link: open a specific module when navigated from Dashboard ──
+    useEffect(() => {
+        const id = sessionStorage.getItem("modules_open_id");
+        if (!id || modules.length === 0) return;
+        sessionStorage.removeItem("modules_open_id");
+        const mod = modules.find(m => m.id === id);
+        if (mod) { setViewingModule(mod); fetchModuleFeatures(mod.id); }
+    }, [modules]); // eslint-disable-line
+
     const filteredModules = modules.filter(mod => {
         const matchesSearch = mod.module_name.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesStatus = filterStatus === "All Status" || mod.status === filterStatus;
@@ -1056,10 +806,6 @@ export default function ModulesLibrary() {
                         <button onClick={() => exportToCSV(modules)}
                             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
                             <i className="fa-solid fa-download" /> Export
-                        </button>
-                        <button onClick={() => setShowImportModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-                            <i className="fa-solid fa-upload" /> Import
                         </button>
                         <button onClick={() => setShowModal(true)}
                             className="flex items-center gap-2 px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity">
@@ -1184,14 +930,6 @@ export default function ModulesLibrary() {
                     onEdit={handleEditModule}
                     moduleFeatures={moduleFeatures}
                     featuresLoading={featuresLoading}
-                />
-            )}
-            {showImportModal && (
-                <ImportModulesModal
-                    onClose={() => setShowImportModal(false)}
-                    onSuccess={fetchModules}
-                    existingModules={modules}
-                    existingModuleCodes={existingModuleCodes}
                 />
             )}
         </div>
