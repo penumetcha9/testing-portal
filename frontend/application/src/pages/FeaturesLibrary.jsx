@@ -436,6 +436,7 @@ const generateNextFeatCode = (allFeatures) => {
 };
 
 // ─── CSV template column definitions ──────────────────────────────────────────
+// Status column removed from feature imports — all imported features default to "Active"
 const FEATURE_IMPORT_COLUMNS = [
     { name: "Module name", req: true, hint: "Exact module name e.g. Authentication" },
     { name: "Feature Name", req: true, hint: "e.g. Two-Factor Authentication" },
@@ -443,7 +444,6 @@ const FEATURE_IMPORT_COLUMNS = [
     { name: "User Story", req: true, hint: "e.g. US-015" },
     { name: "Description", req: true, hint: "Brief description of the feature" },
     { name: "Assign To", req: true, hint: "Full name of assignee (must match a user in the system)" },
-    { name: "Status", req: true, hint: "Active / Draft / Archived" },
 ];
 
 const TC_IMPORT_COLUMNS = [
@@ -1140,7 +1140,6 @@ export default function FeaturesLibrary() {
         reader.readAsText(file);
     }, [parseCSV]);
 
-    // ── FIX: corrected handleImportSubmit ─────────────────────────────────────
     const handleImportSubmit = useCallback(async () => {
         if (!importRows.length) return;
 
@@ -1168,17 +1167,12 @@ export default function FeaturesLibrary() {
                     if (u.name) userMap[u.name.toLowerCase()] = u.id;
                 }
 
-                // ── STEP 1: Check all module names resolve — block import if any don't ──
-                const VALID_STATUSES = ["active", "draft", "archived"];
+                // ── Validate all module names resolve — block import if any don't ──
                 const rowErrors = [];
                 importRows.forEach((row, i) => {
                     const moduleKey = String(row["Module name"] || "").trim().toLowerCase();
                     if (!modMap[moduleKey]) {
                         rowErrors.push(`Row ${i + 2}: Module "${row["Module name"]}" not found. Available modules: ${modules.map(m => m.module_name || m.name).join(", ")}`);
-                    }
-                    const status = (row["Status"] || "").trim().toLowerCase();
-                    if (status && !VALID_STATUSES.includes(status)) {
-                        rowErrors.push(`Row ${i + 2}: Status "${row["Status"]}" is invalid. Use: Active, Draft, or Archived`);
                     }
                 });
                 if (rowErrors.length) {
@@ -1186,7 +1180,7 @@ export default function FeaturesLibrary() {
                     return;
                 }
 
-                // ── STEP 2: Check for duplicate feature codes ──
+                // ── Check for duplicate feature codes ──
                 const { data: existingFeatures } = await supabase.from("features").select("feature_code");
                 const existingCodes = new Set((existingFeatures || []).map(f => (f.feature_code || "").trim().toLowerCase()));
 
@@ -1197,9 +1191,6 @@ export default function FeaturesLibrary() {
                         const moduleId = modMap[moduleKey];
                         const assignToName = String(row["Assign To"] || "").trim().toLowerCase();
                         const assignToId = userMap[assignToName] || null;
-                        const rawStatus = (row["Status"] || "Active").trim();
-                        // Normalize status to proper case
-                        const status = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase();
                         return {
                             module_id: moduleId,
                             feature_name: row["Feature Name"].trim(),
@@ -1207,7 +1198,7 @@ export default function FeaturesLibrary() {
                             user_story: row["User Story"].trim() || null,
                             description: row["Description"].trim() || null,
                             assign_to: assignToId,
-                            status: status || "Active",
+                            status: "Active",   // ← always default to Active
                             created_at: new Date().toISOString(),
                         };
                     })
@@ -1231,7 +1222,7 @@ export default function FeaturesLibrary() {
                 setImportSuccess(`✓ Successfully imported ${inserts.length} feature(s).${skippedMsg}`);
 
             } else {
-                // Test cases
+                // ── Test cases ──
                 const featMap = {};
                 for (const m of modules) {
                     for (const f of m.features) {
@@ -1239,10 +1230,10 @@ export default function FeaturesLibrary() {
                     }
                 }
 
-                // FIX 3: build story_id code → UUID map so user_story_ids stores UUIDs
+                // Build story_id code → UUID map
                 const storyUUIDMap = {};
                 for (const s of userStories) {
-                    if (s.code) storyUUIDMap[s.code] = s.id;   // s.code = "US-001", s.id = UUID
+                    if (s.code) storyUUIDMap[s.code] = s.id;
                 }
 
                 const { data: allTcIds } = await supabase.from("test_cases").select("test_case_id");
@@ -1256,13 +1247,12 @@ export default function FeaturesLibrary() {
                     const feat = featMap[(row["Feature Code"] || "").trim()] || {};
                     tcCounter++;
 
-                    // FIX: convert semicolon-separated story codes to actual UUIDs
                     const rawStoryCodes = row["User Story IDs"]
                         ? row["User Story IDs"].split(/[;,]/).map(s => s.trim()).filter(Boolean)
                         : [];
                     const storyUUIDs = rawStoryCodes
                         .map(code => storyUUIDMap[code])
-                        .filter(Boolean);   // drop any codes with no matching UUID
+                        .filter(Boolean);
 
                     return {
                         id: generateUUID(),
@@ -1279,7 +1269,7 @@ export default function FeaturesLibrary() {
                         test_steps: row["Test Steps"].trim() || null,
                         expected_result: row["Expected Result"].trim() || null,
                         assigned_to: row["Assigned To"].trim() || null,
-                        user_story_ids: storyUUIDs.length > 0 ? storyUUIDs : null,  // ✅ UUIDs
+                        user_story_ids: storyUUIDs.length > 0 ? storyUUIDs : null,
                         created_by: user.id,
                         created_at: new Date().toISOString(),
                         updated_at: new Date().toISOString(),
@@ -1772,7 +1762,7 @@ export default function FeaturesLibrary() {
                                             background: T.greenLight, border: `1px solid ${T.greenTint}`,
                                             color: T.green, fontFamily: T.sans,
                                         }}>
-                                            {col.name}<span style={{ color: T.red, marginLeft: 1, fontWeight: 700 }}>*</span>
+                                            {col.name}{col.req && <span style={{ color: T.red, marginLeft: 1, fontWeight: 700 }}>*</span>}
                                         </span>
                                     ))}
                                 </div>

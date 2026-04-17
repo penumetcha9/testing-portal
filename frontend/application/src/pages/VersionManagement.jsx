@@ -389,102 +389,115 @@ const AssignModulesPage = memo(({ version, modules, onBack, onSuccess, showToast
 AssignModulesPage.displayName = "AssignModulesPage";
 
 // ── Version Card ──────────────────────────────────────────────────────────────
-const VersionCard = memo(({ v, onEdit, onArchive, onDelete, onViewDetails, onAssignTesters, onViewIssues, onExport, onRestore, onAssignModules }) => (
-    <div className={`bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow ${v.status === "archived" ? "opacity-60" : ""}`}>
-        <div className="p-6">
-            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-4">
-                <div className="flex items-start gap-4">
-                    <div className="w-16 h-16 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <span className="text-green-700 text-2xl">⑂</span>
-                    </div>
-                    <div>
-                        <div className="flex items-center gap-3 mb-1">
-                            <h3 className="text-xl font-bold">{v.version_number}</h3>
-                            <span className={`px-3 py-1 text-xs font-medium rounded-full ${STATUS_CONFIG[v.status].className}`}>{STATUS_CONFIG[v.status].label}</span>
-                            {v.critical_issues > 0 && <span className="px-3 py-1 text-xs font-medium bg-red-100 text-red-600 rounded-full">{v.critical_issues} Critical</span>}
+const VersionCard = memo(({ v, users, onEdit, onArchive, onDelete, onViewDetails, onAssignTesters, onViewIssues, onExport, onRestore, onAssignModules }) => {
+    const assignedTesters = (users || []).filter(u => (v.assignedTesterIds || []).includes(u.id));
+    return (
+        <div className={`bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow ${v.status === "archived" ? "opacity-60" : ""}`}>
+            <div className="p-6">
+                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-4">
+                    <div className="flex items-start gap-4">
+                        <div className="w-16 h-16 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <span className="text-green-700 text-2xl">⑂</span>
                         </div>
-                        <p className="text-sm text-gray-500 mb-2">Build {v.build_number} • {v.version_type}</p>
-                        <div className="flex flex-wrap gap-4 text-sm text-gray-500">
-                            <span>📅 Release: {new Date(v.release_date).toLocaleDateString()}</span>
-                            <span>🕐 Created: {new Date(v.created_date).toLocaleDateString()}</span>
+                        <div>
+                            <div className="flex items-center gap-3 mb-1">
+                                <h3 className="text-xl font-bold">{v.version_number}</h3>
+                                <span className={`px-3 py-1 text-xs font-medium rounded-full ${STATUS_CONFIG[v.status].className}`}>{STATUS_CONFIG[v.status].label}</span>
+                                {v.critical_issues > 0 && <span className="px-3 py-1 text-xs font-medium bg-red-100 text-red-600 rounded-full">{v.critical_issues} Critical</span>}
+                            </div>
+                            <p className="text-sm text-gray-500 mb-2">Build {v.build_number} • {v.version_type}</p>
+                            <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-gray-500 items-center">
+                                <span>📅 Release: {new Date(v.release_date).toLocaleDateString()}</span>
+                                <span>🕐 Created: {new Date(v.created_date).toLocaleDateString()}</span>
+                                {assignedTesters.length > 0 && (
+                                    <span className="flex items-center gap-1.5 flex-wrap">
+                                        <i className="fa-solid fa-user-check text-green-600 text-xs" />
+                                        {assignedTesters.map((t, i) => (
+                                            <span key={t.id} className="inline-flex items-center px-2 py-0.5 bg-green-50 border border-green-200 text-green-700 rounded-full text-xs font-medium">
+                                                {t.name}
+                                            </span>
+                                        ))}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                {/* ── Action icons ── */}
-                <div className="flex items-center gap-1">
-                    <button onClick={(e) => { e.stopPropagation(); onEdit(v); }}
-                        className="p-2 text-gray-400 hover:text-green-700 hover:bg-green-50 rounded-lg transition-all"
-                        title="Edit version">
-                        <i className="fa-solid fa-pen-to-square" />
-                    </button>
-
-                    {v.status !== "archived" ? (
-                        <button onClick={(e) => { e.stopPropagation(); onArchive(v); }}
-                            className="p-2 text-gray-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-all"
-                            title="Archive this version">
-                            <i className="fa-solid fa-box-archive" />
-                        </button>
-                    ) : (
-                        <button onClick={(e) => { e.stopPropagation(); onRestore(v); }}
+                    {/* ── Action icons ── */}
+                    <div className="flex items-center gap-1">
+                        <button onClick={(e) => { e.stopPropagation(); onEdit(v); }}
                             className="p-2 text-gray-400 hover:text-green-700 hover:bg-green-50 rounded-lg transition-all"
-                            title="Restore this version">
-                            <i className="fa-solid fa-rotate-left" />
+                            title="Edit version">
+                            <i className="fa-solid fa-pen-to-square" />
                         </button>
-                    )}
 
-                    <button onClick={(e) => { e.stopPropagation(); onDelete(v); }}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                        title="Delete version">
-                        <i className="fa-solid fa-trash" />
-                    </button>
-                </div>
-            </div>
+                        {v.status !== "archived" ? (
+                            <button onClick={(e) => { e.stopPropagation(); onArchive(v); }}
+                                className="p-2 text-gray-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-all"
+                                title="Archive this version">
+                                <i className="fa-solid fa-box-archive" />
+                            </button>
+                        ) : (
+                            <button onClick={(e) => { e.stopPropagation(); onRestore(v); }}
+                                className="p-2 text-gray-400 hover:text-green-700 hover:bg-green-50 rounded-lg transition-all"
+                                title="Restore this version">
+                                <i className="fa-solid fa-rotate-left" />
+                            </button>
+                        )}
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-                <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-1">Total Tests</p><p className="text-2xl font-bold">{v.total_tests}</p></div>
-                <div className="p-3 bg-green-50 rounded-lg"><p className="text-xs text-green-700 mb-1">Passed</p><p className="text-2xl font-bold text-green-600">{v.passed_tests}</p></div>
-                <div className="p-3 bg-red-50 rounded-lg"><p className="text-xs text-red-700 mb-1">Failed</p><p className="text-2xl font-bold text-red-500">{v.failed_tests}</p></div>
-                <div className="p-3 bg-yellow-50 rounded-lg"><p className="text-xs text-yellow-700 mb-1">Pending</p><p className="text-2xl font-bold text-yellow-500">{v.pending_tests}</p></div>
-            </div>
-
-            <div className="mb-4">
-                <div className="flex justify-between mb-1">
-                    <span className="text-sm font-medium">Overall Completion</span>
-                    <span className="text-sm font-bold">{v.completion_percentage}%</span>
-                </div>
-                <div className="w-full bg-gray-100 rounded-full h-3">
-                    <div className={`h-3 rounded-full ${PROGRESS_COLOR[v.status]}`} style={{ width: `${v.completion_percentage}%` }} />
-                </div>
-            </div>
-
-            {v.linkedModules && v.linkedModules.length > 0 && (
-                <div className="mb-4 flex flex-wrap gap-2">
-                    {v.linkedModules.slice(0, 4).map(m => (
-                        <span key={m.id} className="px-2 py-1 bg-green-50 border border-green-200 text-green-700 text-xs rounded-full font-medium">{m.module_name}</span>
-                    ))}
-                    {v.linkedModules.length > 4 && <span className="px-2 py-1 bg-gray-100 text-gray-500 text-xs rounded-full font-medium">+{v.linkedModules.length - 4} more</span>}
-                </div>
-            )}
-
-            <div className="flex flex-wrap gap-2">
-                <button onClick={() => onViewDetails(v)} className="px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">View Details</button>
-                {v.status !== "archived" && (
-                    <>
-                        <button onClick={() => onAssignTesters(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors flex items-center gap-1.5">
-                            <i className="fa-solid fa-users text-sm" /> Assign Testers
+                        <button onClick={(e) => { e.stopPropagation(); onDelete(v); }}
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                            title="Delete version">
+                            <i className="fa-solid fa-trash" />
                         </button>
-                        <button onClick={() => onAssignModules(v)} className="px-4 py-2 border border-green-300 text-green-700 rounded-lg text-sm hover:bg-green-50 transition-colors flex items-center gap-1.5">
-                            <i className="fa-solid fa-puzzle-piece" /> Assign Modules
-                        </button>
-                        <button onClick={() => onViewIssues(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors">View Issues</button>
-                    </>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                    <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-1">Total Tests</p><p className="text-2xl font-bold">{v.total_tests}</p></div>
+                    <div className="p-3 bg-green-50 rounded-lg"><p className="text-xs text-green-700 mb-1">Passed</p><p className="text-2xl font-bold text-green-600">{v.passed_tests}</p></div>
+                    <div className="p-3 bg-red-50 rounded-lg"><p className="text-xs text-red-700 mb-1">Failed</p><p className="text-2xl font-bold text-red-500">{v.failed_tests}</p></div>
+                    <div className="p-3 bg-yellow-50 rounded-lg"><p className="text-xs text-yellow-700 mb-1">Pending</p><p className="text-2xl font-bold text-yellow-500">{v.pending_tests}</p></div>
+                </div>
+
+                <div className="mb-4">
+                    <div className="flex justify-between mb-1">
+                        <span className="text-sm font-medium">Overall Completion</span>
+                        <span className="text-sm font-bold">{v.completion_percentage}%</span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-3">
+                        <div className={`h-3 rounded-full ${PROGRESS_COLOR[v.status]}`} style={{ width: `${v.completion_percentage}%` }} />
+                    </div>
+                </div>
+
+                {v.linkedModules && v.linkedModules.length > 0 && (
+                    <div className="mb-4 flex flex-wrap gap-2">
+                        {v.linkedModules.slice(0, 4).map(m => (
+                            <span key={m.id} className="px-2 py-1 bg-green-50 border border-green-200 text-green-700 text-xs rounded-full font-medium">{m.module_name}</span>
+                        ))}
+                        {v.linkedModules.length > 4 && <span className="px-2 py-1 bg-gray-100 text-gray-500 text-xs rounded-full font-medium">+{v.linkedModules.length - 4} more</span>}
+                    </div>
                 )}
-                <button onClick={() => onExport(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors">Export Report</button>
+
+                <div className="flex flex-wrap gap-2">
+                    <button onClick={() => onViewDetails(v)} className="px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">View Details</button>
+                    {v.status !== "archived" && (
+                        <>
+                            <button onClick={() => onAssignTesters(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors flex items-center gap-1.5">
+                                <i className="fa-solid fa-users text-sm" /> Assign Testers
+                            </button>
+                            <button onClick={() => onAssignModules(v)} className="px-4 py-2 border border-green-300 text-green-700 rounded-lg text-sm hover:bg-green-50 transition-colors flex items-center gap-1.5">
+                                <i className="fa-solid fa-puzzle-piece" /> Assign Modules
+                            </button>
+                            <button onClick={() => onViewIssues(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors">View Issues</button>
+                        </>
+                    )}
+                    <button onClick={() => onExport(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors">Export Report</button>
+                </div>
             </div>
         </div>
-    </div>
-));
+    );
+});
 VersionCard.displayName = "VersionCard";
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
@@ -569,16 +582,22 @@ export default function VersionManagement() {
                 if (!modulesByVersion[row.version_id]) modulesByVersion[row.version_id] = [];
                 if (row.modules) modulesByVersion[row.version_id].push(row.modules);
             });
-            setVersions((versionData || []).map(v => ({ ...v, linkedModules: modulesByVersion[v.id] || [] })));
+            const { data: vtData } = await supabase.from("version_testers").select("version_id, tester_id");
+            const testersByVersion = {};
+            (vtData || []).forEach(row => {
+                if (!testersByVersion[row.version_id]) testersByVersion[row.version_id] = [];
+                testersByVersion[row.version_id].push(row.tester_id);
+            });
+            setVersions((versionData || []).map(v => ({ ...v, linkedModules: modulesByVersion[v.id] || [], assignedTesterIds: testersByVersion[v.id] || [] })));
         } catch (err) { console.error(err); setError(err.message); }
         finally { setLoading(false); }
     }, []);
 
     const fetchUsers = useCallback(async () => {
         try {
-            const { data, error: e } = await supabase.from("profiles").select("id, full_name, email").order("full_name");
+            const { data, error: e } = await supabase.from("profiles").select("id, full_name").order("full_name");
             if (e) throw e;
-            setUsers((data || []).map(u => ({ id: u.id, name: u.full_name || u.email || u.id })));
+            setUsers((data || []).map(u => ({ id: u.id, name: u.full_name })));
         } catch (err) { console.error(err); }
     }, []);
 
@@ -822,7 +841,7 @@ export default function VersionManagement() {
                         <h3 className="text-lg font-semibold">Filters &amp; Search</h3>
                         <button onClick={handleResetFilters} className="text-sm text-green-700 hover:underline font-medium">Reset All</button>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium mb-1">Search Version</label>
                             <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by version or build number..." className="w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300" />
@@ -830,9 +849,6 @@ export default function VersionManagement() {
                         <div>
                             <label className="block text-sm font-medium mb-1">Status</label>
                             <SingleDropdown options={STATUS_FILTER_OPTIONS} selected={statusFilter} onChange={setStatusFilter} placeholder="All Statuses" />
-                        </div>
-                        <div className="flex items-end">
-                            <button className="w-full px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:opacity-90">Apply Filters</button>
                         </div>
                     </div>
                 </div>
@@ -857,6 +873,7 @@ export default function VersionManagement() {
                     ) : (
                         filtered.map((v) => (
                             <VersionCard key={v.id} v={v}
+                                users={users}
                                 onEdit={handleEditVersion}
                                 onArchive={handleArchiveVersion}
                                 onDelete={handleDeleteVersion}
