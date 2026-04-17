@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import ReactDOM from "react-dom";
+import { useLocation } from "react-router-dom";
 import supabase from "../services/supabaseClient";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -74,89 +74,54 @@ const generateModuleCode = (existingCodes = []) => {
 };
 
 // ─── Simple dropdown matching Versions page style ──────────────────────────────
-const DD_BTN_BASE = { width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: "10px", fontSize: "13.5px", cursor: "pointer", outline: "none", letterSpacing: "0.01em", background: "none", border: "none" };
-
-function ChevronIcon({ open }) {
-    return (
-        <span style={{ marginLeft: 8, display: "flex", alignItems: "center", transition: "transform 0.22s cubic-bezier(.4,0,.2,1)", transform: open ? "rotate(180deg)" : "rotate(0deg)", color: open ? "#6366f1" : "#94a3b8", flexShrink: 0 }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-        </span>
-    );
-}
-
 function SimpleDropdown({ options, value, onChange, placeholder = "Select..." }) {
-    const [isOpen, setIsOpen] = useState(false);
-    const [pos, setPos] = useState(null);
-    const btnRef = useRef(null);
-    const portalId = useRef(`ml-portal-${Math.random().toString(36).slice(2)}`);
-    const isOpenRef = useRef(false);
-    isOpenRef.current = isOpen;
+    const [open, setOpen] = useState(false);
+    const ref = useRef(null);
 
     useEffect(() => {
-        const h = (e) => {
-            if (!isOpenRef.current) return;
-            if (btnRef.current && btnRef.current.contains(e.target)) return;
-            const portal = document.getElementById(portalId.current);
-            if (portal && portal.contains(e.target)) return;
-            setIsOpen(false);
-        };
+        const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
         document.addEventListener("mousedown", h);
         return () => document.removeEventListener("mousedown", h);
     }, []);
 
-    const LIST_H = 220;
-
-    const handleOpen = () => {
-        if (btnRef.current) {
-            const r = btnRef.current.getBoundingClientRect();
-            const spaceBelow = window.innerHeight - r.bottom;
-            const openUp = spaceBelow < LIST_H + 10;
-            setPos({ left: r.left, width: r.width, top: openUp ? r.top - LIST_H - 4 : r.bottom + 4 });
-        }
-        setIsOpen(p => !p);
-    };
-
-    const selectedLabel = options.find(o => o.id === value)?.name ?? null;
-
-    const btnStyle = {
-        ...DD_BTN_BASE,
-        background: isOpen ? "linear-gradient(135deg,#f0f4ff 0%,#fafbff 100%)" : "linear-gradient(135deg,#fafbff 0%,#f4f6fb 100%)",
-        border: isOpen ? "1.5px solid #6366f1" : "1.5px solid #e2e6f0",
-        color: value ? "#1e293b" : "#94a3b8",
-        fontWeight: value ? 500 : 400,
-        boxShadow: isOpen ? "0 0 0 3px rgba(99,102,241,0.12)" : "0 1px 3px rgba(0,0,0,0.06)",
-    };
+    const label = options.find(o => o.id === value)?.name;
 
     return (
-        <>
-            <button ref={btnRef} type="button" onClick={handleOpen} style={btnStyle}>
-                <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {selectedLabel || placeholder}
-                </span>
-                <ChevronIcon open={isOpen} />
+        <div ref={ref} className="relative">
+            <button
+                type="button"
+                onClick={() => setOpen(p => !p)}
+                className={`w-full flex items-center justify-between px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 bg-white ${open ? "border-green-600 ring-2 ring-green-100" : "border-gray-200"} ${label ? "text-gray-900" : "text-gray-400"}`}
+            >
+                <span className="truncate">{label || placeholder}</span>
+                <svg className={`w-4 h-4 ml-2 flex-shrink-0 transition-transform ${open ? "rotate-180 text-green-700" : "text-gray-400"}`} viewBox="0 0 14 14" fill="none">
+                    <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
             </button>
-            {isOpen && pos && ReactDOM.createPortal(
-                <div id={portalId.current} style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 999999, background: "#fff", border: "1.5px solid #e8eaf6", borderRadius: "12px", boxShadow: "0 12px 40px rgba(0,0,0,0.22)", overflow: "hidden" }}>
-                    <div style={{ padding: "6px", maxHeight: `${LIST_H}px`, overflowY: "auto" }}>
-                        {options.map((opt) => {
-                            const isSel = opt.id === value;
+            {open && (
+                <div className="absolute top-full mt-1.5 left-0 right-0 z-50 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                    <div className="p-1.5 max-h-60 overflow-y-auto">
+                        {options.map(opt => {
+                            const sel = opt.id === value;
                             return (
-                                <div key={opt.id} onClick={() => { onChange(opt.id); setIsOpen(false); }}
-                                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "13.5px", fontWeight: isSel ? 600 : 400, color: isSel ? "#4f46e5" : "#374151", background: isSel ? "linear-gradient(135deg,#eef2ff 0%,#f0f4ff 100%)" : "transparent", transition: "background 0.12s ease" }}
-                                    onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = "#f8fafc"; }}
-                                    onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = isSel ? "linear-gradient(135deg,#eef2ff 0%,#f0f4ff 100%)" : "transparent"; }}>
+                                <div
+                                    key={opt.id}
+                                    onClick={() => { onChange(opt.id); setOpen(false); }}
+                                    className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${sel ? "bg-green-50 text-green-700 font-semibold" : "text-gray-700 hover:bg-gray-50"}`}
+                                >
                                     <span>{opt.name}</span>
-                                    {isSel && <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, marginLeft: 8 }}><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#4f46e5" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                                    {sel && (
+                                        <svg className="w-3.5 h-3.5 text-green-700 flex-shrink-0" viewBox="0 0 14 14" fill="none">
+                                            <path d="M2.5 7l3.5 3.5 5.5-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
+                                    )}
                                 </div>
                             );
                         })}
                     </div>
-                </div>,
-                document.body
+                </div>
             )}
-        </>
+        </div>
     );
 }
 
@@ -265,7 +230,7 @@ function EditModuleModal({ module, onClose, onSuccess, users }) {
     });
 
     const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-    const userOptions = [{ id: "", name: "Select Owner" }, ...users.map(u => ({ id: u.name, name: u.name }))];
+    const userOptions = [{ id: "", name: "Select Owner" }, ...users.map(u => ({ id: u.name || u.id, name: u.name }))];
 
     const handleUpdate = async () => {
         if (!form.module_name) { alert("Module Name required"); return; }
@@ -287,10 +252,10 @@ function EditModuleModal({ module, onClose, onSuccess, users }) {
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: "90vh" }} onClick={e => e.stopPropagation()}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
 
                 {/* Header */}
-                <div className="flex-shrink-0 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                <div className="sticky top-0 bg-white z-10 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
                             <i className="fa-solid fa-pen-to-square text-blue-500" />
@@ -306,7 +271,7 @@ function EditModuleModal({ module, onClose, onSuccess, users }) {
                 </div>
 
                 {/* Body */}
-                <div className="p-6 space-y-5 overflow-y-auto flex-1">
+                <div className="p-6 space-y-5">
                     <Field label="Module Name" required>
                         <input
                             type="text" value={form.module_name}
@@ -349,7 +314,7 @@ function EditModuleModal({ module, onClose, onSuccess, users }) {
                 </div>
 
                 {/* Footer */}
-                <div className="flex-shrink-0 bg-white border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-3">
+                <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-3">
                     <button onClick={onClose} disabled={loading}
                         className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
                         Cancel
@@ -372,7 +337,7 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
     const [form, setForm] = useState({ module_name: "", description: "", module_owner: "", priority: "", status: "Active" });
 
     const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-    const userOptions = [{ id: "", name: "Select Owner" }, ...users.map(u => ({ id: u.name, name: u.name }))];
+    const userOptions = [{ id: "", name: "Select Owner" }, ...users.map(u => ({ id: u.name || u.id, name: u.name }))];
 
     const handleCreate = async () => {
         if (!form.module_name) { alert("Module Name required"); return; }
@@ -394,10 +359,10 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: "90vh" }} onClick={e => e.stopPropagation()}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
 
                 {/* Header */}
-                <div className="flex-shrink-0 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                <div className="sticky top-0 bg-white z-10 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center">
                             <i className="fa-solid fa-plus text-green-700" />
@@ -413,7 +378,7 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
                 </div>
 
                 {/* Body */}
-                <div className="p-6 space-y-5 overflow-y-auto flex-1">
+                <div className="p-6 space-y-5">
                     <Field label="Module Name" required>
                         <input
                             type="text" value={form.module_name}
@@ -456,7 +421,7 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
                 </div>
 
                 {/* Footer */}
-                <div className="flex-shrink-0 bg-white border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-3">
+                <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-3">
                     <button onClick={onClose} disabled={loading}
                         className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
                         Cancel
@@ -718,8 +683,8 @@ export default function ModulesLibrary() {
     const [deleteLoading, setDeleteLoading] = useState(false);
 
     const fetchUsers = async () => {
-        const { data } = await supabase.from("profiles").select("id, full_name").order("full_name", { ascending: true });
-        setUsers((data || []).map(u => ({ id: u.id, name: u.full_name || "Unnamed" })));
+        const { data } = await supabase.from("users").select("*").order("name", { ascending: true });
+        setUsers(data || []);
     };
 
     const fetchModules = async () => {
@@ -764,16 +729,20 @@ export default function ModulesLibrary() {
 
     const handleEditModule = (module) => { setEditingModule(module); setShowEditModal(true); };
 
+    const location = useLocation();
+
     useEffect(() => { fetchUsers(); fetchModules(); }, []);
 
-    // ── Deep-link: open a specific module when navigated from Dashboard ──
+    // Auto-open module detail when navigated here with a moduleId
     useEffect(() => {
-        const id = sessionStorage.getItem("modules_open_id");
-        if (!id || modules.length === 0) return;
-        sessionStorage.removeItem("modules_open_id");
-        const mod = modules.find(m => m.id === id);
-        if (mod) { setViewingModule(mod); fetchModuleFeatures(mod.id); }
-    }, [modules]); // eslint-disable-line
+        const moduleId = location.state?.moduleId;
+        if (!moduleId || modules.length === 0) return;
+        const target = modules.find(m => m.id === moduleId);
+        if (target) {
+            setViewingModule(target);
+            fetchModuleFeatures(target.id);
+        }
+    }, [location.state?.moduleId, modules]);
 
     const filteredModules = modules.filter(mod => {
         const matchesSearch = mod.module_name.toLowerCase().includes(searchTerm.toLowerCase());

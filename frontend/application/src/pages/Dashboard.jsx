@@ -107,7 +107,7 @@ function MyAssignments({ userId }) {
                 modules ( module_name ),
                 versions ( version_number )
             `)
-            .eq("assigned_to", userId.toString())
+            .eq("assigned_to", userId)
             .order("created_at", { ascending: false })
             .limit(20);
 
@@ -119,7 +119,7 @@ function MyAssignments({ userId }) {
         const { data: tcData, error: tcError } = await supabase
             .from("test_cases")
             .select("module_id")
-            .eq("assigned_to", userId.toString());
+            .eq("assigned_to", userId);
 
         if (tcError || !tcData) return;
 
@@ -128,7 +128,7 @@ function MyAssignments({ userId }) {
 
         const { data, error } = await supabase
             .from("modules")
-            .select("id, module_name, status, description")
+            .select("id, module_name, status, description, test_cases ( status )")
             .in("id", moduleIds)
             .order("module_name");
 
@@ -140,7 +140,7 @@ function MyAssignments({ userId }) {
         const { data: tcData, error: tcError } = await supabase
             .from("test_cases")
             .select("version_id")
-            .eq("assigned_to", userId.toString());
+            .eq("assigned_to", userId);
 
         if (tcError || !tcData) return;
 
@@ -149,7 +149,7 @@ function MyAssignments({ userId }) {
 
         const { data, error } = await supabase
             .from("versions")
-            .select("id, version_number, status, release_date, description")
+            .select("id, version_number, status, release_date, description, test_cases ( status )")
             .in("id", versionIds)
             .order("created_date", { ascending: false });
 
@@ -161,7 +161,7 @@ function MyAssignments({ userId }) {
         const { data: tcData, error: tcError } = await supabase
             .from("test_cases")
             .select("feature_id")
-            .eq("assigned_to", userId.toString());
+            .eq("assigned_to", userId);
 
         if (tcError || !tcData) return;
 
@@ -249,82 +249,147 @@ function MyAssignments({ userId }) {
                     <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                         {myTestCases.map(tc => (
                             <div key={tc.id}
-                                onClick={() => { sessionStorage.setItem("te_direct_open", tc.id); navigate("/test-execution"); }}
-                                className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                                        <i className="fa-solid fa-flask text-primary text-xs" />
+                                onClick={() => navigate("/test-execution", { state: { testCaseId: tc.id } })}
+                                className="p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                            <i className="fa-solid fa-flask text-primary text-xs" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium text-foreground truncate">{tc.name}</p>
+                                            <p className="text-xs text-muted-foreground">{tc.test_case_id}</p>
+                                        </div>
                                     </div>
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-medium text-foreground truncate">{tc.name}</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {tc.test_case_id}
-                                            {tc.modules?.module_name && ` · ${tc.modules.module_name}`}
-                                            {tc.versions?.version_number && ` · ${tc.versions.version_number}`}
-                                        </p>
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                        {tc.priority && (
+                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${tc.priority === "High" || tc.priority === "Critical"
+                                                ? "bg-red-100 text-red-600"
+                                                : tc.priority === "Medium"
+                                                    ? "bg-yellow-100 text-yellow-600"
+                                                    : "bg-gray-100 text-gray-500"
+                                                }`}>{tc.priority}</span>
+                                        )}
+                                        <AssignmentBadge status={tc.status} />
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                                    {tc.priority && (
-                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${tc.priority === "High" || tc.priority === "Critical"
-                                            ? "bg-red-100 text-red-600"
-                                            : tc.priority === "Medium"
-                                                ? "bg-yellow-100 text-yellow-600"
-                                                : "bg-gray-100 text-gray-500"
-                                            }`}>{tc.priority}</span>
+                                <div className="flex items-center gap-3 mt-2 ml-11 flex-wrap">
+                                    {tc.modules?.module_name && (
+                                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                            <i className="fa-solid fa-cube text-blue-400 text-[10px]" />
+                                            {tc.modules.module_name}
+                                        </span>
                                     )}
-                                    <AssignmentBadge status={tc.status} />
+                                    {tc.versions?.version_number && (
+                                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                            <i className="fa-solid fa-code-branch text-emerald-400 text-[10px]" />
+                                            {tc.versions.version_number}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                         ))}
                     </div>
                 ) : activeTab === "modules" ? (
                     <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                        {myModules.map(m => (
-                            <div key={m.id}
-                                onClick={() => { sessionStorage.setItem("modules_open_id", m.id); navigate("/modules"); }}
-                                className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <div className="w-8 h-8 bg-blue-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                                        <i className="fa-solid fa-cube text-blue-500 text-xs" />
+                        {myModules.map(m => {
+                            const tcs = m.test_cases || [];
+                            const total = tcs.length;
+                            const passed = tcs.filter(t => t.status === "Passed").length;
+                            const failed = tcs.filter(t => t.status === "Failed").length;
+                            const pending = tcs.filter(t => t.status === "Pending").length;
+                            const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
+                            return (
+                                <div key={m.id}
+                                    onClick={() => navigate("/modules", { state: { moduleId: m.id } })}
+                                    className="p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
+                                    <div className="flex items-center justify-between gap-3 mb-2">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="w-8 h-8 bg-blue-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                <i className="fa-solid fa-cube text-blue-500 text-xs" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-medium text-foreground truncate">{m.module_name}</p>
+                                                <p className="text-xs text-muted-foreground">{total} test case{total !== 1 ? "s" : ""}</p>
+                                            </div>
+                                        </div>
+                                        {m.status && <AssignmentBadge status={m.status} />}
                                     </div>
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-medium text-foreground truncate">{m.module_name}</p>
-                                        {m.description && <p className="text-xs text-muted-foreground truncate">{m.description}</p>}
-                                    </div>
+                                    {total > 0 && (
+                                        <div className="ml-11">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
+                                                    <div className="bg-green-500 h-1.5 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                                </div>
+                                                <span className="text-xs text-muted-foreground w-8 text-right">{pct}%</span>
+                                            </div>
+                                            <div className="flex gap-3">
+                                                <span className="text-xs text-green-600 font-medium">{passed} passed</span>
+                                                <span className="text-xs text-red-500 font-medium">{failed} failed</span>
+                                                <span className="text-xs text-yellow-500 font-medium">{pending} pending</span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                                {m.status && <AssignmentBadge status={m.status} />}
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 ) : activeTab === "versions" ? (
                     <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                        {myVersions.map(v => (
-                            <div key={v.id}
-                                onClick={() => { sessionStorage.setItem("versions_open_id", v.id); navigate("/versions"); }}
-                                className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                                        <i className="fa-solid fa-code-branch text-emerald-500 text-xs" />
+                        {myVersions.map(v => {
+                            const tcs = v.test_cases || [];
+                            const total = tcs.length;
+                            const passed = tcs.filter(t => t.status === "Passed").length;
+                            const failed = tcs.filter(t => t.status === "Failed").length;
+                            const pending = tcs.filter(t => t.status === "Pending").length;
+                            const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
+                            return (
+                                <div key={v.id}
+                                    onClick={() => navigate("/versions")}
+                                    className="p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
+                                    <div className="flex items-center justify-between gap-3 mb-2">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                <i className="fa-solid fa-code-branch text-emerald-500 text-xs" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-medium text-foreground truncate">{v.version_number}</p>
+                                                <div className="flex items-center gap-2">
+                                                    {v.release_date && (
+                                                        <span className="text-xs text-muted-foreground">
+                                                            Release: {new Date(v.release_date).toLocaleDateString()}
+                                                        </span>
+                                                    )}
+                                                    <span className="text-xs text-muted-foreground">{total} test case{total !== 1 ? "s" : ""}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {v.status && <AssignmentBadge status={v.status} />}
                                     </div>
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-medium text-foreground truncate">{v.version_number}</p>
-                                        {v.release_date && (
-                                            <p className="text-xs text-muted-foreground">
-                                                Release: {new Date(v.release_date).toLocaleDateString()}
-                                            </p>
-                                        )}
-                                    </div>
+                                    {total > 0 && (
+                                        <div className="ml-11">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
+                                                    <div className="bg-green-500 h-1.5 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                                </div>
+                                                <span className="text-xs text-muted-foreground w-8 text-right">{pct}%</span>
+                                            </div>
+                                            <div className="flex gap-3">
+                                                <span className="text-xs text-green-600 font-medium">{passed} passed</span>
+                                                <span className="text-xs text-red-500 font-medium">{failed} failed</span>
+                                                <span className="text-xs text-yellow-500 font-medium">{pending} pending</span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                                {v.status && <AssignmentBadge status={v.status} />}
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 ) : activeTab === "features" ? (
                     <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                         {myFeatures.map(f => (
                             <div key={f.id}
-                                onClick={() => { sessionStorage.setItem("features_open_id", f.id); navigate("/features"); }}
+                                onClick={() => navigate("/features")}
                                 className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className="w-8 h-8 bg-purple-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -389,7 +454,7 @@ export default function Dashboard() {
 
     useEffect(() => {
         supabase.auth.getUser().then(({ data: { user } }) => {
-            if (user) setCurrentUserId(user.id);
+            if (user) setCurrentUserId(user.email);
         });
     }, []);
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import { supabase } from "../services/supabaseClient";
 
 // Force all Supabase REST fetches to bypass the browser HTTP cache.
@@ -16,7 +17,6 @@ if (typeof window !== "undefined") {
 }
 
 // ── Session-persisted pending updates ────────────────────────────────────────
-// Keeps pass/fail colors alive across page switches for the entire browser session.
 const STORAGE_KEY = "te_pending_updates";
 function loadPendingUpdates() {
     try { return JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "{}"); } catch { return {}; }
@@ -297,8 +297,6 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
 
                 const { data, error: err } = await q;
                 if (!cancelled) {
-                    // Load latest pendingUpdates from sessionStorage at mapping time
-                    // so even a full re-fetch gets the correct overrides applied.
                     const latestPending = loadPendingUpdates();
                     const { mod, feat, ver } = mapsRef.current;
                     setTestCases((data || []).map(t => {
@@ -320,8 +318,6 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
         return () => { cancelled = true; };
     }, [metaReady, filterVersion, filterModule, filterFeature, filterStatus, allFeatures]);
 
-    // Patch test cases in-place when pendingUpdates changes (instant visual feedback
-    // after returning from ExecuteView, no re-fetch needed).
     useEffect(() => {
         const allPending = { ...loadPendingUpdates(), ...pendingUpdates };
         if (Object.keys(allPending).length === 0) return;
@@ -557,138 +553,6 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
     );
 }
 
-// ── Multi-select dropdown for team assignment ──────────────────────────────────
-function MultiAssign({ label, icon, values, onChange, color = "emerald", profiles = [] }) {
-    const [open, setOpen] = useState(false);
-    const [search, setSearch] = useState("");
-    const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
-    const ref = useRef(null);
-    const btnRef = useRef(null);
-
-    useEffect(() => {
-        const h = (e) => {
-            if (ref.current && !ref.current.contains(e.target)) {
-                setOpen(false);
-                setSearch("");
-            }
-        };
-        document.addEventListener("mousedown", h);
-        return () => document.removeEventListener("mousedown", h);
-    }, []);
-
-    useEffect(() => {
-        if (open && btnRef.current) {
-            const rect = btnRef.current.getBoundingClientRect();
-            setDropdownPos({
-                top: rect.bottom + window.scrollY + 4,
-                left: rect.left + window.scrollX,
-                width: rect.width,
-            });
-        }
-    }, [open]);
-
-    const filtered = profiles.filter(p =>
-        (p.full_name || p.email || "").toLowerCase().includes(search.toLowerCase())
-    );
-
-    const COLORS = {
-        emerald: { pill: "bg-emerald-100 text-emerald-700", sel: "bg-emerald-50", check: "text-emerald-500" },
-        blue: { pill: "bg-blue-100 text-blue-700", sel: "bg-blue-50", check: "text-blue-500" },
-    };
-    const c = COLORS[color] || COLORS.emerald;
-
-    return (
-        <div ref={ref} className="relative">
-            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                <i className={`fa-solid ${icon} text-[9px]`} />{label}
-            </label>
-            {values.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-1.5">
-                    {values.map(id => {
-                        const p = profiles.find(x => x.id === id);
-                        const name = p?.full_name || p?.email || id;
-                        return (
-                            <span key={id} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${c.pill}`}>
-                                {name.split(" ")[0]}
-                                <button type="button" onClick={() => onChange(values.filter(v => v !== id))} className="hover:opacity-70 leading-none ml-0.5">×</button>
-                            </span>
-                        );
-                    })}
-                </div>
-            )}
-            <button
-                ref={btnRef}
-                type="button"
-                onClick={() => setOpen(p => !p)}
-                className={`w-full flex items-center justify-between px-3 py-2 bg-white border rounded-lg text-xs transition-all ${open ? "border-emerald-400 ring-2 ring-emerald-50" : "border-slate-200 hover:border-slate-300"}`}
-            >
-                <span className="text-slate-500">{values.length > 0 ? `${values.length} assigned` : "Select people…"}</span>
-                <i className={`fa-solid fa-chevron-down text-slate-400 text-[9px] transition-transform ${open ? "rotate-180" : ""}`} />
-            </button>
-
-            {open && (
-                <div
-                    style={{
-                        position: "fixed",
-                        top: dropdownPos.top,
-                        left: dropdownPos.left,
-                        width: dropdownPos.width,
-                        zIndex: 9999,
-                    }}
-                    className="bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
-                >
-                    <div className="p-2 border-b border-slate-100">
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                            placeholder="Search…"
-                            autoFocus
-                            className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                        />
-                    </div>
-                    <div className="max-h-44 overflow-y-auto py-1">
-                        {filtered.length === 0
-                            ? <p className="text-center text-xs text-slate-400 py-3">No profiles found</p>
-                            : filtered.map(p => {
-                                const isSel = values.includes(p.id);
-                                const name = p.full_name || p.email || "?";
-                                return (
-                                    <button
-                                        key={p.id}
-                                        type="button"
-                                        onClick={() => onChange(isSel ? values.filter(v => v !== p.id) : [...values, p.id])}
-                                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs hover:bg-slate-50 transition-colors ${isSel ? c.sel : ""}`}
-                                    >
-                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 text-[10px] ${isSel ? "bg-emerald-500" : "bg-slate-300"}`}>
-                                            {name[0]?.toUpperCase() || "?"}
-                                        </div>
-                                        <div className="flex-1 text-left min-w-0">
-                                            <p className={`font-medium truncate ${isSel ? "text-slate-900" : "text-slate-600"}`}>{name}</p>
-                                            {p.role && <p className="text-slate-400 text-[10px] capitalize">{p.role}</p>}
-                                        </div>
-                                        {isSel && <i className={`fa-solid fa-check ${c.check} text-[10px] flex-shrink-0`} />}
-                                    </button>
-                                );
-                            })}
-                    </div>
-                    {values.length > 0 && (
-                        <div className="p-2 border-t border-slate-100">
-                            <button
-                                type="button"
-                                onClick={() => onChange([])}
-                                className="w-full py-1.5 text-[10px] font-semibold text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                            >
-                                Clear all
-                            </button>
-                        </div>
-                    )}
-                </div>
-            )}
-        </div>
-    );
-}
-
 // ═════════════════════════════════════════════════════════════════════════════
 // VIEW 2 — EXECUTE A TEST CASE
 // ═════════════════════════════════════════════════════════════════════════════
@@ -698,12 +562,6 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
     const [version, setVersion] = useState(null);
     const [tester, setTester] = useState(null);
     const [executionHistory, setExecutionHistory] = useState([]);
-    const [allProfiles, setAllProfiles] = useState([]);
-    const [assignedTesters, setAssignedTesters] = useState(
-        testCase.assigned_to ? [testCase.assigned_to] : []
-    );
-    const [assignedDevs, setAssignedDevs] = useState([]);
-    const [savingAssign, setSavingAssign] = useState(false);
 
     const [allVersions, setAllVersions] = useState([]);
     const [versionsLoading, setVersionsLoading] = useState(false);
@@ -769,15 +627,6 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
     }, []);
 
     useEffect(() => {
-        (async () => {
-            try {
-                const { data } = await supabase.from("profiles").select("id,full_name,email,role").order("full_name", { ascending: true });
-                setAllProfiles(data || []);
-            } catch (e) { console.warn(e); }
-        })();
-    }, []);
-
-    useEffect(() => {
         const normalised = isUntested(testCase.status) ? "not-tested" : (testCase.status || "not-tested");
         setSelectedStatus(normalised);
         setExpectedResult(testCase.expected_result || "");
@@ -786,8 +635,6 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
         setStepsToReproduce(""); setAdditionalNotes("");
         setLinkedBugId(""); setLinkedIssue(null); setUploadedFiles([]);
         setExecutionHistory([]);
-        setAssignedTesters(testCase.assigned_to ? [testCase.assigned_to] : []);
-        setAssignedDevs([]);
         setModule(null); setFeature(null);
         if (!manualVersion) setVersion(null);
     }, [testCase.id]);
@@ -912,17 +759,6 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
         }
     }, [testCase]);
 
-    const handleSaveAssignments = async () => {
-        setSavingAssign(true);
-        try {
-            const updates = {};
-            if (assignedTesters.length > 0) updates.assigned_to = assignedTesters[0];
-            await supabase.from("test_cases").update(updates).eq("id", testCase.id);
-            showNotif("Assignments saved!");
-        } catch (e) { alert("Error: " + e.message); }
-        finally { setSavingAssign(false); }
-    };
-
     const sm = getSM(selectedStatus);
 
     return (
@@ -1004,9 +840,9 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
             <main className="flex-1 overflow-y-auto">
                 <div className="p-5 space-y-4 max-w-3xl mx-auto">
 
-                    {/* Context + Team Card */}
+                    {/* Context Card */}
                     <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-100 border-b border-slate-100">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-100">
                             {[
                                 { label: "Version", icon: "fa-code-branch", value: version ? `v${version.version_number}` : "—", sub: version?.build_number || "", color: "text-blue-400", bg: "bg-blue-50" },
                                 { label: "Module", icon: "fa-puzzle-piece", value: module?.module_name || "—", sub: "", color: "text-teal-400", bg: "bg-teal-50" },
@@ -1023,26 +859,15 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
                                 </div>
                             ))}
                         </div>
-
-                        <div className="px-5 py-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" style={{ overflow: "visible" }}>
-                                <MultiAssign label="Assign Testers" icon="fa-flask" values={assignedTesters} onChange={setAssignedTesters} color="emerald" profiles={allProfiles} />
-                                <MultiAssign label="Assign Developers" icon="fa-code" values={assignedDevs} onChange={setAssignedDevs} color="blue" profiles={allProfiles} />
+                        {executionHistory.length > 0 && (
+                            <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between">
+                                <span className={`text-xs flex items-center gap-1.5 ${getSM(executionHistory[0].execution_status).color}`}>
+                                    <i className="fa-solid fa-history text-slate-400 text-xs" />
+                                    Last run: {new Date(executionHistory[0].executed_at).toLocaleDateString()} —
+                                    <span className="font-semibold">{executionHistory[0].execution_status}</span>
+                                </span>
                             </div>
-                            <div className="flex items-center justify-between mt-3">
-                                {executionHistory.length > 0 ? (
-                                    <span className={`text-xs flex items-center gap-1.5 ${getSM(executionHistory[0].execution_status).color}`}>
-                                        <i className="fa-solid fa-history text-slate-400 text-xs" />
-                                        Last run: {new Date(executionHistory[0].executed_at).toLocaleDateString()} —
-                                        <span className="font-semibold">{executionHistory[0].execution_status}</span>
-                                    </span>
-                                ) : <span />}
-                                <button onClick={handleSaveAssignments} disabled={savingAssign}
-                                    className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-                                    {savingAssign ? <><i className="fa-solid fa-spinner fa-spin text-xs" />Saving…</> : <><i className="fa-solid fa-check text-xs" />Save Assignments</>}
-                                </button>
-                            </div>
-                        </div>
+                        )}
                     </div>
 
                     {/* Test Case Details */}
@@ -1188,31 +1013,28 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
 // ROOT
 // ═════════════════════════════════════════════════════════════════════════════
 export default function TestExecution() {
+    const location = useLocation();
     const [selectedTest, setSelectedTest] = useState(null);
     const [testList, setTestList] = useState([]);
     const [selectedIdx, setSelectedIdx] = useState(-1);
+    const [loadingDirect, setLoadingDirect] = useState(false);
 
-    // Initialise from sessionStorage so colors survive page switches.
     const [pendingUpdates, setPendingUpdates] = useState(() => loadPendingUpdates());
 
-    // ── Direct-open: navigate here from another page with a specific test case ──
     useEffect(() => {
-        const tcId = sessionStorage.getItem("te_direct_open");
-        if (!tcId) return;
-        sessionStorage.removeItem("te_direct_open");
-        (async () => {
-            const { data } = await supabase
-                .from("test_cases")
-                .select("*")
-                .eq("id", tcId)
-                .single();
-            if (data) {
-                setTestList([data]);
-                setSelectedIdx(0);
-                setSelectedTest(data);
-            }
-        })();
-    }, []);
+        const testCaseId = location.state?.testCaseId;
+        if (!testCaseId) return;
+        setLoadingDirect(true);
+        supabase
+            .from("test_cases")
+            .select("*")
+            .eq("id", testCaseId)
+            .single()
+            .then(({ data }) => {
+                if (data) setSelectedTest(data);
+                setLoadingDirect(false);
+            });
+    }, [location.state?.testCaseId]);
 
     const handleSelect = (test, list = []) => {
         const idx = list.findIndex(t => t.id === test.id);
@@ -1225,8 +1047,6 @@ export default function TestExecution() {
         if (updatedId && updatedStatus) {
             setPendingUpdates(prev => {
                 const next = { ...prev, [updatedId]: updatedStatus };
-                // Persist to sessionStorage so the map survives if this component
-                // unmounts when the user navigates to another page and comes back.
                 savePendingUpdates(next);
                 return next;
             });
@@ -1241,6 +1061,17 @@ export default function TestExecution() {
             setSelectedTest(testList[next]);
         }
     };
+
+    if (loadingDirect) {
+        return (
+            <div className="flex-1 flex items-center justify-center">
+                <div className="text-center">
+                    <i className="fa-solid fa-spinner fa-spin text-4xl text-emerald-600 mb-4" />
+                    <p className="text-slate-500">Loading test case...</p>
+                </div>
+            </div>
+        );
+    }
 
     if (selectedTest) {
         return (
