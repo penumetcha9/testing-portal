@@ -78,7 +78,6 @@ function MyAssignments({ userId }) {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [myModules, setMyModules] = useState([]);
-    const [myVersions, setMyVersions] = useState([]);
     const [myFeatures, setMyFeatures] = useState([]);
     const [myTestCases, setMyTestCases] = useState([]);
     const [activeTab, setActiveTab] = useState("testcases");
@@ -93,7 +92,6 @@ function MyAssignments({ userId }) {
         await Promise.all([
             fetchMyTestCases(),
             fetchMyModules(),
-            fetchMyVersions(),
             fetchMyFeatures(),
         ]);
         setLoading(false);
@@ -136,27 +134,6 @@ function MyAssignments({ userId }) {
         if (!error && data) setMyModules(data);
     }
 
-    async function fetchMyVersions() {
-        const { data: tcData, error: tcError } = await supabase
-            .from("test_cases")
-            .select("version_id")
-            .eq("assigned_to", userId);
-
-        if (tcError || !tcData) return;
-
-        const versionIds = [...new Set(tcData.map(tc => tc.version_id).filter(Boolean))];
-        if (versionIds.length === 0) { setMyVersions([]); return; }
-
-        const { data, error } = await supabase
-            .from("versions")
-            .select("id, version_number, status, release_date, description, test_cases ( status )")
-            .in("id", versionIds)
-            .order("created_date", { ascending: false });
-
-        if (error) console.error("fetchMyVersions error:", error);
-        if (!error && data) setMyVersions(data);
-    }
-
     async function fetchMyFeatures() {
         const { data: tcData, error: tcError } = await supabase
             .from("test_cases")
@@ -194,14 +171,12 @@ function MyAssignments({ userId }) {
     const tabs = [
         { key: "testcases", label: "Test Cases", icon: "fa-vials", count: myTestCases.length },
         { key: "modules", label: "Modules", icon: "fa-cubes", count: myModules.length },
-        { key: "versions", label: "Versions", icon: "fa-code-branch", count: myVersions.length },
         { key: "features", label: "Features", icon: "fa-list-check", count: myFeatures.length },
     ];
 
     const isEmpty = {
         testcases: myTestCases.length === 0,
         modules: myModules.length === 0,
-        versions: myVersions.length === 0,
         features: myFeatures.length === 0,
     };
 
@@ -215,7 +190,7 @@ function MyAssignments({ userId }) {
                 <p className="text-sm text-muted-foreground">Items assigned to you across the project</p>
             </div>
 
-            <div className="grid grid-cols-4 border-b border-border divide-x divide-border">
+            <div className="grid grid-cols-3 border-b border-border divide-x divide-border">
                 {tabs.map(tab => (
                     <button
                         key={tab.key}
@@ -314,57 +289,6 @@ function MyAssignments({ userId }) {
                                             </div>
                                         </div>
                                         {m.status && <AssignmentBadge status={m.status} />}
-                                    </div>
-                                    {total > 0 && (
-                                        <div className="ml-11">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
-                                                    <div className="bg-green-500 h-1.5 rounded-full transition-all" style={{ width: `${pct}%` }} />
-                                                </div>
-                                                <span className="text-xs text-muted-foreground w-8 text-right">{pct}%</span>
-                                            </div>
-                                            <div className="flex gap-3">
-                                                <span className="text-xs text-green-600 font-medium">{passed} passed</span>
-                                                <span className="text-xs text-red-500 font-medium">{failed} failed</span>
-                                                <span className="text-xs text-yellow-500 font-medium">{pending} pending</span>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                ) : activeTab === "versions" ? (
-                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                        {myVersions.map(v => {
-                            const tcs = v.test_cases || [];
-                            const total = tcs.length;
-                            const passed = tcs.filter(t => t.status === "Passed").length;
-                            const failed = tcs.filter(t => t.status === "Failed").length;
-                            const pending = tcs.filter(t => t.status === "Pending").length;
-                            const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
-                            return (
-                                <div key={v.id}
-                                    onClick={() => navigate("/versions")}
-                                    className="p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
-                                    <div className="flex items-center justify-between gap-3 mb-2">
-                                        <div className="flex items-center gap-3 min-w-0">
-                                            <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                <i className="fa-solid fa-code-branch text-emerald-500 text-xs" />
-                                            </div>
-                                            <div className="min-w-0">
-                                                <p className="text-sm font-medium text-foreground truncate">{v.version_number}</p>
-                                                <div className="flex items-center gap-2">
-                                                    {v.release_date && (
-                                                        <span className="text-xs text-muted-foreground">
-                                                            Release: {new Date(v.release_date).toLocaleDateString()}
-                                                        </span>
-                                                    )}
-                                                    <span className="text-xs text-muted-foreground">{total} test case{total !== 1 ? "s" : ""}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        {v.status && <AssignmentBadge status={v.status} />}
                                     </div>
                                     {total > 0 && (
                                         <div className="ml-11">
@@ -497,22 +421,13 @@ export default function Dashboard() {
         const exec = executions || 0;
         const passRate = exec > 0 ? Math.round((p / exec) * 100) : 0;
 
-        setStats({
-            total: t,
-            passed: p,
-            failed: f,
-            passRate,
-            executions: exec,
-        });
+        setStats({ total: t, passed: p, failed: f, passRate, executions: exec });
     }
 
     async function fetchVersionStats() {
         const { data: versionsData, error: vErr } = await supabase
             .from("versions")
-            .select(`
-                id, version_number, status,
-                test_cases ( status )
-            `)
+            .select(`id, version_number, status, test_cases ( status )`)
             .order("created_date", { ascending: false })
             .limit(3);
 
@@ -532,14 +447,8 @@ export default function Dashboard() {
             const pending = tcs.filter(t => t.status === "Pending").length;
             const completion = total > 0 ? Math.round(((passed + failed) / total) * 100) : 0;
             return {
-                version_id: v.id,
-                label: v.version_number,
-                status: v.status,
-                total,
-                passed,
-                failed,
-                pending,
-                completion,
+                version_id: v.id, label: v.version_number, status: v.status,
+                total, passed, failed, pending, completion,
                 colors: colorOptions[i] || colorOptions[0],
             };
         });
@@ -561,11 +470,7 @@ export default function Dashboard() {
             const passed = tcs.filter(t => t.status === "Passed").length;
             const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
             return {
-                id: m.id,
-                name: m.module_name,
-                pct,
-                total,
-                passed,
+                id: m.id, name: m.module_name, pct, total, passed,
                 color: pct >= 80 ? "bg-green-500" : pct >= 50 ? "bg-accent" : "bg-destructive",
             };
         }).sort((a, b) => b.pct - a.pct);
@@ -605,10 +510,7 @@ export default function Dashboard() {
     async function fetchTeamPerformance() {
         const { data: execData, error } = await supabase
             .from("test_executions")
-            .select(`
-                executed_by, execution_status,
-                executor:profiles!executed_by ( id, full_name, avatar_url, email )
-            `);
+            .select(`executed_by, execution_status, executor:profiles!executed_by ( id, full_name, avatar_url, email )`);
 
         if (error || !execData) return;
 
@@ -633,11 +535,7 @@ export default function Dashboard() {
         const shaped = Object.values(memberMap)
             .map(m => {
                 const passRate = m.assigned > 0 ? Math.round((m.completed / m.assigned) * 100) : 0;
-                return {
-                    ...m,
-                    passRate,
-                    barColor: passRate >= 80 ? "bg-green-500" : passRate >= 50 ? "bg-accent" : "bg-destructive",
-                };
+                return { ...m, passRate, barColor: passRate >= 80 ? "bg-green-500" : passRate >= 50 ? "bg-accent" : "bg-destructive" };
             })
             .sort((a, b) => b.assigned - a.assigned);
 
@@ -724,62 +622,17 @@ export default function Dashboard() {
             <main className="flex-1 overflow-auto">
                 <div className="p-4 lg:p-8 space-y-6 lg:space-y-8">
 
-                    {/* ── KPI Cards: Total | Passed | Failed | Pass Rate | Executions ── */}
+                    {/* ── KPI Cards ── */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-                        <StatCard
-                            loading={loading}
-                            icon="fa-vials"
-                            iconBg="bg-primary/10"
-                            iconColor="text-primary"
-                            label="Total Test Cases"
-                            value={stats.total}
-                            sub="All versions"
-                            subColor="text-muted-foreground"
-                        />
-                        <StatCard
-                            loading={loading}
-                            icon="fa-circle-check"
-                            iconBg="bg-green-500/10"
-                            iconColor="text-green-500"
-                            label="Passed Attempts"
-                            value={stats.passed}
-                            sub={`${stats.passRate}% pass rate`}
-                            subColor="text-green-500"
-                        />
-                        <StatCard
-                            loading={loading}
-                            icon="fa-circle-xmark"
-                            iconBg="bg-destructive/10"
-                            iconColor="text-destructive"
-                            label="Failed Attempts"
-                            value={stats.failed}
-                            sub="Needs attention"
-                            subColor="text-destructive"
-                        />
-                        <StatCard
-                            loading={loading}
-                            icon="fa-gauge-high"
-                            iconBg="bg-muted"
-                            iconColor="text-muted-foreground"
-                            label="Pass Rate"
-                            value={`${stats.passRate}%`}
-                            sub="Overall quality"
-                            subColor={stats.passRate >= 80 ? "text-green-500" : "text-destructive"}
-                        />
-                        <StatCard
-                            loading={loading}
-                            icon="fa-play-circle"
-                            iconBg="bg-secondary/10"
-                            iconColor="text-secondary"
-                            label="Executions"
-                            value={stats.executions}
-                            sub="Total runs"
-                            subColor="text-muted-foreground"
-                        />
+                        <StatCard loading={loading} icon="fa-vials" iconBg="bg-primary/10" iconColor="text-primary" label="Total Test Cases" value={stats.total} sub="All versions" subColor="text-muted-foreground" />
+                        <StatCard loading={loading} icon="fa-circle-check" iconBg="bg-green-500/10" iconColor="text-green-500" label="Passed Attempts" value={stats.passed} sub={`${stats.passRate}% pass rate`} subColor="text-green-500" />
+                        <StatCard loading={loading} icon="fa-circle-xmark" iconBg="bg-destructive/10" iconColor="text-destructive" label="Failed Attempts" value={stats.failed} sub="Needs attention" subColor="text-destructive" />
+                        <StatCard loading={loading} icon="fa-gauge-high" iconBg="bg-muted" iconColor="text-muted-foreground" label="Pass Rate" value={`${stats.passRate}%`} sub="Overall quality" subColor={stats.passRate >= 80 ? "text-green-500" : "text-destructive"} />
+                        <StatCard loading={loading} icon="fa-play-circle" iconBg="bg-secondary/10" iconColor="text-secondary" label="Executions" value={stats.executions} sub="Total runs" subColor="text-muted-foreground" />
                     </div>
 
                     {/* ── MY ASSIGNMENTS ── */}
-                    <MyAssignments userId={currentUserId} loading={loading} />
+                    <MyAssignments userId={currentUserId} />
 
                     {/* ── Active Versions + Status Chart ── */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
@@ -789,8 +642,7 @@ export default function Dashboard() {
                                     <h3 className="text-lg font-bold text-foreground mb-1">Active Versions</h3>
                                     <p className="text-sm text-muted-foreground">Test case distribution by version</p>
                                 </div>
-                                <button onClick={() => navigate("/versions")}
-                                    className="self-start sm:self-auto text-primary font-medium text-sm flex items-center gap-2 hover:opacity-80 transition-opacity">
+                                <button onClick={() => navigate("/versions")} className="self-start sm:self-auto text-primary font-medium text-sm flex items-center gap-2 hover:opacity-80 transition-opacity">
                                     View All <i className="fa-solid fa-arrow-right" />
                                 </button>
                             </div>
@@ -866,13 +718,10 @@ export default function Dashboard() {
                                                 <div key={s.label}>
                                                     <div className="flex justify-between mb-1.5 text-sm">
                                                         <span className="font-medium text-foreground">{s.label}</span>
-                                                        <span className={`font-semibold ${s.textColor}`}>
-                                                            {s.value} ({pct}%)
-                                                        </span>
+                                                        <span className={`font-semibold ${s.textColor}`}>{s.value} ({pct}%)</span>
                                                     </div>
                                                     <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
-                                                        <div className={`${s.color} h-3 rounded-full transition-all duration-700`}
-                                                            style={{ width: `${pct}%` }} />
+                                                        <div className={`${s.color} h-3 rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
                                                     </div>
                                                 </div>
                                             );
@@ -901,8 +750,7 @@ export default function Dashboard() {
                                     <h3 className="text-lg font-bold text-foreground mb-1">Module Coverage</h3>
                                     <p className="text-sm text-muted-foreground">Pass rate by module</p>
                                 </div>
-                                <button onClick={() => navigate("/modules")}
-                                    className="text-primary font-medium text-sm hover:opacity-80 transition-opacity">View All</button>
+                                <button onClick={() => navigate("/modules")} className="text-primary font-medium text-sm hover:opacity-80 transition-opacity">View All</button>
                             </div>
                             <div className="p-6 space-y-4">
                                 {loading ? [1, 2, 3, 4, 5].map(i => (
@@ -933,8 +781,7 @@ export default function Dashboard() {
                                     <h3 className="text-lg font-bold text-foreground mb-1">Recent Failed Issues</h3>
                                     <p className="text-sm text-muted-foreground">Latest issues requiring attention</p>
                                 </div>
-                                <button onClick={() => navigate("/failed-issues")}
-                                    className="text-primary font-medium text-sm hover:opacity-80 transition-opacity">View All</button>
+                                <button onClick={() => navigate("/failed-issues")} className="text-primary font-medium text-sm hover:opacity-80 transition-opacity">View All</button>
                             </div>
                             <div className="p-6 space-y-4">
                                 {loading ? [1, 2, 3, 4].map(i => (
