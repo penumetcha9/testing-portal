@@ -307,10 +307,6 @@ function IssueDetailsPanel({ issue, users, onAssign, onLinkBug, onAddComment, on
                                 className="w-full px-4 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors active:scale-95 flex items-center gap-2">
                                 <i className="fa-solid fa-user-plus" />Assign to Developer
                             </button>
-                            <button onClick={() => onLinkBug(issue)}
-                                className="w-full px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors active:scale-95 flex items-center gap-2">
-                                <i className="fa-solid fa-link" />Link to Bug Tracker
-                            </button>
                             <button onClick={() => onAddComment(issue)}
                                 className="w-full px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors active:scale-95 flex items-center gap-2">
                                 <i className="fa-solid fa-comment" />Add Comment

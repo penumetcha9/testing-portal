@@ -89,39 +89,61 @@ function MyAssignments({ userId }) {
 
     async function fetchMyAssignments() {
         setLoading(true);
+
+        // Step 1: resolve the user's full_name from profiles using their UUID.
+        // assigned_to in test_cases stores a name string (e.g. "krishna"), not a UUID.
+        const { data: profileData } = await supabase
+            .from("profiles")
+            .select("id, full_name, email")
+            .eq("id", userId)
+            .single();
+
+        const userName = profileData?.full_name || profileData?.email || userId;
+        console.log("MyAssignments: resolved userName =", userName, "from userId =", userId);
+
         await Promise.all([
-            fetchMyTestCases(),
-            fetchMyModules(),
-            fetchMyFeatures(),
+            fetchMyTestCases(userName),
+            fetchMyModules(userName),
+            fetchMyFeatures(userName),
         ]);
         setLoading(false);
     }
 
-    async function fetchMyTestCases() {
-        const { data, error } = await supabase
-            .from("test_cases")
-            .select(`
-                id, name, test_case_id, status, priority,
-                modules ( module_name ),
-                versions ( version_number )
-            `)
-            .eq("assigned_to", userId)
-            .order("created_at", { ascending: false })
-            .limit(20);
+    async function fetchMyTestCases(userName) {
+        // Try matching by UUID first, fall back to name string
+        const [byId, byName] = await Promise.all([
+            supabase
+                .from("test_cases")
+                .select(`id, name, test_case_id, status, priority, modules ( module_name ), versions ( version_number )`)
+                .eq("assigned_to", userId)
+                .order("created_at", { ascending: false })
+                .limit(20),
+            supabase
+                .from("test_cases")
+                .select(`id, name, test_case_id, status, priority, modules ( module_name ), versions ( version_number )`)
+                .eq("assigned_to", userName)
+                .order("created_at", { ascending: false })
+                .limit(20),
+        ]);
 
-        if (error) console.error("fetchMyTestCases error:", error);
-        if (!error && data) setMyTestCases(data);
+        const merged = [
+            ...(byId.data || []),
+            ...(byName.data || []),
+        ];
+        const unique = Array.from(new Map(merged.map(tc => [tc.id, tc])).values());
+        console.log("fetchMyTestCases: found", unique.length, "records");
+        setMyTestCases(unique);
     }
 
-    async function fetchMyModules() {
-        const { data: tcData, error: tcError } = await supabase
-            .from("test_cases")
-            .select("module_id")
-            .eq("assigned_to", userId);
+    async function fetchMyModules(userName) {
+        // Fetch test_cases assigned to user (by UUID or name) to get their module_ids
+        const [byId, byName] = await Promise.all([
+            supabase.from("test_cases").select("module_id").eq("assigned_to", userId),
+            supabase.from("test_cases").select("module_id").eq("assigned_to", userName),
+        ]);
 
-        if (tcError || !tcData) return;
-
-        const moduleIds = [...new Set(tcData.map(tc => tc.module_id).filter(Boolean))];
+        const allTcs = [...(byId.data || []), ...(byName.data || [])];
+        const moduleIds = [...new Set(allTcs.map(tc => tc.module_id).filter(Boolean))];
         if (moduleIds.length === 0) { setMyModules([]); return; }
 
         const { data, error } = await supabase
@@ -134,21 +156,25 @@ function MyAssignments({ userId }) {
         if (!error && data) setMyModules(data);
     }
 
-    async function fetchMyFeatures() {
-        const { data: tcData, error: tcError } = await supabase
-            .from("test_cases")
-            .select("feature_id")
-            .eq("assigned_to", userId);
+    async function fetchMyFeatures(userName) {
+        const [byId, byName] = await Promise.all([
+            supabase.from("test_cases").select("feature_id").eq("assigned_to", userId),
+            supabase.from("test_cases").select("feature_id").eq("assigned_to", userName),
+        ]);
 
-        if (tcError || !tcData) return;
-
-        const featureIds = [...new Set(tcData.map(tc => tc.feature_id).filter(Boolean))];
+        const allTcs = [...(byId.data || []), ...(byName.data || [])];
+        const featureIds = [...new Set(allTcs.map(tc => tc.feature_id).filter(Boolean))];
 
         const queries = [
             supabase
                 .from("features")
                 .select("id, feature_name, status, priority, modules ( module_name )")
                 .eq("assign_to", userId.toString())
+                .order("feature_name"),
+            supabase
+                .from("features")
+                .select("id, feature_name, status, priority, modules ( module_name )")
+                .eq("assign_to", userName)
                 .order("feature_name"),
         ];
 
@@ -378,7 +404,7 @@ export default function Dashboard() {
 
     useEffect(() => {
         supabase.auth.getUser().then(({ data: { user } }) => {
-            if (user) setCurrentUserId(user.email);
+            if (user) setCurrentUserId(user.id);
         });
     }, []);
 
@@ -478,20 +504,24 @@ export default function Dashboard() {
         setModules(shaped);
     }
 
+    // ── fetchFailedIssues ────────────────────────────────────────────────────
+    // Mirrors FailedIssues.jsx exactly: queries test_cases with status in
+    // ['fail', 'Failed', 'failed'], same select fields and shape.
     async function fetchFailedIssues() {
         const { data, error } = await supabase
-            .from("issues")
-            .select(`
-                id, bug_id, priority, issue_type, failure_comment,
-                affected_component, created_at,
-                reporter:profiles!reported_by ( full_name, avatar_url ),
-                modules ( module_name ),
-                features ( feature_name )
-            `)
+            .from("test_cases")
+            .select("*")
+            .in("status", ["fail", "Failed", "failed"])
             .order("created_at", { ascending: false })
             .limit(4);
 
-        if (error || !data) return;
+        if (error) {
+            console.error("fetchFailedIssues error:", error);
+            addToast("Failed to load recent issues", "error");
+            return;
+        }
+
+        if (!data) return;
 
         const priorityMap = {
             Critical: { iconBg: "bg-destructive/10", iconColor: "text-destructive", icon: "fa-bug", severityBg: "bg-destructive/10", severityColor: "text-destructive" },
@@ -500,10 +530,10 @@ export default function Dashboard() {
             Low: { iconBg: "bg-muted", iconColor: "text-muted-foreground", icon: "fa-circle-info", severityBg: "bg-muted", severityColor: "text-muted-foreground" },
         };
 
-        setFailedIssues(data.map(issue => ({
-            ...issue,
-            style: priorityMap[issue.priority] || priorityMap.Low,
-            timeAgo: timeAgo(issue.created_at),
+        setFailedIssues(data.map(tc => ({
+            ...tc,
+            style: priorityMap[tc.priority] || priorityMap.Low,
+            timeAgo: timeAgo(tc.created_at),
         })));
     }
 
@@ -798,15 +828,19 @@ export default function Dashboard() {
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2 mb-1">
-                                                <h4 className="text-sm font-semibold text-foreground truncate">{issue.bug_id}</h4>
-                                                {issue.issue_type && (
-                                                    <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">{issue.issue_type}</span>
+                                                <h4 className="text-sm font-semibold text-foreground truncate">{issue.test_case_id}</h4>
+                                                {issue.test_type && (
+                                                    <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">{issue.test_type}</span>
                                                 )}
                                             </div>
-                                            <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{issue.failure_comment || issue.affected_component}</p>
+                                            <p className="text-xs text-muted-foreground mb-1 line-clamp-2">{issue.name}</p>
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <span className={`text-xs px-2 py-1 ${issue.style.severityBg} ${issue.style.severityColor} rounded-full`}>{issue.priority}</span>
-                                                {issue.modules?.module_name && <span className="text-xs text-muted-foreground">{issue.modules.module_name}</span>}
+                                                {issue.assigned_to && (
+                                                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                        <i className="fa-solid fa-user text-[10px]" />{issue.assigned_to}
+                                                    </span>
+                                                )}
                                                 <span className="text-xs text-muted-foreground ml-auto">{issue.timeAgo}</span>
                                             </div>
                                         </div>
@@ -949,7 +983,7 @@ export default function Dashboard() {
                                             </div>
                                         ))}
                                     </div>
-                                    <div className="flex items-end gap-2 h-40">
+                                    <div className="flex items-end gap-2 h-40 max-w-xs">
                                         {trends.labels.map((label, i) => {
                                             const total = (trends.passed[i] || 0) + (trends.failed[i] || 0) + (trends.pending[i] || 0);
                                             const maxTotal = Math.max(...trends.labels.map((_, j) =>

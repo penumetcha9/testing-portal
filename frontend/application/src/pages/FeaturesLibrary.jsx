@@ -1,5 +1,25 @@
-import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, memo, Component } from "react";
 import supabase from "../services/supabaseClient";
+
+// ─── Error Boundary ────────────────────────────────────────────────────────────
+class ErrorBoundary extends Component {
+    constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+    static getDerivedStateFromError(error) { return { hasError: true, error }; }
+    componentDidCatch(error, info) { console.error("[FeaturesLibrary] Render error:", error, info); }
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12, padding: 40 }}>
+                    <div style={{ fontSize: 32 }}>⚠️</div>
+                    <p style={{ fontSize: 15, fontWeight: 600, color: "#111827" }}>Something went wrong loading the Features Library.</p>
+                    <p style={{ fontSize: 13, color: "#6B7280", maxWidth: 480, textAlign: "center" }}>{this.state.error?.message}</p>
+                    <button onClick={() => this.setState({ hasError: false, error: null })} style={{ padding: "9px 20px", background: "#15803d", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Try Again</button>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
 
 // ─── Global styles ─────────────────────────────────────────────────────────────
 const GLOBAL_STYLES = `
@@ -202,9 +222,6 @@ const generateNextTcId = (allTestCases) => { let max = 0; for (const tc of allTe
 const generateNextFeatCode = (allFeatures) => { let max = 0; for (const f of allFeatures) { const code = f.feature_code || f.code || ""; const m = code.match(/^FEAT-(\d+)$/i); if (m) max = Math.max(max, parseInt(m[1], 10)); } return `FEAT-${String(max + 1).padStart(3, "0")}`; };
 
 // ─── CSV helpers ───────────────────────────────────────────────────────────────
-/**
- * Robust CSV line parser — handles quoted fields, escaped quotes, and trims whitespace.
- */
 const splitCSVLine = (line) => {
     const cells = []; let inQ = false, cur = "";
     for (let i = 0; i < line.length; i++) {
@@ -217,10 +234,6 @@ const splitCSVLine = (line) => {
     return cells;
 };
 
-/**
- * Normalise a raw CSV header token: strip BOM, quotes, and surrounding whitespace,
- * then lowercase — so comparisons are reliable regardless of Excel export quirks.
- */
 const normaliseHeader = (h) =>
     h.replace(/^\uFEFF/, "").replace(/^["'\s]+|["'\s]+$/g, "").toLowerCase().trim();
 
@@ -365,18 +378,11 @@ const downloadCSV = (columns, filename, exampleRow) => {
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 };
 
-/**
- * ParseFeedback — renders parse status, per-row errors, and a preview table.
- *
- * FIX: previously referenced `parsed.validRows` (a number that never existed on
- * the returned object).  The parse functions return `{ rows, rowErrors, fatalError }`,
- * so we derive `validCount` from `rows.length` here.
- */
 function ParseFeedback({ parsed }) {
     if (!parsed) return null;
 
     const { rows = [], rowErrors = [], fatalError } = parsed;
-    const validCount = rows.length;          // ← was wrongly read as parsed.validRows
+    const validCount = rows.length;
     const errorCount = rowErrors.length;
 
     if (fatalError) {
@@ -390,7 +396,6 @@ function ParseFeedback({ parsed }) {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {/* Summary */}
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: validCount > 0 ? "rgba(22,163,74,0.07)" : "rgba(220,38,38,0.06)", border: `1px solid ${validCount > 0 ? "rgba(22,163,74,0.2)" : "rgba(220,38,38,0.2)"}`, borderRadius: 9 }}>
                 <i className={`fa-solid ${validCount > 0 ? "fa-circle-check" : "fa-circle-xmark"}`} style={{ color: validCount > 0 ? "#15803D" : T.red, fontSize: 13, flexShrink: 0 }}></i>
                 <span style={{ fontSize: 13, color: validCount > 0 ? "#15803D" : T.red, fontFamily: T.sans }}>
@@ -400,7 +405,6 @@ function ParseFeedback({ parsed }) {
                 </span>
             </div>
 
-            {/* Per-row errors */}
             {errorCount > 0 && (
                 <div style={{ border: `1px solid rgba(220,38,38,0.2)`, borderRadius: 9, overflow: "hidden" }}>
                     <div style={{ padding: "8px 14px", background: "rgba(220,38,38,0.05)", borderBottom: `1px solid rgba(220,38,38,0.1)` }}>
@@ -420,7 +424,6 @@ function ParseFeedback({ parsed }) {
                 </div>
             )}
 
-            {/* Preview table of valid rows */}
             {validCount > 0 && rows.length > 0 && (
                 <div style={{ border: `1px solid rgba(22,163,74,0.2)`, borderRadius: 9, overflow: "hidden" }}>
                     <div style={{ padding: "8px 14px", background: "rgba(22,163,74,0.05)", borderBottom: `1px solid rgba(22,163,74,0.1)` }}>
@@ -459,16 +462,6 @@ function ParseFeedback({ parsed }) {
 }
 
 // ─── Import Features Modal ─────────────────────────────────────────────────────
-/**
- * KEY FIXES in this modal:
- * 1. parseCSV uses `normaliseHeader` so BOM / quote-wrapped headers from Excel work.
- * 2. Module lookup is done against the raw `modules` prop (enriched array from state),
- *    using both `module_name` and `name` keys with a case-insensitive trim.
- * 3. `assign_to` is Optional — a missing user now only logs a warning and sets NULL;
- *    the column reference label was also updated to show "Optional".
- * 4. `ParseFeedback` now receives the correct shape: `{ rows, rowErrors, fatalError }`.
- * 5. Import button is disabled only on fatalError or zero valid rows (not on rowErrors).
- */
 function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
     const [file, setFile] = useState(null);
     const [parsed, setParsed] = useState(null);
@@ -480,20 +473,12 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
         onClose();
     };
 
-    /**
-     * Returns { rows: ValidRow[], rowErrors: RowError[], fatalError: string|null }
-     *
-     * - `fatalError`  → structural problem (wrong/missing columns); blocks import
-     * - `rowErrors`   → per-row validation failures; those rows are skipped
-     * - `rows`        → only the rows that passed validation
-     */
     const parseCSV = (text) => {
         const allLines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter(l => l.trim());
         if (allLines.length < 2) {
             return { rows: [], rowErrors: [], fatalError: "CSV must have a header row and at least one data row." };
         }
 
-        // Build a normalised header → column-index map
         const rawHeaders = splitCSVLine(allLines[0]).map(normaliseHeader);
         const keyMap = {
             "module name": "module_name",
@@ -506,7 +491,6 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
         const idxMap = {};
         rawHeaders.forEach((h, i) => { const k = keyMap[h]; if (k) idxMap[k] = i; });
 
-        // Only truly required columns block the import
         const required = ["module_name", "feature_name", "feature_code", "description"];
         const missing = required
             .filter(k => idxMap[k] === undefined)
@@ -528,9 +512,9 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
             const module_name = get("module_name");
             const feature_name = get("feature_name");
             const feature_code = get("feature_code");
-            const user_story = get("user_story");       // optional
+            const user_story = get("user_story");
             const description = get("description");
-            const assign_to = get("assign_to");         // optional
+            const assign_to = get("assign_to");
 
             const errs = [];
             if (!module_name) errs.push("Module Name is required");
@@ -560,22 +544,18 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
         setImporting(true);
         const success = [], failed = [];
 
-        // Build module lookup: normalised name → id
-        // `modules` is the enriched array; each entry has module_name OR name
         const moduleMap = {};
         for (const m of modules) {
             const key = (m.module_name || m.name || "").toLowerCase().trim();
             if (key) moduleMap[key] = m.id;
         }
 
-        // Build user lookup: normalised full_name → UUID
         const userMap = {};
         for (const u of users) {
             if (u.name) userMap[u.name.toLowerCase().trim()] = u.id;
         }
 
         for (const row of parsed.rows) {
-            // Resolve module
             const moduleId = moduleMap[row.module_name.toLowerCase().trim()];
             if (!moduleId) {
                 failed.push({
@@ -585,7 +565,6 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
                 continue;
             }
 
-            // Resolve optional assignee
             const assignId = row.assign_to
                 ? (userMap[row.assign_to.toLowerCase().trim()] || null)
                 : null;
@@ -608,7 +587,6 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
             else success.push(row.feature_name);
         }
 
-        // Also surface rows that were skipped at parse-time
         const skipped = (parsed.rowErrors || []).map(e => ({
             name: e.name || `Row ${e.row}`,
             reason: Array.isArray(e.messages) ? e.messages.join(" · ") : e.messages,
@@ -625,7 +603,6 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
     return (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={handleClose}>
             <div className="fl-modal-enter" style={{ background: T.surface, borderRadius: 16, boxShadow: "0 24px 64px rgba(0,0,0,0.18)", width: "100%", maxWidth: 600, maxHeight: "90vh", overflowY: "auto", fontFamily: T.sans }} onClick={e => e.stopPropagation()}>
-                {/* Header */}
                 <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${T.borderLight}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between", position: "sticky", top: 0, background: T.surface, zIndex: 10 }}>
                     <div>
                         <h3 style={{ fontSize: 17, fontWeight: 700, color: T.text, margin: 0 }}>Import Features</h3>
@@ -637,7 +614,6 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
                 <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
                     {!result ? (
                         <>
-                            {/* Template banner */}
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, padding: "14px 18px", background: T.blueTint, border: `1px solid rgba(37,99,235,0.18)`, borderRadius: 10 }}>
                                 <div>
                                     <p style={{ fontSize: 13, fontWeight: 700, color: T.blue, margin: "0 0 2px" }}>Download Import Template</p>
@@ -655,7 +631,6 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
                                 </button>
                             </div>
 
-                            {/* Debug helper: shows available module names so users know what to type */}
                             {modules.length > 0 && (
                                 <div style={{ padding: "10px 14px", background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 9 }}>
                                     <p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Available Module Names</p>
@@ -678,7 +653,6 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
                     )}
                 </div>
 
-                {/* Footer */}
                 <div style={{ padding: "14px 24px", borderTop: `1px solid ${T.borderLight}`, position: "sticky", bottom: 0, background: T.surface, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10 }}>
                     <button onClick={handleClose} disabled={importing} style={{ padding: "9px 22px", background: T.surface, border: `1px solid ${T.border}`, color: T.textMid, borderRadius: 8, fontWeight: 500, fontSize: 13, cursor: "pointer", fontFamily: T.sans }}>Cancel</button>
                     {!result ? (
@@ -702,14 +676,6 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
 }
 
 // ─── Import Test Cases Modal ───────────────────────────────────────────────────
-/**
- * KEY FIXES:
- * 1. Same header normalisation via `normaliseHeader`.
- * 2. `assigned_to` and `user_story_codes` are now Optional — import proceeds without them.
- * 3. ParseFeedback reads `rows.length` not `parsed.validRows`.
- * 4. Auth user fetched once before the loop.
- * 5. Existing TC IDs fetched once before the loop.
- */
 function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userStories }) {
     const [file, setFile] = useState(null);
     const [parsed, setParsed] = useState(null);
@@ -741,7 +707,6 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
         const idxMap = {};
         rawHeaders.forEach((h, i) => { const k = keyMap[h]; if (k) idxMap[k] = i; });
 
-        // Only truly required columns
         const required = ["feature_code", "name", "description", "priority", "status", "test_type"];
         const missing = required
             .filter(k => idxMap[k] === undefined)
@@ -766,8 +731,8 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
             const priority = get("priority");
             const status = get("status");
             const test_type = get("test_type");
-            const assigned_to = get("assigned_to");       // optional
-            const user_story_codes = get("user_story_codes"); // optional
+            const assigned_to = get("assigned_to");
+            const user_story_codes = get("user_story_codes");
 
             const errs = [];
             if (!feature_code) errs.push("Feature Code is required");
@@ -802,7 +767,6 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
         setImporting(true);
         const success = [], failed = [];
 
-        // Build lookup maps (all case-insensitive)
         const featureMap = {};
         for (const f of flatFeatures) {
             const key = (f.feature_code || f.code || "").toLowerCase().trim();
@@ -819,15 +783,12 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
             if (s.code) storyMap[s.code.toLowerCase().trim()] = s.id;
         }
 
-        // Fetch existing TC IDs once
         const { data: existingTCs } = await supabase.from("test_cases").select("test_case_id");
         let allTCIds = (existingTCs || []).map(t => ({ tcId: t.test_case_id }));
 
-        // Fetch auth user once
         const { data: { user: authUser } } = await supabase.auth.getUser();
 
         for (const row of parsed.rows) {
-            // Resolve feature
             const feat = featureMap[row.feature_code.toLowerCase().trim()];
             if (!feat) {
                 failed.push({
@@ -837,7 +798,6 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
                 continue;
             }
 
-            // Resolve optional assignee
             const assignId = row.assigned_to
                 ? (userMap[row.assigned_to.toLowerCase().trim()] || null)
                 : null;
@@ -846,7 +806,6 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
                 console.warn(`[Import TCs] User "${row.assigned_to}" not found; importing with no assignee.`);
             }
 
-            // Resolve optional story codes → UUIDs
             let storyIds = [];
             if (row.user_story_codes) {
                 const storyCodes = row.user_story_codes.split(";").map(s => s.trim()).filter(Boolean);
@@ -882,7 +841,6 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
             else success.push(row.name);
         }
 
-        // Surface rows skipped at parse-time
         const skipped = (parsed.rowErrors || []).map(e => ({
             name: e.name || `Row ${e.row}`,
             reason: Array.isArray(e.messages) ? e.messages.join(" · ") : e.messages,
@@ -899,7 +857,6 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
     return (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={handleClose}>
             <div className="fl-modal-enter" style={{ background: T.surface, borderRadius: 16, boxShadow: "0 24px 64px rgba(0,0,0,0.18)", width: "100%", maxWidth: 640, maxHeight: "90vh", overflowY: "auto", fontFamily: T.sans }} onClick={e => e.stopPropagation()}>
-                {/* Header */}
                 <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${T.borderLight}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between", position: "sticky", top: 0, background: T.surface, zIndex: 10 }}>
                     <div>
                         <h3 style={{ fontSize: 17, fontWeight: 700, color: T.text, margin: 0 }}>Import Test Cases</h3>
@@ -911,7 +868,6 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
                 <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
                     {!result ? (
                         <>
-                            {/* Template banner */}
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, padding: "14px 18px", background: T.blueTint, border: `1px solid rgba(37,99,235,0.18)`, borderRadius: 10 }}>
                                 <div>
                                     <p style={{ fontSize: 13, fontWeight: 700, color: T.blue, margin: "0 0 2px" }}>Download Import Template</p>
@@ -929,7 +885,6 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
                                 </button>
                             </div>
 
-                            {/* Debug helper: show available feature codes */}
                             {flatFeatures.length > 0 && (
                                 <div style={{ padding: "10px 14px", background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 9 }}>
                                     <p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Available Feature Codes</p>
@@ -952,7 +907,6 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
                     )}
                 </div>
 
-                {/* Footer */}
                 <div style={{ padding: "14px 24px", borderTop: `1px solid ${T.borderLight}`, position: "sticky", bottom: 0, background: T.surface, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10 }}>
                     <button onClick={handleClose} disabled={importing} style={{ padding: "9px 22px", background: T.surface, border: `1px solid ${T.border}`, color: T.textMid, borderRadius: 8, fontWeight: 500, fontSize: 13, cursor: "pointer", fontFamily: T.sans }}>Cancel</button>
                     {!result ? (
@@ -1025,7 +979,7 @@ const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEdit, onDelete })
             <span style={{ fontSize: 10, fontWeight: 700, color: T.textFaint, textTransform: "uppercase", letterSpacing: "0.07em", fontFamily: T.sans, flexShrink: 0 }}>Module</span>
             <div style={{ width: 5, height: 5, borderRadius: "50%", background: T.blue, flexShrink: 0 }} />
             <span style={{ fontSize: 12, fontWeight: 600, color: T.textMid, fontFamily: T.sans }}>{feat.moduleName}</span>
-            <Chip label={feat.moduleCode} style={{ background: T.blueTint, color: T.blue }} mono />
+            <Chip label={String(feat.moduleCode ?? "")} style={{ background: T.blueTint, color: T.blue }} mono />
         </div>
         {isOpen && feat.testCases.length > 0 && (
             <div style={{ borderTop: `1px solid ${T.borderLight}` }}>
@@ -1050,7 +1004,11 @@ const BTN_PRIMARY = { padding: "9px 20px", background: "#15803d", border: "none"
 const BTN_DANGER = { padding: "9px 20px", background: T.red, border: "none", color: "#fff", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: T.sans };
 const Field = ({ label, required, children }) => (<div><label className="fl-label">{label}{required && <span style={{ color: T.red, marginLeft: 3 }}>*</span>}</label>{children}</div>);
 
-export default function FeaturesLibrary() {
+export default function FeaturesLibraryPage() {
+    return <ErrorBoundary><FeaturesLibrary /></ErrorBoundary>;
+}
+
+function FeaturesLibrary() {
     const [modules, setModules] = useState([]);
     const [users, setUsers] = useState([]);
     const [userStories, setUserStories] = useState([]);
@@ -1126,7 +1084,44 @@ export default function FeaturesLibrary() {
     const userOptions = useMemo(() => [{ id: "", name: "Select Assignee" }, ...users.map(u => ({ id: u.id, name: u.name }))], [users]);
     const testerOptions = useMemo(() => [{ id: "", name: "Select Tester" }, ...users.map(u => ({ id: u.name, name: u.name }))], [users]);
     const moduleOptions = useMemo(() => [{ id: "", name: "Choose Module" }, ...modules.map(m => ({ id: m.id, name: m.name }))], [modules]);
-    const filteredFeatures = useMemo(() => { let list = flatFeatures; if (filterStatus) list = list.filter(f => (f.status || "Active").toLowerCase() === filterStatus.toLowerCase()); if (searchQuery) { const q = searchQuery.toLowerCase(); list = list.filter(f => f.name.toLowerCase().includes(q) || f.code.toLowerCase().includes(q) || (f.moduleName || "").toLowerCase().includes(q) || (f.moduleCode || "").toLowerCase().includes(q) || f.testCases.some(tc => (tc.tcId || tc.id).toLowerCase().includes(q) || tc.name.toLowerCase().includes(q) || (tc.userStoryCodes || []).some(code => code.toLowerCase().includes(q)))); } return list; }, [flatFeatures, searchQuery, filterStatus]);
+
+    // ─── FIXED: null-safe search filter ───────────────────────────────────────
+    const filteredFeatures = useMemo(() => {
+        let list = flatFeatures;
+        if (filterStatus) {
+            list = list.filter(f => (f.status || "Active").toLowerCase() === filterStatus.toLowerCase());
+        }
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase().trim();
+            const s = (v) => String(v ?? "").toLowerCase();
+            list = list.filter(f =>
+                s(f.name).includes(q) ||
+                s(f.code).includes(q) ||
+                s(f.feature_name).includes(q) ||
+                s(f.feature_code).includes(q) ||
+                s(f.moduleName).includes(q) ||
+                s(f.moduleCode).includes(q) ||
+                s(f.description).includes(q) ||
+                (f.testCases || []).some(tc =>
+                    s(tc.tcId || tc.id).includes(q) ||
+                    s(tc.name).includes(q) ||
+                    s(tc.description).includes(q) ||
+                    (tc.userStoryCodes || []).some(code => s(code).includes(q))
+                )
+            );
+        }
+        return list;
+    }, [flatFeatures, searchQuery, filterStatus]);
+
+    // ─── Auto-expand matched features when searching ───────────────────────────
+    useEffect(() => {
+        if (searchQuery.trim()) {
+            const expanded = {};
+            filteredFeatures.forEach(f => { expanded[f.id] = true; });
+            setOpenFeatures(prev => ({ ...prev, ...expanded }));
+        }
+    }, [searchQuery, filteredFeatures]);
+
     const stats = useMemo(() => [{ label: "Modules", value: totalModules, icon: "fa-puzzle-piece", color: "blue" }, { label: "Features", value: totalFeatures, icon: "fa-list-check", color: "green" }, { label: "Test Cases", value: totalTestCases.toLocaleString(), icon: "fa-vial", color: "purple" }, { label: "Active Features", value: flatFeatures.filter(f => (f.status || "Active") === "Active").length, icon: "fa-check-circle", color: "amber" }, { label: "Team Members", value: users.length, icon: "fa-users", color: "red" }], [totalModules, totalFeatures, totalTestCases, flatFeatures, users.length]);
 
     const toggleFeature = useCallback(id => setOpenFeatures(p => ({ ...p, [id]: !p[id] })), []);
@@ -1138,8 +1133,8 @@ export default function FeaturesLibrary() {
     const openDeleteFeatureModal = useCallback((e, feat) => { e.stopPropagation(); setDeleteFeatureTarget(feat); setDeleteFeatureModal(true); }, []);
 
     const handleAddTestCase = useCallback(async () => { if (!form.name || !form.priority || !form.testType) { alert("Name, Priority and Test Type are required"); return; } try { const { data: { user } } = await supabase.auth.getUser(); if (!user) { alert("Must be logged in"); return; } const { error } = await supabase.from("test_cases").insert([{ id: generateUUID(), test_case_id: form.id, name: form.name, description: form.description, feature_id: addModal.featureId || null, module_id: addModal.moduleId || null, priority: form.priority, status: form.status, test_type: form.testType || null, created_by: user.id, assigned_to: form.assignee || null, user_story_ids: form.userStoryIds.length > 0 ? form.userStoryIds : null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }]); if (error) throw error; setAddModal({ open: false }); fetchModulesWithFeatures(); } catch (err) { alert(`Error: ${err.message}`); } }, [form, addModal.featureId, addModal.moduleId, fetchModulesWithFeatures]);
-    const handleEditTestCase = useCallback(async () => { if (!form.name || !form.priority || !form.testType) { alert("Name, Priority and Test Type are required"); return; } try { const { error } = await supabase.from("test_cases").update({ name: form.name, description: form.description, priority: form.priority, status: form.status, test_type: form.testType || null, user_story_ids: form.userStoryIds.length > 0 ? form.userStoryIds : null, updated_at: new Date().toISOString() }).eq("id", editModal.tc.id); if (error) throw error; setEditModal({ open: false }); fetchModulesWithFeatures(); } catch (err) { alert(`Error: ${err.message}`); } }, [form, editModal.tc, fetchModulesWithFeatures]);
-    const handleDeleteTestCase = useCallback(async () => { try { const { error } = await supabase.from("test_cases").delete().eq("id", deleteModal.tc.id); if (error) throw error; setDeleteModal({ open: false }); fetchModulesWithFeatures(); } catch (err) { alert(`Error: ${err.message}`); } }, [deleteModal.tc, fetchModulesWithFeatures]);
+    const handleEditTestCase = useCallback(async () => { if (!form.name || !form.priority || !form.testType) { alert("Name, Priority and Test Type are required"); return; } if (!editModal.tc?.id) return; try { const { error } = await supabase.from("test_cases").update({ name: form.name, description: form.description, priority: form.priority, status: form.status, test_type: form.testType || null, user_story_ids: form.userStoryIds.length > 0 ? form.userStoryIds : null, updated_at: new Date().toISOString() }).eq("id", editModal.tc.id); if (error) throw error; setEditModal({ open: false, tc: null, featureId: null, moduleId: null }); fetchModulesWithFeatures(); } catch (err) { alert(`Error: ${err.message}`); } }, [form, editModal.tc, fetchModulesWithFeatures]);
+    const handleDeleteTestCase = useCallback(async () => { if (!deleteModal.tc?.id) return; try { const { error } = await supabase.from("test_cases").delete().eq("id", deleteModal.tc.id); if (error) throw error; setDeleteModal({ open: false, tc: null, featureId: null, moduleId: null }); fetchModulesWithFeatures(); } catch (err) { alert(`Error: ${err.message}`); } }, [deleteModal.tc, fetchModulesWithFeatures]);
     const handleAddFeature = useCallback(async () => { if (!featureForm.moduleId || !featureForm.name) { alert("Module and Name required"); return; } try { const ins = { module_id: featureForm.moduleId, feature_name: featureForm.name, feature_code: featureForm.code, description: featureForm.description, created_at: new Date().toISOString() }; if (featureForm.user_story) ins.user_story = featureForm.user_story; if (featureForm.assign_to) ins.assign_to = featureForm.assign_to; const { error } = await supabase.from("features").insert([ins]); if (error) throw error; setAddFeatureModal(false); setFeatureForm(emptyFeatureForm); fetchModulesWithFeatures(); } catch (err) { alert(`Error: ${err.message}`); } }, [featureForm, fetchModulesWithFeatures]);
     const handleEditFeature = useCallback(async () => { if (!editFeatureForm.name || !editFeatureForm.code) { alert("Name and Code required"); return; } try { const { error } = await supabase.from("features").update({ feature_name: editFeatureForm.name, feature_code: editFeatureForm.code, description: editFeatureForm.description, user_story: editFeatureForm.user_story || null, assign_to: editFeatureForm.assign_to || null, module_id: editFeatureForm.moduleId }).eq("id", editFeatureForm.id); if (error) throw error; setEditFeatureModal(false); setEditFeatureForm(emptyEditFeatureForm); fetchModulesWithFeatures(); } catch (err) { alert(`Error: ${err.message}`); } }, [editFeatureForm, fetchModulesWithFeatures]);
     const handleDeleteFeature = useCallback(async () => { if (!deleteFeatureTarget) return; try { await supabase.from("test_cases").delete().eq("feature_id", deleteFeatureTarget.id); const { error } = await supabase.from("features").delete().eq("id", deleteFeatureTarget.id); if (error) throw error; setDeleteFeatureModal(false); setDeleteFeatureTarget(null); fetchModulesWithFeatures(); } catch (err) { alert(`Error: ${err.message}`); } }, [deleteFeatureTarget, fetchModulesWithFeatures]);

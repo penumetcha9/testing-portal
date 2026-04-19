@@ -240,21 +240,23 @@ function UserDrawer({ user, allUsers, onClose, onRoleChange, onStatusChange, add
         try {
             const toUser = allUsers.find((u) => u.id === reassignTo);
             const { error } = await supabase.from("test_cases").update({ assigned_to: reassignTo }).in("id", selectedTests);
-            if (error) { addToast("Reassign failed: " + error.message, "error"); }
-            else {
+            if (error) {
+                addToast("Reassign failed: " + error.message, "error");
+            } else {
                 setReassignSuccess(true);
                 addToast(`${selectedTests.length} test case(s) reassigned to ${toUser?.full_name || toUser?.email}`);
-                setSelectedTests([]); setSelectedModules([]); setSelectedFeatures([]); setReassignTo("");
+                setSelectedTests([]);
+                setSelectedModules([]);
+                setSelectedFeatures([]);
+                setReassignTo("");
 
-                const { data: refreshed } = await supabase.from("test_cases").select("id, test_case_id, name, status, assigned_to").eq("assigned_to", user.id);
-                const mine = refreshed || [];
-                setUserTests(mine.map((t) => ({ ...t, displayName: `${t.test_case_id} — ${t.name}` })));
-                setUserStats({ total: mine.length, passed: mine.filter((t) => t.status === "pass").length, failed: mine.filter((t) => t.status === "fail").length, pending: mine.filter((t) => !t.status || t.status === "not-tested").length });
-
+                // Refresh parent data so preloadedTestCases and the table update correctly
                 if (refreshUsers) refreshUsers();
                 setTimeout(() => setReassignSuccess(false), 2000);
             }
-        } catch (e) { addToast("Unexpected error: " + e.message, "error"); }
+        } catch (e) {
+            addToast("Unexpected error: " + e.message, "error");
+        }
         setReassigning(false);
     };
 
@@ -405,7 +407,7 @@ export default function UserManagement() {
     const [searchTerm, setSearchTerm] = useState("");
     const [filterRole, setFilterRole] = useState("all");
     const [selectedUser, setSelectedUser] = useState(null);
-    const [testCasesByUser, setTestCasesByUser] = useState({}); // userId/email/name -> test cases array
+    const [testCasesByUser, setTestCasesByUser] = useState({});
 
     const [confirmDialog, setConfirmDialog] = useState({
         show: false, title: "", message: "", onConfirm: null, danger: false,
@@ -438,7 +440,6 @@ export default function UserManagement() {
         const map = {};
 
         profiles.forEach(p => {
-            // Match by UUID, email, or full_name — all possible storage formats
             const matches = allTCs.filter(tc =>
                 tc.assigned_to === p.id ||
                 (p.email && tc.assigned_to === p.email) ||
@@ -448,6 +449,10 @@ export default function UserManagement() {
         });
 
         setTestCasesByUser(map);
+
+        // Keep selectedUser in sync after refresh so the drawer reflects new data
+        setSelectedUser(prev => prev ? (profiles.find(p => p.id === prev.id) || null) : null);
+
         setLoading(false);
     }, [addToast]);
 
@@ -463,7 +468,6 @@ export default function UserManagement() {
         setSelectedUser((prev) => prev?.id === userId ? { ...prev, is_active: newStatus } : prev);
     }, []);
 
-    // ── Delete user — removes from both profiles AND Supabase Auth ──
     const handleDelete = useCallback((userId) => {
         const user = users.find((u) => u.id === userId);
         setConfirmDialog({
@@ -474,36 +478,19 @@ export default function UserManagement() {
             onConfirm: async () => {
                 setConfirmDialog((p) => ({ ...p, show: false }));
                 try {
-                    // Step 1: Delete from profiles table
-                    const { error: profileError } = await supabase
-                        .from("profiles")
-                        .delete()
-                        .eq("id", userId);
+                    const { error: profileError } = await supabase.from("profiles").delete().eq("id", userId);
+                    if (profileError) { addToast("Failed to delete profile: " + profileError.message, "error"); return; }
 
-                    if (profileError) {
-                        addToast("Failed to delete profile: " + profileError.message, "error");
-                        return;
-                    }
-
-                    // Step 2: Delete from Supabase Auth using admin API
-                    // This requires the service role key — call via your backend or
-                    // Supabase admin.deleteUser if available
                     const { error: authError } = await supabase.auth.admin.deleteUser(userId);
-
                     if (authError) {
-                        // Auth delete failed but profile is already deleted
-                        // User won't appear in list but can still technically log in
-                        // This is acceptable — they won't have a profile to load
                         console.warn("Auth user delete failed (may need service role):", authError.message);
                         addToast("Profile deleted. Note: auth account may still exist.", "info");
                     } else {
                         addToast("User fully deleted");
                     }
 
-                    // Remove from local state immediately so UI updates without refresh
                     setUsers((p) => p.filter((u) => u.id !== userId));
                     if (selectedUser?.id === userId) setSelectedUser(null);
-
                 } catch (e) {
                     addToast("Unexpected error: " + e.message, "error");
                 }

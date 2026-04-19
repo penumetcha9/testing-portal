@@ -556,7 +556,7 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // VIEW 2 — EXECUTE A TEST CASE
 // ═════════════════════════════════════════════════════════════════════════════
-function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
+function ExecuteView({ testCase, onBack }) {
     const [module, setModule] = useState(null);
     const [feature, setFeature] = useState(null);
     const [version, setVersion] = useState(null);
@@ -821,17 +821,9 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
                                 </div>
                             )}
                         </div>
-                        {total > 0 && (
-                            <span className="text-xs text-slate-400 font-medium">{currentIdx + 1} / {total}</span>
-                        )}
                         <button onClick={handleSave} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50">
                             <i className="fa-solid fa-save text-xs" /> Save
                         </button>
-                        {onNext && (
-                            <button onClick={onNext} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 text-white rounded-lg text-xs font-medium hover:bg-slate-800">
-                                Next <i className="fa-solid fa-arrow-right text-xs" />
-                            </button>
-                        )}
                     </div>
                 </div>
             </header>
@@ -996,11 +988,6 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
                             <button onClick={handleSubmitClick} className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 flex items-center gap-1.5">
                                 <i className="fa-solid fa-paper-plane text-xs" /> Submit Result
                             </button>
-                            {onNext && (
-                                <button onClick={onNext} className="px-4 py-2 bg-slate-700 text-white rounded-lg text-sm font-medium hover:bg-slate-800 flex items-center gap-1.5">
-                                    Next <i className="fa-solid fa-arrow-right text-xs" />
-                                </button>
-                            )}
                         </div>
                     </div>
                 </div>
@@ -1015,8 +1002,6 @@ function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
 export default function TestExecution() {
     const location = useLocation();
     const [selectedTest, setSelectedTest] = useState(null);
-    const [testList, setTestList] = useState([]);
-    const [selectedIdx, setSelectedIdx] = useState(-1);
     const [loadingDirect, setLoadingDirect] = useState(false);
 
     const [pendingUpdates, setPendingUpdates] = useState(() => loadPendingUpdates());
@@ -1036,10 +1021,7 @@ export default function TestExecution() {
             });
     }, [location.state?.testCaseId]);
 
-    const handleSelect = (test, list = []) => {
-        const idx = list.findIndex(t => t.id === test.id);
-        setTestList(list);
-        setSelectedIdx(idx);
+    const handleSelect = (test) => {
         setSelectedTest(test);
     };
 
@@ -1052,14 +1034,6 @@ export default function TestExecution() {
             });
         }
         setSelectedTest(null);
-    };
-
-    const handleNext = () => {
-        const next = selectedIdx + 1;
-        if (next < testList.length) {
-            setSelectedIdx(next);
-            setSelectedTest(testList[next]);
-        }
     };
 
     if (loadingDirect) {
@@ -1078,16 +1052,13 @@ export default function TestExecution() {
             <ExecuteView
                 testCase={selectedTest}
                 onBack={handleBack}
-                onNext={selectedIdx < testList.length - 1 ? handleNext : null}
-                currentIdx={selectedIdx}
-                total={testList.length}
             />
         );
     }
     return (
         <TestCaseListView
             pendingUpdates={pendingUpdates}
-            onSelect={(test, list) => handleSelect(test, list)}
+            onSelect={(test) => handleSelect(test)}
         />
     );
 }

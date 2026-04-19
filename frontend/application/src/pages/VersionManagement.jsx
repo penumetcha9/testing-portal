@@ -283,12 +283,9 @@ const ModuleDrillDown = memo(({ module, onBack }) => {
 
     return (
         <div>
-            {/* Back breadcrumb */}
             <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-green-700 hover:underline font-medium mb-4">
                 <i className="fa-solid fa-arrow-left text-xs" /> Back to Linked Modules
             </button>
-
-            {/* Module header */}
             <div className="flex items-center gap-3 mb-4 p-3 bg-green-50 border border-green-200 rounded-xl">
                 <div className="w-9 h-9 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
                     <i className="fa-solid fa-cube text-green-600 text-sm" />
@@ -298,16 +295,11 @@ const ModuleDrillDown = memo(({ module, onBack }) => {
                     {module.module_code && <p className="text-xs text-gray-400 font-mono">{module.module_code}</p>}
                 </div>
             </div>
-
-            {/* Features list */}
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
                 Features <span className="ml-1 text-green-700">{features.length}</span>
             </p>
-
             {loadingFeatures ? (
-                <div className="text-center py-6">
-                    <i className="fa-solid fa-spinner fa-spin text-green-600 text-xl" />
-                </div>
+                <div className="text-center py-6"><i className="fa-solid fa-spinner fa-spin text-green-600 text-xl" /></div>
             ) : features.length === 0 ? (
                 <div className="text-center py-6 border-2 border-dashed border-gray-200 rounded-xl">
                     <i className="fa-solid fa-list-check text-gray-300 text-2xl mb-2 block" />
@@ -317,10 +309,8 @@ const ModuleDrillDown = memo(({ module, onBack }) => {
                 <div className="space-y-2">
                     {features.map(f => (
                         <div key={f.id}>
-                            <div
-                                onClick={() => handleFeatureClick(f)}
-                                className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${selectedFeature?.id === f.id ? "border-purple-300 bg-purple-50" : "border-gray-200 hover:border-purple-200 hover:bg-purple-50/40"}`}
-                            >
+                            <div onClick={() => handleFeatureClick(f)}
+                                className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${selectedFeature?.id === f.id ? "border-purple-300 bg-purple-50" : "border-gray-200 hover:border-purple-200 hover:bg-purple-50/40"}`}>
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${selectedFeature?.id === f.id ? "bg-purple-100" : "bg-gray-100"}`}>
                                         <i className={`fa-solid fa-list-check text-xs ${selectedFeature?.id === f.id ? "text-purple-600" : "text-gray-400"}`} />
@@ -333,14 +323,10 @@ const ModuleDrillDown = memo(({ module, onBack }) => {
                                     <i className={`fa-solid fa-chevron-${selectedFeature?.id === f.id ? "up" : "down"} text-xs text-gray-400`} />
                                 </div>
                             </div>
-
-                            {/* Test cases for this feature */}
                             {selectedFeature?.id === f.id && (
                                 <div className="ml-4 mt-1 mb-2 border-l-2 border-purple-200 pl-3">
                                     {loadingTests ? (
-                                        <div className="py-4 text-center">
-                                            <i className="fa-solid fa-spinner fa-spin text-purple-500 text-lg" />
-                                        </div>
+                                        <div className="py-4 text-center"><i className="fa-solid fa-spinner fa-spin text-purple-500 text-lg" /></div>
                                     ) : testCases.length === 0 ? (
                                         <div className="py-4 text-center border border-dashed border-gray-200 rounded-lg mt-1">
                                             <i className="fa-solid fa-vials text-gray-300 text-xl mb-1 block" />
@@ -631,8 +617,9 @@ const VersionCard = memo(({ v, users, onEdit, onArchive, onDelete, onViewDetails
                     <button onClick={() => onViewDetails(v)} className="px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">View Details</button>
                     {v.status !== "archived" && (
                         <>
+                            {/* FIX: renamed "Assign Testers" → "Assign To" */}
                             <button onClick={() => onAssignTesters(v)} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 transition-colors flex items-center gap-1.5">
-                                <i className="fa-solid fa-users text-sm" /> Assign Testers
+                                <i className="fa-solid fa-users text-sm" /> Assign To
                             </button>
                             <button onClick={() => onAssignModules(v)} className="px-4 py-2 border border-green-300 text-green-700 rounded-lg text-sm hover:bg-green-50 transition-colors flex items-center gap-1.5">
                                 <i className="fa-solid fa-puzzle-piece" /> Assign Modules
@@ -666,8 +653,6 @@ export default function VersionManagement() {
     const [formData, setFormData] = useState(EMPTY_FORM);
     const [toasts, setToasts] = useState([]);
     const editingVersionIdRef = useRef(null);
-
-    // ── NEW: drill-down state for details modal ──
     const [drillModule, setDrillModule] = useState(null);
 
     const showToast = useCallback((msg, type = "success") => {
@@ -790,7 +775,7 @@ export default function VersionManagement() {
         });
     }, [versions, activeTab, statusFilter, search]);
 
-    const resetForm = useCallback(() => setFormData(EMPTY_FORM), []);
+    const resetForm = useCallback(() => { setFormData(EMPTY_FORM); editingVersionIdRef.current = null; }, []);
 
     const handleCreateVersion = useCallback(async () => {
         if (!formData.version_number || !formData.build_number || !formData.release_date || !formData.version_type) {
@@ -818,20 +803,30 @@ export default function VersionManagement() {
 
     const handleViewDetails = useCallback((v) => {
         setSelectedVersion(v);
-        setDrillModule(null); // reset drill-down on open
+        setDrillModule(null);
         setShowDetailsModal(true);
     }, []);
 
-    const handleAssignTesters = useCallback((v) => { setSelectedVersion(v); setShowAssignModal(true); }, []);
+    const handleAssignTesters = useCallback((v) => {
+        setSelectedVersion(v);
+        // Pre-load existing tester assignments into the form
+        setFormData(prev => ({ ...prev, selectedTesters: v.assignedTesterIds || [] }));
+        setShowAssignModal(true);
+    }, []);
+
     const handleAssignModules = useCallback((v) => { setShowDetailsModal(false); setDrillModule(null); setAssignModulesVersion(v); }, []);
 
     const handleEditVersion = useCallback((v) => {
         editingVersionIdRef.current = v.id;
+        // FIX: pre-load existing tester assignments so the dropdown shows current state
         setFormData({
-            version_number: v.version_number, build_number: v.build_number,
+            version_number: v.version_number,
+            build_number: v.build_number,
             release_date: v.release_date ? v.release_date.split("T")[0] : "",
-            status: v.status, version_type: v.version_type,
-            description: v.description || "", selectedTesters: [],
+            status: v.status,
+            version_type: v.version_type,
+            description: v.description || "",
+            selectedTesters: v.assignedTesterIds || [],
         });
         setSelectedVersion(v);
         setShowDetailsModal(false);
@@ -851,7 +846,17 @@ export default function VersionManagement() {
                 version_type: fields.version_type, description: fields.description,
             }).eq("id", versionId);
             if (error) throw error;
-            setVersions(prev => prev.map(v => v.id === versionId ? { ...v, ...fields } : v));
+
+            // FIX: also save tester assignments on update
+            await supabase.from("version_testers").delete().eq("version_id", versionId);
+            if (fields.selectedTesters && fields.selectedTesters.length > 0) {
+                const { error: ae } = await supabase.from("version_testers").insert(
+                    fields.selectedTesters.map(tid => ({ version_id: versionId, tester_id: tid }))
+                );
+                if (ae) throw ae;
+            }
+
+            setVersions(prev => prev.map(v => v.id === versionId ? { ...v, ...fields, assignedTesterIds: fields.selectedTesters || [] } : v));
             editingVersionIdRef.current = null;
             setShowModal(false); setSelectedVersion(null); resetForm();
             showToast("Version updated successfully!");
@@ -897,7 +902,7 @@ export default function VersionManagement() {
                 if (ie) throw ie;
             }
             setShowAssignModal(false); setSelectedVersion(null); await fetchVersions();
-            showToast("Testers assigned successfully! 👥");
+            showToast("Assigned successfully! 👥");
         } catch (err) { showToast(err.message, "error"); }
     }, [selectedVersion, fetchVersions, showToast]);
 
@@ -1092,9 +1097,10 @@ export default function VersionManagement() {
                                 <label className="block text-sm font-medium mb-1">Description</label>
                                 <textarea rows={4} value={formData.description} onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))} placeholder="Enter version description and release notes..." className="w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 resize-none" />
                             </div>
+                            {/* FIX: renamed label "Assign Testers" → "Assign To" */}
                             <div>
-                                <label className="block text-sm font-medium mb-2">Assign Testers</label>
-                                <CustomDropdown options={users} selected={formData.selectedTesters} onChange={setTestersSel} placeholder="Select testers..." />
+                                <label className="block text-sm font-medium mb-2">Assign To</label>
+                                <CustomDropdown options={users} selected={formData.selectedTesters} onChange={setTestersSel} placeholder="Select assignees..." />
                                 {formData.selectedTesters.length > 0 && (
                                     <div className="mt-3 flex flex-wrap gap-2">
                                         {users.filter(u => formData.selectedTesters.includes(u.id)).map(user => (
@@ -1144,7 +1150,6 @@ export default function VersionManagement() {
                         </div>
 
                         <div className="p-6 space-y-5">
-                            {/* Only show top sections when NOT in drill-down */}
                             {!drillModule && (
                                 <>
                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1192,7 +1197,6 @@ export default function VersionManagement() {
                                 </>
                             )}
 
-                            {/* ── Linked Modules section — clickable ── */}
                             <div className="border border-gray-100 rounded-xl p-4">
                                 <div className="flex items-center justify-between mb-3">
                                     <div className="flex items-center gap-2">
@@ -1216,7 +1220,6 @@ export default function VersionManagement() {
                                     </div>
                                 </div>
 
-                                {/* Drill-down view OR module list */}
                                 {drillModule ? (
                                     <ModuleDrillDown module={drillModule} onBack={() => setDrillModule(null)} />
                                 ) : !selectedVersion.linkedModules?.length ? (
@@ -1230,11 +1233,8 @@ export default function VersionManagement() {
                                 ) : (
                                     <div className="flex flex-wrap gap-2">
                                         {selectedVersion.linkedModules.map(m => (
-                                            <button
-                                                key={m.id}
-                                                onClick={() => setDrillModule(m)}
-                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg font-medium hover:bg-green-100 hover:border-green-400 transition-all cursor-pointer"
-                                            >
+                                            <button key={m.id} onClick={() => setDrillModule(m)}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg font-medium hover:bg-green-100 hover:border-green-400 transition-all cursor-pointer">
                                                 <i className="fa-solid fa-puzzle-piece text-green-400 text-xs" />
                                                 {m.module_name}
                                                 {m.module_code && <span className="text-green-400 text-xs font-normal">· {m.module_code}</span>}
@@ -1252,7 +1252,6 @@ export default function VersionManagement() {
                                 </div>
                             )}
 
-                            {/* ── Modal footer actions ── */}
                             {!drillModule && (
                                 <div className="flex flex-wrap gap-3 pt-2 border-t">
                                     <button onClick={() => { setShowDetailsModal(false); handleEditVersion(selectedVersion); }}
@@ -1285,23 +1284,24 @@ export default function VersionManagement() {
                 </div>
             )}
 
-            {/* ── Assign Testers Modal ── */}
+            {/* ── Assign To Modal (formerly Assign Testers) ── */}
             {showAssignModal && selectedVersion && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setShowAssignModal(false)}>
                     <div className="bg-white rounded-lg shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
                         <div className="p-6 border-b flex items-center justify-between">
                             <div>
-                                <h3 className="text-xl font-bold flex items-center gap-2"><i className="fa-solid fa-users text-green-700" /> Assign Testers</h3>
+                                {/* FIX: renamed heading */}
+                                <h3 className="text-xl font-bold flex items-center gap-2"><i className="fa-solid fa-users text-green-700" /> Assign To</h3>
                                 <p className="text-sm text-gray-500 mt-0.5">{selectedVersion.version_number}</p>
                             </div>
                             <button onClick={() => setShowAssignModal(false)} className="text-gray-400 hover:text-gray-700 text-xl"><i className="fa-solid fa-times" /></button>
                         </div>
                         <div className="p-6 space-y-4">
-                            <p className="text-sm text-gray-600">Assign testers to <span className="font-semibold">{selectedVersion.version_number}</span></p>
-                            <CustomDropdown options={users} selected={formData.selectedTesters} onChange={setTestersSel} placeholder="Select testers to assign..." />
+                            <p className="text-sm text-gray-600">Assign users to <span className="font-semibold">{selectedVersion.version_number}</span></p>
+                            <CustomDropdown options={users} selected={formData.selectedTesters} onChange={setTestersSel} placeholder="Select users to assign..." />
                             {formData.selectedTesters.length > 0 && (
                                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                                    <p className="text-sm font-medium text-green-900 mb-2"><i className="fa-solid fa-check-circle mr-2" />{formData.selectedTesters.length} tester{formData.selectedTesters.length !== 1 ? "s" : ""} selected</p>
+                                    <p className="text-sm font-medium text-green-900 mb-2"><i className="fa-solid fa-check-circle mr-2" />{formData.selectedTesters.length} user{formData.selectedTesters.length !== 1 ? "s" : ""} selected</p>
                                     <div className="flex flex-wrap gap-2">
                                         {users.filter(u => formData.selectedTesters.includes(u.id)).map(user => (
                                             <span key={user.id} className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">{user.name}</span>
@@ -1310,7 +1310,7 @@ export default function VersionManagement() {
                                 </div>
                             )}
                             <div className="flex gap-3 pt-4">
-                                <button onClick={() => handleSaveAssignments(formData.selectedTesters)} className="flex-1 px-6 py-3 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity"><i className="fa-solid fa-check mr-2" /> Save Assignments</button>
+                                <button onClick={() => handleSaveAssignments(formData.selectedTesters)} className="flex-1 px-6 py-3 bg-green-700 text-white rounded-lg font-medium hover:opacity-90 transition-opacity"><i className="fa-solid fa-check mr-2" /> Save</button>
                                 <button onClick={() => { setShowAssignModal(false); setFormData(prev => ({ ...prev, selectedTesters: [] })); }} className="flex-1 px-6 py-3 border rounded-lg font-medium hover:bg-gray-50 transition-colors">Cancel</button>
                             </div>
                         </div>

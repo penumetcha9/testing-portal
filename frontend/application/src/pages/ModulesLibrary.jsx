@@ -69,8 +69,7 @@ const COLUMN_REFERENCE = [
 
 const downloadImportTemplate = () => {
     const header = "Module Name,Description,Module Owner,Priority,Status,Icon Color";
-    const example = '"User Management","Handles user roles and profile management","John Doe","High","Active","blue"';
-    const csv = header + "\n" + example;
+    const csv = header;
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
     const a = document.createElement("a");
     a.href = url;
@@ -99,8 +98,6 @@ const splitLine = (line) => {
     return cells;
 };
 
-// FIX 1: parseCSV now returns per-row validation errors alongside parsed rows
-// so the preview step has everything it needs without undefined variables.
 const parseCSV = (text) => {
     const allLines = text
         .replace(/^\uFEFF/, '')
@@ -151,7 +148,6 @@ const parseCSV = (text) => {
         };
     }
 
-    // FIX 2: Validate each row during parse and separate valid from invalid rows
     const allRows = allLines.slice(1).map((line, i) => {
         const cells = splitLine(line);
         const get = (k) => idx[k] !== -1 ? (cells[idx[k]] || '').replace(/^"|"$/g, '').trim() : '';
@@ -320,13 +316,11 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [], user
     const fileInputRef = useRef(null);
     const [file, setFile] = useState(null);
     const [parsed, setParsed] = useState(null);
-    // FIX 3: Start on "upload" step; "preview" step now works correctly
     const [step, setStep] = useState("upload");
     const [dragOver, setDragOver] = useState(false);
     const [importing, setImporting] = useState(false);
     const [result, setResult] = useState(null);
 
-    // FIX 4: Reset all state when modal is closed and re-opened
     const handleClose = () => {
         setFile(null);
         setParsed(null);
@@ -342,7 +336,7 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [], user
             alert("Only .csv files are supported."); return;
         }
         setFile(f);
-        setParsed(null); // reset previous parse result
+        setParsed(null);
         const reader = new FileReader();
         reader.onload = (e) => {
             const result = parseCSV(e.target.result);
@@ -356,14 +350,21 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [], user
         if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
     };
 
-    // FIX 5: handleImport uses validRows (pre-validated) instead of re-validating inline
-    // FIX 6: owner resolution now uses case-insensitive matching against full_name
     const handleImport = async () => {
         if (!parsed?.validRows?.length) {
             alert("No valid rows to import. Please check your CSV file and try again.");
             return;
         }
         setImporting(true);
+
+        // Fetch existing module names to prevent duplicates
+        const { data: existing } = await supabase
+            .from("modules")
+            .select("module_name");
+
+        const existingNames = new Set(
+            (existing || []).map(m => m.module_name.trim().toLowerCase())
+        );
 
         // Build a case-insensitive map: lowercase full_name → actual full_name stored in DB
         const userMap = {};
@@ -375,7 +376,13 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [], user
         const success = [], failed = [];
 
         for (const row of parsed.validRows) {
-            // FIX 7: Case-insensitive owner lookup; null if not found (row still imports)
+            // Check for duplicate module name
+            if (existingNames.has(row.module_name.trim().toLowerCase())) {
+                failed.push({ name: row.module_name, reason: "Module name already exists" });
+                continue;
+            }
+
+            // Case-insensitive owner lookup; null if not found (row still imports)
             const resolvedOwner = userMap[row.module_owner.trim().toLowerCase()] || null;
 
             // Color — invalid value silently defaults to "blue"
@@ -399,7 +406,7 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [], user
             else success.push(row.module_name);
         }
 
-        // FIX 8: Also surface rows that were skipped at parse/validation time
+        // Also surface rows that were skipped at parse/validation time
         const skipped = (parsed.errors || []).map(e => ({
             name: e.name || `Row ${e.row}`,
             reason: e.messages.join(" · "),
@@ -496,7 +503,7 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [], user
                                 )}
                             </div>
 
-                            {/* FIX 9: Richer parse summary with per-row error details */}
+                            {/* Parse summary */}
                             {parsed && (
                                 <div className="space-y-2">
                                     {parseError ? (
@@ -654,7 +661,6 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [], user
                             </button>
                             <button
                                 onClick={handleImport}
-                                // FIX 10: Disable import if no valid rows OR if there's a parse-level error
                                 disabled={importing || !file || !!parseError || validRows === 0}
                                 className="px-6 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
                                 {importing
