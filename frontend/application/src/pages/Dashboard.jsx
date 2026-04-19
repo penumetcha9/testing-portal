@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../services/supabaseClient";
 import Header from "../components/Header";
 import StatusChart from "../components/StatusChart";
-import TrendsChart from "../components/TrendsChart";
 
 // ── Skeleton loader ──────────────────────────────────────────────────────────
 function Skeleton({ className = "" }) {
@@ -90,8 +89,6 @@ function MyAssignments({ userId }) {
     async function fetchMyAssignments() {
         setLoading(true);
 
-        // Step 1: resolve the user's full_name from profiles using their UUID.
-        // assigned_to in test_cases stores a name string (e.g. "krishna"), not a UUID.
         const { data: profileData } = await supabase
             .from("profiles")
             .select("id, full_name, email")
@@ -110,7 +107,6 @@ function MyAssignments({ userId }) {
     }
 
     async function fetchMyTestCases(userName) {
-        // Try matching by UUID first, fall back to name string
         const [byId, byName] = await Promise.all([
             supabase
                 .from("test_cases")
@@ -136,7 +132,6 @@ function MyAssignments({ userId }) {
     }
 
     async function fetchMyModules(userName) {
-        // Fetch test_cases assigned to user (by UUID or name) to get their module_ids
         const [byId, byName] = await Promise.all([
             supabase.from("test_cases").select("module_id").eq("assigned_to", userId),
             supabase.from("test_cases").select("module_id").eq("assigned_to", userName),
@@ -393,7 +388,6 @@ export default function Dashboard() {
     const [failedIssues, setFailedIssues] = useState([]);
     const [teamMembers, setTeamMembers] = useState([]);
     const [recentExecutions, setRecentExecutions] = useState([]);
-    const [trends, setTrends] = useState({ labels: [], passed: [], failed: [], pending: [] });
     const [teamPeriod, setTeamPeriod] = useState("Last 7 days");
 
     const addToast = useCallback((message, type = "success") => {
@@ -418,7 +412,6 @@ export default function Dashboard() {
                 fetchFailedIssues(),
                 fetchTeamPerformance(),
                 fetchRecentExecutions(),
-                fetchTrends(),
             ]);
         } catch (e) {
             addToast("Error loading dashboard data", "error");
@@ -504,9 +497,6 @@ export default function Dashboard() {
         setModules(shaped);
     }
 
-    // ── fetchFailedIssues ────────────────────────────────────────────────────
-    // Mirrors FailedIssues.jsx exactly: queries test_cases with status in
-    // ['fail', 'Failed', 'failed'], same select fields and shape.
     async function fetchFailedIssues() {
         const { data, error } = await supabase
             .from("test_cases")
@@ -585,46 +575,6 @@ export default function Dashboard() {
 
         if (error || !data) return;
         setRecentExecutions(data.map(e => ({ ...e, timeAgo: timeAgo(e.created_at) })));
-    }
-
-    async function fetchTrends() {
-        const days = 7;
-        const since = new Date();
-        since.setDate(since.getDate() - days);
-
-        const { data, error } = await supabase
-            .from("test_executions")
-            .select("execution_status, created_at")
-            .gte("created_at", since.toISOString())
-            .order("created_at");
-
-        if (error || !data) return;
-
-        const labels = [];
-        const buckets = {};
-        for (let i = days - 1; i >= 0; i--) {
-            const d = new Date();
-            d.setDate(d.getDate() - i);
-            const key = d.toISOString().split("T")[0];
-            labels.push(d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
-            buckets[key] = { passed: 0, failed: 0, pending: 0 };
-        }
-
-        data.forEach(e => {
-            const key = e.created_at.split("T")[0];
-            if (!buckets[key]) return;
-            if (e.execution_status === "Passed") buckets[key].passed++;
-            else if (e.execution_status === "Failed") buckets[key].failed++;
-            else buckets[key].pending++;
-        });
-
-        const vals = Object.values(buckets);
-        setTrends({
-            labels,
-            passed: vals.map(v => v.passed),
-            failed: vals.map(v => v.failed),
-            pending: vals.map(v => v.pending),
-        });
     }
 
     function timeAgo(ts) {
@@ -959,62 +909,6 @@ export default function Dashboard() {
                                     <p className="text-sm text-muted-foreground text-center py-6">No recent activity</p>
                                 )}
                             </div>
-                        </div>
-                    </div>
-
-                    {/* ── Testing Trends ── */}
-                    <div className="bg-card border border-border rounded-lg shadow-sm">
-                        <div className="p-6 border-b border-border">
-                            <h3 className="text-lg font-bold text-foreground mb-1">Testing Trends</h3>
-                            <p className="text-sm text-muted-foreground">Execution results over the last 7 days</p>
-                        </div>
-                        <div className="p-6">
-                            {!loading && trends.labels.length > 0 ? (
-                                <div className="space-y-4">
-                                    <div className="grid grid-cols-3 gap-4 mb-6">
-                                        {[
-                                            { label: "Passed", values: trends.passed, color: "text-green-500" },
-                                            { label: "Failed", values: trends.failed, color: "text-red-500" },
-                                            { label: "Pending", values: trends.pending, color: "text-orange-400" },
-                                        ].map(s => (
-                                            <div key={s.label} className="text-center p-3 bg-muted rounded-lg">
-                                                <p className={`text-2xl font-bold ${s.color}`}>{s.values.reduce((a, b) => a + b, 0)}</p>
-                                                <p className="text-xs text-muted-foreground">{s.label} (7d)</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="flex items-end gap-2 h-40 max-w-xs">
-                                        {trends.labels.map((label, i) => {
-                                            const total = (trends.passed[i] || 0) + (trends.failed[i] || 0) + (trends.pending[i] || 0);
-                                            const maxTotal = Math.max(...trends.labels.map((_, j) =>
-                                                (trends.passed[j] || 0) + (trends.failed[j] || 0) + (trends.pending[j] || 0)
-                                            ), 1);
-                                            const height = Math.round((total / maxTotal) * 100);
-                                            return (
-                                                <div key={label} className="flex-1 flex flex-col items-center gap-1">
-                                                    <div className="w-full flex flex-col justify-end rounded overflow-hidden" style={{ height: "120px" }}>
-                                                        <div title={`Passed: ${trends.passed[i]}`} style={{ height: `${total > 0 ? Math.round((trends.passed[i] / total) * height) : 0}%` }} className="bg-green-500 w-full transition-all" />
-                                                        <div title={`Failed: ${trends.failed[i]}`} style={{ height: `${total > 0 ? Math.round((trends.failed[i] / total) * height) : 0}%` }} className="bg-red-500 w-full transition-all" />
-                                                        <div title={`Pending: ${trends.pending[i]}`} style={{ height: `${total > 0 ? Math.round((trends.pending[i] / total) * height) : 0}%` }} className="bg-orange-400 w-full transition-all" />
-                                                    </div>
-                                                    <span className="text-xs text-muted-foreground">{label}</span>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                    <div className="flex items-center gap-6 justify-center pt-2">
-                                        {[["bg-green-500", "Passed"], ["bg-red-500", "Failed"], ["bg-orange-400", "Pending"]].map(([color, label]) => (
-                                            <div key={label} className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                <div className={`w-3 h-3 rounded-sm ${color}`} />{label}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            ) : loading ? (
-                                <Skeleton className="h-40 w-full" />
-                            ) : (
-                                <TrendsChart />
-                            )}
                         </div>
                     </div>
 
