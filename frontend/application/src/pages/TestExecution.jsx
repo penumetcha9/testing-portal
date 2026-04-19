@@ -979,9 +979,7 @@ function ExecuteView({ testCase, onBack }) {
                             <i className="fa-solid fa-arrow-left text-xs" /> Back to List
                         </button>
                         <div className="flex items-center gap-2">
-                            <button onClick={handleSave} className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 flex items-center gap-1.5">
-                                <i className="fa-solid fa-floppy-disk text-xs" /> Save Draft
-                            </button>
+
                             <button onClick={handleSubmitClick} className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 flex items-center gap-1.5">
                                 <i className="fa-solid fa-paper-plane text-xs" /> Submit Result
                             </button>

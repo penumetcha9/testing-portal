@@ -380,11 +380,9 @@ const downloadCSV = (columns, filename, exampleRow) => {
 
 function ParseFeedback({ parsed }) {
     if (!parsed) return null;
-
     const { rows = [], rowErrors = [], fatalError } = parsed;
     const validCount = rows.length;
     const errorCount = rowErrors.length;
-
     if (fatalError) {
         return (
             <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 14px", background: "rgba(220,38,38,0.06)", border: `1px solid rgba(220,38,38,0.2)`, borderRadius: 9 }}>
@@ -393,7 +391,6 @@ function ParseFeedback({ parsed }) {
             </div>
         );
     }
-
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: validCount > 0 ? "rgba(22,163,74,0.07)" : "rgba(220,38,38,0.06)", border: `1px solid ${validCount > 0 ? "rgba(22,163,74,0.2)" : "rgba(220,38,38,0.2)"}`, borderRadius: 9 }}>
@@ -404,13 +401,10 @@ function ParseFeedback({ parsed }) {
                     {validCount === 0 && errorCount === 0 && " No data rows found."}
                 </span>
             </div>
-
             {errorCount > 0 && (
                 <div style={{ border: `1px solid rgba(220,38,38,0.2)`, borderRadius: 9, overflow: "hidden" }}>
                     <div style={{ padding: "8px 14px", background: "rgba(220,38,38,0.05)", borderBottom: `1px solid rgba(220,38,38,0.1)` }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: T.red, textTransform: "uppercase", letterSpacing: "0.07em", fontFamily: T.sans }}>
-                            Row Errors — fix in your CSV and re-upload
-                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: T.red, textTransform: "uppercase", letterSpacing: "0.07em", fontFamily: T.sans }}>Row Errors — fix in your CSV and re-upload</span>
                     </div>
                     <div style={{ maxHeight: 150, overflowY: "auto" }}>
                         {rowErrors.map((err, i) => (
@@ -423,22 +417,17 @@ function ParseFeedback({ parsed }) {
                     </div>
                 </div>
             )}
-
             {validCount > 0 && rows.length > 0 && (
                 <div style={{ border: `1px solid rgba(22,163,74,0.2)`, borderRadius: 9, overflow: "hidden" }}>
                     <div style={{ padding: "8px 14px", background: "rgba(22,163,74,0.05)", borderBottom: `1px solid rgba(22,163,74,0.1)` }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: "#15803D", textTransform: "uppercase", letterSpacing: "0.07em", fontFamily: T.sans }}>
-                            Preview — {validCount} valid row{validCount > 1 ? "s" : ""}
-                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#15803D", textTransform: "uppercase", letterSpacing: "0.07em", fontFamily: T.sans }}>Preview — {validCount} valid row{validCount > 1 ? "s" : ""}</span>
                     </div>
                     <div style={{ overflowX: "auto", maxHeight: 200 }}>
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, fontFamily: T.sans }}>
                             <thead>
                                 <tr style={{ background: T.surfaceAlt, borderBottom: `1px solid ${T.border}` }}>
                                     {Object.keys(rows[0]).map(k => (
-                                        <th key={k} style={{ padding: "7px 12px", textAlign: "left", fontSize: 10, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>
-                                            {k.replace(/_/g, " ")}
-                                        </th>
+                                        <th key={k} style={{ padding: "7px 12px", textAlign: "left", fontSize: 10, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>{k.replace(/_/g, " ")}</th>
                                     ))}
                                 </tr>
                             </thead>
@@ -446,9 +435,7 @@ function ParseFeedback({ parsed }) {
                                 {rows.map((row, i) => (
                                     <tr key={i} style={{ borderBottom: i < rows.length - 1 ? `1px solid ${T.borderLight}` : "none", background: i % 2 === 0 ? T.surface : T.surfaceAlt }}>
                                         {Object.values(row).map((v, j) => (
-                                            <td key={j} style={{ padding: "7px 12px", color: T.text, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                                {String(v || "—")}
-                                            </td>
+                                            <td key={j} style={{ padding: "7px 12px", color: T.text, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(v || "—")}</td>
                                         ))}
                                     </tr>
                                 ))}
@@ -468,67 +455,32 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
     const [importing, setImporting] = useState(false);
     const [result, setResult] = useState(null);
 
-    const handleClose = () => {
-        setFile(null); setParsed(null); setImporting(false); setResult(null);
-        onClose();
-    };
+    const handleClose = () => { setFile(null); setParsed(null); setImporting(false); setResult(null); onClose(); };
 
     const parseCSV = (text) => {
         const allLines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter(l => l.trim());
-        if (allLines.length < 2) {
-            return { rows: [], rowErrors: [], fatalError: "CSV must have a header row and at least one data row." };
-        }
-
+        if (allLines.length < 2) return { rows: [], rowErrors: [], fatalError: "CSV must have a header row and at least one data row." };
         const rawHeaders = splitCSVLine(allLines[0]).map(normaliseHeader);
-        const keyMap = {
-            "module name": "module_name",
-            "feature name": "feature_name",
-            "feature code": "feature_code",
-            "user story": "user_story",
-            "description": "description",
-            "assign to": "assign_to",
-        };
+        const keyMap = { "module name": "module_name", "feature name": "feature_name", "feature code": "feature_code", "user story": "user_story", "description": "description", "assign to": "assign_to" };
         const idxMap = {};
         rawHeaders.forEach((h, i) => { const k = keyMap[h]; if (k) idxMap[k] = i; });
-
         const required = ["module_name", "feature_name", "feature_code", "description"];
-        const missing = required
-            .filter(k => idxMap[k] === undefined)
-            .map(k => FEATURE_COLUMNS.find(c => keyMap[normaliseHeader(c.label)] === k)?.label || k);
-
-        if (missing.length) {
-            return {
-                rows: [], rowErrors: [],
-                fatalError: `Missing required column${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}. Please use the provided template.`,
-            };
-        }
-
+        const missing = required.filter(k => idxMap[k] === undefined).map(k => FEATURE_COLUMNS.find(c => keyMap[normaliseHeader(c.label)] === k)?.label || k);
+        if (missing.length) return { rows: [], rowErrors: [], fatalError: `Missing required column${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}. Please use the provided template.` };
         const rows = [], rowErrors = [];
         allLines.slice(1).forEach((line, i) => {
             const cells = splitCSVLine(line);
             const get = (k) => idxMap[k] !== undefined ? (cells[idxMap[k]] || "").replace(/^"|"$/g, "").trim() : "";
             const rowNum = i + 2;
-
-            const module_name = get("module_name");
-            const feature_name = get("feature_name");
-            const feature_code = get("feature_code");
-            const user_story = get("user_story");
-            const description = get("description");
-            const assign_to = get("assign_to");
-
+            const module_name = get("module_name"), feature_name = get("feature_name"), feature_code = get("feature_code"), user_story = get("user_story"), description = get("description"), assign_to = get("assign_to");
             const errs = [];
             if (!module_name) errs.push("Module Name is required");
             if (!feature_name) errs.push("Feature Name is required");
             if (!feature_code) errs.push("Feature Code is required");
             if (!description) errs.push("Description is required");
-
-            if (errs.length) {
-                rowErrors.push({ row: rowNum, name: feature_name || `Row ${rowNum}`, messages: errs });
-            } else {
-                rows.push({ module_name, feature_name, feature_code, user_story, description, assign_to });
-            }
+            if (errs.length) rowErrors.push({ row: rowNum, name: feature_name || `Row ${rowNum}`, messages: errs });
+            else rows.push({ module_name, feature_name, feature_code, user_story, description, assign_to });
         });
-
         return { rows, rowErrors, fatalError: null };
     };
 
@@ -543,55 +495,19 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
         if (!parsed?.rows?.length) return;
         setImporting(true);
         const success = [], failed = [];
-
         const moduleMap = {};
-        for (const m of modules) {
-            const key = (m.module_name || m.name || "").toLowerCase().trim();
-            if (key) moduleMap[key] = m.id;
-        }
-
+        for (const m of modules) { const key = (m.module_name || m.name || "").toLowerCase().trim(); if (key) moduleMap[key] = m.id; }
         const userMap = {};
-        for (const u of users) {
-            if (u.name) userMap[u.name.toLowerCase().trim()] = u.id;
-        }
-
+        for (const u of users) { if (u.name) userMap[u.name.toLowerCase().trim()] = u.id; }
         for (const row of parsed.rows) {
             const moduleId = moduleMap[row.module_name.toLowerCase().trim()];
-            if (!moduleId) {
-                failed.push({
-                    name: row.feature_name,
-                    reason: `Module "${row.module_name}" not found. Available modules: ${Object.keys(moduleMap).join(", ") || "none"}`,
-                });
-                continue;
-            }
-
-            const assignId = row.assign_to
-                ? (userMap[row.assign_to.toLowerCase().trim()] || null)
-                : null;
-
-            if (row.assign_to && !assignId) {
-                console.warn(`[Import Features] User "${row.assign_to}" not found; importing with no assignee.`);
-            }
-
-            const { error } = await supabase.from("features").insert([{
-                module_id: moduleId,
-                feature_name: row.feature_name,
-                feature_code: row.feature_code,
-                user_story: row.user_story || null,
-                description: row.description,
-                assign_to: assignId,
-                created_at: new Date().toISOString(),
-            }]);
-
+            if (!moduleId) { failed.push({ name: row.feature_name, reason: `Module "${row.module_name}" not found.` }); continue; }
+            const assignId = row.assign_to ? (userMap[row.assign_to.toLowerCase().trim()] || null) : null;
+            const { error } = await supabase.from("features").insert([{ module_id: moduleId, feature_name: row.feature_name, feature_code: row.feature_code, user_story: row.user_story || null, description: row.description, assign_to: assignId, created_at: new Date().toISOString() }]);
             if (error) failed.push({ name: row.feature_name, reason: error.message });
             else success.push(row.feature_name);
         }
-
-        const skipped = (parsed.rowErrors || []).map(e => ({
-            name: e.name || `Row ${e.row}`,
-            reason: Array.isArray(e.messages) ? e.messages.join(" · ") : e.messages,
-        }));
-
+        const skipped = (parsed.rowErrors || []).map(e => ({ name: e.name || `Row ${e.row}`, reason: Array.isArray(e.messages) ? e.messages.join(" · ") : e.messages }));
         setResult({ success, failed: [...skipped, ...failed] });
         setImporting(false);
         if (success.length) onSuccess();
@@ -604,67 +520,26 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={handleClose}>
             <div className="fl-modal-enter" style={{ background: T.surface, borderRadius: 16, boxShadow: "0 24px 64px rgba(0,0,0,0.18)", width: "100%", maxWidth: 600, maxHeight: "90vh", overflowY: "auto", fontFamily: T.sans }} onClick={e => e.stopPropagation()}>
                 <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${T.borderLight}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between", position: "sticky", top: 0, background: T.surface, zIndex: 10 }}>
-                    <div>
-                        <h3 style={{ fontSize: 17, fontWeight: 700, color: T.text, margin: 0 }}>Import Features</h3>
-                        <p style={{ fontSize: 13, color: T.textMuted, margin: "3px 0 0" }}>Upload a CSV file to bulk import features</p>
-                    </div>
+                    <div><h3 style={{ fontSize: 17, fontWeight: 700, color: T.text, margin: 0 }}>Import Features</h3><p style={{ fontSize: 13, color: T.textMuted, margin: "3px 0 0" }}>Upload a CSV file to bulk import features</p></div>
                     <button onClick={handleClose} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 18, padding: "2px 4px", lineHeight: 1 }}>✕</button>
                 </div>
-
                 <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
-                    {!result ? (
-                        <>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, padding: "14px 18px", background: T.blueTint, border: `1px solid rgba(37,99,235,0.18)`, borderRadius: 10 }}>
-                                <div>
-                                    <p style={{ fontSize: 13, fontWeight: 700, color: T.blue, margin: "0 0 2px" }}>Download Import Template</p>
-                                    <p style={{ fontSize: 12, color: "#3B82F6", margin: 0 }}>Get the CSV template with all required columns. Fill it in and upload below.</p>
-                                </div>
-                                <button
-                                    onClick={() => downloadCSV(
-                                        FEATURE_COLUMNS,
-                                        "features_import_template.csv",
-                                        ["Login Module", "Two-Factor Auth", "FEAT-001", "US-015", "Adds 2FA via TOTP", "Jane Smith"]
-                                    )}
-                                    style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", background: T.surface, border: `1px solid rgba(37,99,235,0.3)`, color: T.blue, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.sans }}
-                                >
-                                    <i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Template
-                                </button>
-                            </div>
-
-                            {modules.length > 0 && (
-                                <div style={{ padding: "10px 14px", background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 9 }}>
-                                    <p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Available Module Names</p>
-                                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                        {modules.map(m => (
-                                            <span key={m.id} style={{ fontSize: 11, fontFamily: T.mono, background: T.surface, border: `1px solid ${T.border}`, color: T.textMid, padding: "2px 8px", borderRadius: 5 }}>
-                                                {m.module_name || m.name}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            <ColumnReference columns={FEATURE_COLUMNS} />
-                            <DropZone file={file} onFile={handleFile} />
-                            <ParseFeedback parsed={parsed} />
-                        </>
-                    ) : (
-                        <ImportResultScreen result={result} />
-                    )}
+                    {!result ? (<>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, padding: "14px 18px", background: T.blueTint, border: `1px solid rgba(37,99,235,0.18)`, borderRadius: 10 }}>
+                            <div><p style={{ fontSize: 13, fontWeight: 700, color: T.blue, margin: "0 0 2px" }}>Download Import Template</p><p style={{ fontSize: 12, color: "#3B82F6", margin: 0 }}>Get the CSV template with all required columns.</p></div>
+                            <button onClick={() => downloadCSV(FEATURE_COLUMNS, "features_import_template.csv", ["Login Module", "Two-Factor Auth", "FEAT-001", "US-015", "Adds 2FA via TOTP", "Jane Smith"])} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", background: T.surface, border: `1px solid rgba(37,99,235,0.3)`, color: T.blue, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.sans }}><i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Template</button>
+                        </div>
+                        {modules.length > 0 && (<div style={{ padding: "10px 14px", background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 9 }}><p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Available Module Names</p><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{modules.map(m => (<span key={m.id} style={{ fontSize: 11, fontFamily: T.mono, background: T.surface, border: `1px solid ${T.border}`, color: T.textMid, padding: "2px 8px", borderRadius: 5 }}>{m.module_name || m.name}</span>))}</div></div>)}
+                        <ColumnReference columns={FEATURE_COLUMNS} />
+                        <DropZone file={file} onFile={handleFile} />
+                        <ParseFeedback parsed={parsed} />
+                    </>) : (<ImportResultScreen result={result} />)}
                 </div>
-
                 <div style={{ padding: "14px 24px", borderTop: `1px solid ${T.borderLight}`, position: "sticky", bottom: 0, background: T.surface, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10 }}>
                     <button onClick={handleClose} disabled={importing} style={{ padding: "9px 22px", background: T.surface, border: `1px solid ${T.border}`, color: T.textMid, borderRadius: 8, fontWeight: 500, fontSize: 13, cursor: "pointer", fontFamily: T.sans }}>Cancel</button>
                     {!result ? (
-                        <button
-                            onClick={handleImport}
-                            disabled={!canImport}
-                            style={{ padding: "9px 22px", background: "#15803d", border: "none", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: canImport ? "pointer" : "not-allowed", fontFamily: T.sans, opacity: canImport ? 1 : 0.45, display: "inline-flex", alignItems: "center", gap: 8 }}
-                        >
-                            {importing
-                                ? <><i className="fa-solid fa-spinner fa-spin" style={{ fontSize: 11 }}></i> Importing…</>
-                                : <><i className="fa-solid fa-file-import" style={{ fontSize: 11 }}></i> Import {validRows > 0 ? `${validRows} Feature${validRows !== 1 ? "s" : ""}` : "Features"}</>
-                            }
+                        <button onClick={handleImport} disabled={!canImport} style={{ padding: "9px 22px", background: "#15803d", border: "none", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: canImport ? "pointer" : "not-allowed", fontFamily: T.sans, opacity: canImport ? 1 : 0.45, display: "inline-flex", alignItems: "center", gap: 8 }}>
+                            {importing ? <><i className="fa-solid fa-spinner fa-spin" style={{ fontSize: 11 }}></i> Importing…</> : <><i className="fa-solid fa-file-import" style={{ fontSize: 11 }}></i> Import {validRows > 0 ? `${validRows} Feature${validRows !== 1 ? "s" : ""}` : "Features"}</>}
                         </button>
                     ) : (
                         <button onClick={handleClose} style={{ padding: "9px 22px", background: "#15803d", border: "none", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: T.sans }}>Done</button>
@@ -682,76 +557,34 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
     const [importing, setImporting] = useState(false);
     const [result, setResult] = useState(null);
 
-    const handleClose = () => {
-        setFile(null); setParsed(null); setImporting(false); setResult(null);
-        onClose();
-    };
+    const handleClose = () => { setFile(null); setParsed(null); setImporting(false); setResult(null); onClose(); };
 
     const parseCSV = (text) => {
         const allLines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter(l => l.trim());
-        if (allLines.length < 2) {
-            return { rows: [], rowErrors: [], fatalError: "CSV must have a header row and at least one data row." };
-        }
-
+        if (allLines.length < 2) return { rows: [], rowErrors: [], fatalError: "CSV must have a header row and at least one data row." };
         const rawHeaders = splitCSVLine(allLines[0]).map(normaliseHeader);
-        const keyMap = {
-            "feature code": "feature_code",
-            "test case name": "name",
-            "description": "description",
-            "priority": "priority",
-            "status": "status",
-            "test type": "test_type",
-            "assigned to": "assigned_to",
-            "user story codes": "user_story_codes",
-        };
+        const keyMap = { "feature code": "feature_code", "test case name": "name", "description": "description", "priority": "priority", "status": "status", "test type": "test_type", "assigned to": "assigned_to", "user story codes": "user_story_codes" };
         const idxMap = {};
         rawHeaders.forEach((h, i) => { const k = keyMap[h]; if (k) idxMap[k] = i; });
-
         const required = ["feature_code", "name", "description", "priority", "status", "test_type"];
-        const missing = required
-            .filter(k => idxMap[k] === undefined)
-            .map(k => TC_COLUMNS.find(c => keyMap[normaliseHeader(c.label)] === k)?.label || k);
-
-        if (missing.length) {
-            return {
-                rows: [], rowErrors: [],
-                fatalError: `Missing required column${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}. Please use the provided template.`,
-            };
-        }
-
+        const missing = required.filter(k => idxMap[k] === undefined).map(k => TC_COLUMNS.find(c => keyMap[normaliseHeader(c.label)] === k)?.label || k);
+        if (missing.length) return { rows: [], rowErrors: [], fatalError: `Missing required column${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}. Please use the provided template.` };
         const rows = [], rowErrors = [];
         allLines.slice(1).forEach((line, i) => {
             const cells = splitCSVLine(line);
             const get = (k) => idxMap[k] !== undefined ? (cells[idxMap[k]] || "").replace(/^"|"$/g, "").trim() : "";
             const rowNum = i + 2;
-
-            const feature_code = get("feature_code");
-            const name = get("name");
-            const description = get("description");
-            const priority = get("priority");
-            const status = get("status");
-            const test_type = get("test_type");
-            const assigned_to = get("assigned_to");
-            const user_story_codes = get("user_story_codes");
-
+            const feature_code = get("feature_code"), name = get("name"), description = get("description"), priority = get("priority"), status = get("status"), test_type = get("test_type"), assigned_to = get("assigned_to"), user_story_codes = get("user_story_codes");
             const errs = [];
             if (!feature_code) errs.push("Feature Code is required");
             if (!name) errs.push("Test Case Name is required");
             if (!description) errs.push("Description is required");
-            if (!priority) errs.push("Priority is required");
-            else if (!VALID_PRIORITIES.includes(priority)) errs.push(`Invalid Priority "${priority}" — must be High, Medium or Low`);
-            if (!status) errs.push("Status is required");
-            else if (!VALID_STATUSES.includes(status)) errs.push(`Invalid Status "${status}" — must be Active, Draft or Archived`);
-            if (!test_type) errs.push("Test Type is required");
-            else if (!VALID_TEST_TYPES.includes(test_type)) errs.push(`Invalid Test Type "${test_type}" — must be one of: ${VALID_TEST_TYPES.join(", ")}`);
-
-            if (errs.length) {
-                rowErrors.push({ row: rowNum, name: name || `Row ${rowNum}`, messages: errs });
-            } else {
-                rows.push({ feature_code, name, description, priority, status, test_type, assigned_to, user_story_codes });
-            }
+            if (!priority) errs.push("Priority is required"); else if (!VALID_PRIORITIES.includes(priority)) errs.push(`Invalid Priority "${priority}"`);
+            if (!status) errs.push("Status is required"); else if (!VALID_STATUSES.includes(status)) errs.push(`Invalid Status "${status}"`);
+            if (!test_type) errs.push("Test Type is required"); else if (!VALID_TEST_TYPES.includes(test_type)) errs.push(`Invalid Test Type "${test_type}"`);
+            if (errs.length) rowErrors.push({ row: rowNum, name: name || `Row ${rowNum}`, messages: errs });
+            else rows.push({ feature_code, name, description, priority, status, test_type, assigned_to, user_story_codes });
         });
-
         return { rows, rowErrors, fatalError: null };
     };
 
@@ -766,86 +599,33 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
         if (!parsed?.rows?.length) return;
         setImporting(true);
         const success = [], failed = [];
-
         const featureMap = {};
-        for (const f of flatFeatures) {
-            const key = (f.feature_code || f.code || "").toLowerCase().trim();
-            if (key) featureMap[key] = { id: f.id, moduleId: f.moduleId };
-        }
-
+        for (const f of flatFeatures) { const key = (f.feature_code || f.code || "").toLowerCase().trim(); if (key) featureMap[key] = { id: f.id, moduleId: f.moduleId }; }
         const userMap = {};
-        for (const u of users) {
-            if (u.name) userMap[u.name.toLowerCase().trim()] = u.id;
-        }
-
+        for (const u of users) { if (u.name) userMap[u.name.toLowerCase().trim()] = u.id; }
         const storyMap = {};
-        for (const s of userStories) {
-            if (s.code) storyMap[s.code.toLowerCase().trim()] = s.id;
-        }
-
+        for (const s of userStories) { if (s.code) storyMap[s.code.toLowerCase().trim()] = s.id; }
         const { data: existingTCs } = await supabase.from("test_cases").select("test_case_id");
         let allTCIds = (existingTCs || []).map(t => ({ tcId: t.test_case_id }));
-
         const { data: { user: authUser } } = await supabase.auth.getUser();
-
         for (const row of parsed.rows) {
             const feat = featureMap[row.feature_code.toLowerCase().trim()];
-            if (!feat) {
-                failed.push({
-                    name: row.name,
-                    reason: `Feature code "${row.feature_code}" not found. Available codes: ${Object.keys(featureMap).join(", ") || "none"}`,
-                });
-                continue;
-            }
-
-            const assignId = row.assigned_to
-                ? (userMap[row.assigned_to.toLowerCase().trim()] || null)
-                : null;
-
-            if (row.assigned_to && !assignId) {
-                console.warn(`[Import TCs] User "${row.assigned_to}" not found; importing with no assignee.`);
-            }
-
+            if (!feat) { failed.push({ name: row.name, reason: `Feature code "${row.feature_code}" not found.` }); continue; }
+            const assignId = row.assigned_to ? (userMap[row.assigned_to.toLowerCase().trim()] || null) : null;
             let storyIds = [];
             if (row.user_story_codes) {
                 const storyCodes = row.user_story_codes.split(";").map(s => s.trim()).filter(Boolean);
                 const notFound = storyCodes.filter(code => !storyMap[code.toLowerCase().trim()]);
-                if (notFound.length) {
-                    failed.push({ name: row.name, reason: `User story code(s) not found: ${notFound.join(", ")}` });
-                    continue;
-                }
+                if (notFound.length) { failed.push({ name: row.name, reason: `User story code(s) not found: ${notFound.join(", ")}` }); continue; }
                 storyIds = storyCodes.map(code => storyMap[code.toLowerCase().trim()]);
             }
-
             const nextTcId = generateNextTcId(allTCIds);
             allTCIds.push({ tcId: nextTcId });
-
-            const { error } = await supabase.from("test_cases").insert([{
-                id: generateUUID(),
-                test_case_id: nextTcId,
-                name: row.name,
-                description: row.description,
-                feature_id: feat.id,
-                module_id: feat.moduleId,
-                priority: row.priority,
-                status: row.status,
-                test_type: row.test_type,
-                assigned_to: assignId,
-                user_story_ids: storyIds.length > 0 ? storyIds : null,
-                created_by: authUser?.id || null,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-            }]);
-
+            const { error } = await supabase.from("test_cases").insert([{ id: generateUUID(), test_case_id: nextTcId, name: row.name, description: row.description, feature_id: feat.id, module_id: feat.moduleId, priority: row.priority, status: row.status, test_type: row.test_type, assigned_to: assignId, user_story_ids: storyIds.length > 0 ? storyIds : null, created_by: authUser?.id || null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }]);
             if (error) failed.push({ name: row.name, reason: error.message });
             else success.push(row.name);
         }
-
-        const skipped = (parsed.rowErrors || []).map(e => ({
-            name: e.name || `Row ${e.row}`,
-            reason: Array.isArray(e.messages) ? e.messages.join(" · ") : e.messages,
-        }));
-
+        const skipped = (parsed.rowErrors || []).map(e => ({ name: e.name || `Row ${e.row}`, reason: Array.isArray(e.messages) ? e.messages.join(" · ") : e.messages }));
         setResult({ success, failed: [...skipped, ...failed] });
         setImporting(false);
         if (success.length) onSuccess();
@@ -858,67 +638,26 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={handleClose}>
             <div className="fl-modal-enter" style={{ background: T.surface, borderRadius: 16, boxShadow: "0 24px 64px rgba(0,0,0,0.18)", width: "100%", maxWidth: 640, maxHeight: "90vh", overflowY: "auto", fontFamily: T.sans }} onClick={e => e.stopPropagation()}>
                 <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${T.borderLight}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between", position: "sticky", top: 0, background: T.surface, zIndex: 10 }}>
-                    <div>
-                        <h3 style={{ fontSize: 17, fontWeight: 700, color: T.text, margin: 0 }}>Import Test Cases</h3>
-                        <p style={{ fontSize: 13, color: T.textMuted, margin: "3px 0 0" }}>Upload a CSV file to bulk import test cases</p>
-                    </div>
+                    <div><h3 style={{ fontSize: 17, fontWeight: 700, color: T.text, margin: 0 }}>Import Test Cases</h3><p style={{ fontSize: 13, color: T.textMuted, margin: "3px 0 0" }}>Upload a CSV file to bulk import test cases</p></div>
                     <button onClick={handleClose} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 18, padding: "2px 4px", lineHeight: 1 }}>✕</button>
                 </div>
-
                 <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
-                    {!result ? (
-                        <>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, padding: "14px 18px", background: T.blueTint, border: `1px solid rgba(37,99,235,0.18)`, borderRadius: 10 }}>
-                                <div>
-                                    <p style={{ fontSize: 13, fontWeight: 700, color: T.blue, margin: "0 0 2px" }}>Download Import Template</p>
-                                    <p style={{ fontSize: 12, color: "#3B82F6", margin: 0 }}>Get the CSV template with all required columns. Fill it in and upload below.</p>
-                                </div>
-                                <button
-                                    onClick={() => downloadCSV(
-                                        TC_COLUMNS,
-                                        "test_cases_import_template.csv",
-                                        ["FEAT-001", "Verify successful login", "Test that a user can login with valid credentials", "High", "Active", "Functional", "John Doe", "US-001;US-002"]
-                                    )}
-                                    style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", background: T.surface, border: `1px solid rgba(37,99,235,0.3)`, color: T.blue, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.sans }}
-                                >
-                                    <i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Template
-                                </button>
-                            </div>
-
-                            {flatFeatures.length > 0 && (
-                                <div style={{ padding: "10px 14px", background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 9 }}>
-                                    <p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Available Feature Codes</p>
-                                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                        {flatFeatures.map(f => (
-                                            <span key={f.id} style={{ fontSize: 11, fontFamily: T.mono, background: T.surface, border: `1px solid ${T.border}`, color: T.purple, padding: "2px 8px", borderRadius: 5 }}>
-                                                {f.feature_code || f.code}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            <ColumnReference columns={TC_COLUMNS} />
-                            <DropZone file={file} onFile={handleFile} />
-                            <ParseFeedback parsed={parsed} />
-                        </>
-                    ) : (
-                        <ImportResultScreen result={result} />
-                    )}
+                    {!result ? (<>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, padding: "14px 18px", background: T.blueTint, border: `1px solid rgba(37,99,235,0.18)`, borderRadius: 10 }}>
+                            <div><p style={{ fontSize: 13, fontWeight: 700, color: T.blue, margin: "0 0 2px" }}>Download Import Template</p><p style={{ fontSize: 12, color: "#3B82F6", margin: 0 }}>Get the CSV template with all required columns.</p></div>
+                            <button onClick={() => downloadCSV(TC_COLUMNS, "test_cases_import_template.csv", ["FEAT-001", "Verify successful login", "Test that a user can login with valid credentials", "High", "Active", "Functional", "John Doe", "US-001;US-002"])} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", background: T.surface, border: `1px solid rgba(37,99,235,0.3)`, color: T.blue, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.sans }}><i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Template</button>
+                        </div>
+                        {flatFeatures.length > 0 && (<div style={{ padding: "10px 14px", background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 9 }}><p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Available Feature Codes</p><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{flatFeatures.map(f => (<span key={f.id} style={{ fontSize: 11, fontFamily: T.mono, background: T.surface, border: `1px solid ${T.border}`, color: T.purple, padding: "2px 8px", borderRadius: 5 }}>{f.feature_code || f.code}</span>))}</div></div>)}
+                        <ColumnReference columns={TC_COLUMNS} />
+                        <DropZone file={file} onFile={handleFile} />
+                        <ParseFeedback parsed={parsed} />
+                    </>) : (<ImportResultScreen result={result} />)}
                 </div>
-
                 <div style={{ padding: "14px 24px", borderTop: `1px solid ${T.borderLight}`, position: "sticky", bottom: 0, background: T.surface, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10 }}>
                     <button onClick={handleClose} disabled={importing} style={{ padding: "9px 22px", background: T.surface, border: `1px solid ${T.border}`, color: T.textMid, borderRadius: 8, fontWeight: 500, fontSize: 13, cursor: "pointer", fontFamily: T.sans }}>Cancel</button>
                     {!result ? (
-                        <button
-                            onClick={handleImport}
-                            disabled={!canImport}
-                            style={{ padding: "9px 22px", background: "#15803d", border: "none", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: canImport ? "pointer" : "not-allowed", fontFamily: T.sans, opacity: canImport ? 1 : 0.45, display: "inline-flex", alignItems: "center", gap: 8 }}
-                        >
-                            {importing
-                                ? <><i className="fa-solid fa-spinner fa-spin" style={{ fontSize: 11 }}></i> Importing…</>
-                                : <><i className="fa-solid fa-file-import" style={{ fontSize: 11 }}></i> Import {validRows > 0 ? `${validRows} Test Case${validRows !== 1 ? "s" : ""}` : "Test Cases"}</>
-                            }
+                        <button onClick={handleImport} disabled={!canImport} style={{ padding: "9px 22px", background: "#15803d", border: "none", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: canImport ? "pointer" : "not-allowed", fontFamily: T.sans, opacity: canImport ? 1 : 0.45, display: "inline-flex", alignItems: "center", gap: 8 }}>
+                            {importing ? <><i className="fa-solid fa-spinner fa-spin" style={{ fontSize: 11 }}></i> Importing…</> : <><i className="fa-solid fa-file-import" style={{ fontSize: 11 }}></i> Import {validRows > 0 ? `${validRows} Test Case${validRows !== 1 ? "s" : ""}` : "Test Cases"}</>}
                         </button>
                     ) : (
                         <button onClick={handleClose} style={{ padding: "9px 22px", background: "#15803d", border: "none", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: T.sans }}>Done</button>
@@ -940,7 +679,11 @@ const TestCaseRow = memo(({ tc, onEdit, onDelete }) => (
         <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}><Chip label={tc.priority} style={PRIORITY_STYLE[tc.priority] || {}} mono /></td>
         <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}><Chip label={tc.status} style={STATUS_STYLE[tc.status] || STATUS_STYLE["Active"]} /></td>
         <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>{tc.testType ? <Chip label={tc.testType} style={TEST_TYPE_STYLE[tc.testType] || { background: T.surfaceAlt, color: T.textMid }} /> : <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>—</span>}</td>
-        <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>{tc.assignee ? <span style={{ fontSize: 11, color: T.textMid, fontFamily: T.sans, display: "flex", alignItems: "center", gap: 5 }}><i className="fa-solid fa-user" style={{ fontSize: 9, color: T.textFaint }}></i>{tc.assignee}</span> : <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>—</span>}</td>
+        <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
+            {tc.assignee
+                ? <span style={{ fontSize: 11, color: T.textMid, fontFamily: T.sans, display: "flex", alignItems: "center", gap: 5 }}><i className="fa-solid fa-user" style={{ fontSize: 9, color: T.textFaint }}></i>{tc.assignee}</span>
+                : <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>—</span>}
+        </td>
         <td style={{ padding: "10px 16px" }}>{tc.userStoryIds && tc.userStoryIds.length > 0 ? (<div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>{tc.userStoryCodes && tc.userStoryCodes.length > 0 ? tc.userStoryCodes.map((code, i) => (<span key={i} style={{ fontSize: 10, fontWeight: 700, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "1px 6px", borderRadius: 4 }}>{code}</span>)) : tc.userStoryIds.map((id, i) => (<span key={i} style={{ fontSize: 10, fontWeight: 700, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "1px 6px", borderRadius: 4 }}>US</span>))}</div>) : (<span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>—</span>)}</td>
         <td style={{ padding: "10px 16px", whiteSpace: "nowrap", fontSize: 11, color: T.textMuted, fontFamily: T.mono }}>{tc.updated}</td>
         <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}><div style={{ display: "flex", alignItems: "center", gap: 2 }}><button className="fl-icon-btn edit" onClick={onEdit} title="Edit"><i className="fa-solid fa-pen-to-square"></i></button><button className="fl-icon-btn delete" onClick={onDelete} title="Delete"><i className="fa-solid fa-trash"></i></button></div></td>
@@ -1051,7 +794,15 @@ function FeaturesLibrary() {
                 if (!tcsByFeature[tc.feature_id]) tcsByFeature[tc.feature_id] = [];
                 const userStoryIds = Array.isArray(tc.user_story_ids) ? tc.user_story_ids : [];
                 const userStoryCodes = userStoryIds.map(uid => storyCodeMap[uid]).filter(Boolean);
-                tcsByFeature[tc.feature_id].push({ id: tc.id, tcId: tc.test_case_id || tc.id, name: tc.name, description: tc.description, priority: tc.priority, status: tc.status, testType: tc.test_type || null, assignee: tc.assigned_to || null, updated: new Date(tc.updated_at).toLocaleDateString(), userStoryIds, userStoryCodes });
+                tcsByFeature[tc.feature_id].push({
+                    id: tc.id, tcId: tc.test_case_id || tc.id, name: tc.name,
+                    description: tc.description, priority: tc.priority, status: tc.status,
+                    testType: tc.test_type || null,
+                    // Store raw assigned_to — will be resolved to name in flatFeatures
+                    assignee: tc.assigned_to || null,
+                    updated: new Date(tc.updated_at).toLocaleDateString(),
+                    userStoryIds, userStoryCodes,
+                });
             }
             const featsByModule = {}; for (const f of feats) { if (!featsByModule[f.module_id]) featsByModule[f.module_id] = []; featsByModule[f.module_id].push(f); }
             const enriched = (modulesData || []).map(mod => {
@@ -1077,7 +828,26 @@ function FeaturesLibrary() {
         if (exists) { setOpenFeatures(prev => ({ ...prev, [id]: true })); setTimeout(() => { const el = document.getElementById(`feature-${id}`); if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); }, 300); }
     }, [modules]);
 
-    const flatFeatures = useMemo(() => modules.flatMap(mod => mod.features.map(feat => { const assignedUser = users.find(u => u.id === feat.assign_to); return { ...feat, assign_to_name: assignedUser ? assignedUser.name : (feat.assign_to || null) }; })), [modules, users]);
+    // ── KEY FIX: resolve tc.assignee UUID → display name here, where users is available ──
+    const flatFeatures = useMemo(() => {
+        const userById = {};
+        for (const u of users) { if (u.id) userById[u.id] = u.name; }
+
+        return modules.flatMap(mod => mod.features.map(feat => {
+            const assignedUser = users.find(u => u.id === feat.assign_to);
+            const resolved = {
+                ...feat,
+                assign_to_name: assignedUser ? assignedUser.name : (feat.assign_to || null),
+            };
+            // Resolve each test case's assignee UUID to a human-readable name
+            resolved.testCases = (feat.testCases || []).map(tc => ({
+                ...tc,
+                assignee: tc.assignee ? (userById[tc.assignee] || tc.assignee) : null,
+            }));
+            return resolved;
+        }));
+    }, [modules, users]);
+
     const totalFeatures = useMemo(() => flatFeatures.length, [flatFeatures]);
     const totalModules = useMemo(() => modules.length, [modules]);
     const totalTestCases = useMemo(() => flatFeatures.reduce((a, f) => a + f.testCasesCount, 0), [flatFeatures]);
@@ -1085,35 +855,22 @@ function FeaturesLibrary() {
     const testerOptions = useMemo(() => [{ id: "", name: "Select Tester" }, ...users.map(u => ({ id: u.name, name: u.name }))], [users]);
     const moduleOptions = useMemo(() => [{ id: "", name: "Choose Module" }, ...modules.map(m => ({ id: m.id, name: m.name }))], [modules]);
 
-    // ─── FIXED: null-safe search filter ───────────────────────────────────────
     const filteredFeatures = useMemo(() => {
         let list = flatFeatures;
-        if (filterStatus) {
-            list = list.filter(f => (f.status || "Active").toLowerCase() === filterStatus.toLowerCase());
-        }
+        if (filterStatus) list = list.filter(f => (f.status || "Active").toLowerCase() === filterStatus.toLowerCase());
         if (searchQuery) {
             const q = searchQuery.toLowerCase().trim();
             const s = (v) => String(v ?? "").toLowerCase();
             list = list.filter(f =>
-                s(f.name).includes(q) ||
-                s(f.code).includes(q) ||
-                s(f.feature_name).includes(q) ||
-                s(f.feature_code).includes(q) ||
-                s(f.moduleName).includes(q) ||
-                s(f.moduleCode).includes(q) ||
+                s(f.name).includes(q) || s(f.code).includes(q) || s(f.feature_name).includes(q) ||
+                s(f.feature_code).includes(q) || s(f.moduleName).includes(q) || s(f.moduleCode).includes(q) ||
                 s(f.description).includes(q) ||
-                (f.testCases || []).some(tc =>
-                    s(tc.tcId || tc.id).includes(q) ||
-                    s(tc.name).includes(q) ||
-                    s(tc.description).includes(q) ||
-                    (tc.userStoryCodes || []).some(code => s(code).includes(q))
-                )
+                (f.testCases || []).some(tc => s(tc.tcId || tc.id).includes(q) || s(tc.name).includes(q) || s(tc.description).includes(q) || (tc.userStoryCodes || []).some(code => s(code).includes(q)))
             );
         }
         return list;
     }, [flatFeatures, searchQuery, filterStatus]);
 
-    // ─── Auto-expand matched features when searching ───────────────────────────
     useEffect(() => {
         if (searchQuery.trim()) {
             const expanded = {};

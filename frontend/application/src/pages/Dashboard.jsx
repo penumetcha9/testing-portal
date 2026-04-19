@@ -83,12 +83,14 @@ function MyAssignments({ userId }) {
 
     useEffect(() => {
         if (!userId) return;
+        console.log("MyAssignments: fetching for userId =", userId);
         fetchMyAssignments();
     }, [userId]); // eslint-disable-line
 
     async function fetchMyAssignments() {
         setLoading(true);
 
+        // Resolve both UUID and name so we match regardless of what assigned_to stores
         const { data: profileData } = await supabase
             .from("profiles")
             .select("id, full_name, email")
@@ -96,7 +98,6 @@ function MyAssignments({ userId }) {
             .single();
 
         const userName = profileData?.full_name || profileData?.email || userId;
-        console.log("MyAssignments: resolved userName =", userName, "from userId =", userId);
 
         await Promise.all([
             fetchMyTestCases(userName),
@@ -122,12 +123,8 @@ function MyAssignments({ userId }) {
                 .limit(20),
         ]);
 
-        const merged = [
-            ...(byId.data || []),
-            ...(byName.data || []),
-        ];
+        const merged = [...(byId.data || []), ...(byName.data || [])];
         const unique = Array.from(new Map(merged.map(tc => [tc.id, tc])).values());
-        console.log("fetchMyTestCases: found", unique.length, "records");
         setMyTestCases(unique);
     }
 
@@ -143,24 +140,16 @@ function MyAssignments({ userId }) {
 
         const { data, error } = await supabase
             .from("modules")
-            .select("id, module_name, status, description, test_cases ( status )")
+            .select("id, module_name, status, test_cases ( status )")
             .in("id", moduleIds)
             .order("module_name");
 
         if (error) console.error("fetchMyModules error:", error);
-        if (!error && data) setMyModules(data);
+        else setMyModules(data || []);
     }
 
     async function fetchMyFeatures(userName) {
         const [byId, byName] = await Promise.all([
-            supabase.from("test_cases").select("feature_id").eq("assigned_to", userId),
-            supabase.from("test_cases").select("feature_id").eq("assigned_to", userName),
-        ]);
-
-        const allTcs = [...(byId.data || []), ...(byName.data || [])];
-        const featureIds = [...new Set(allTcs.map(tc => tc.feature_id).filter(Boolean))];
-
-        const queries = [
             supabase
                 .from("features")
                 .select("id, feature_name, status, priority, modules ( module_name )")
@@ -171,20 +160,9 @@ function MyAssignments({ userId }) {
                 .select("id, feature_name, status, priority, modules ( module_name )")
                 .eq("assign_to", userName)
                 .order("feature_name"),
-        ];
+        ]);
 
-        if (featureIds.length > 0) {
-            queries.push(
-                supabase
-                    .from("features")
-                    .select("id, feature_name, status, priority, modules ( module_name )")
-                    .in("id", featureIds)
-                    .order("feature_name")
-            );
-        }
-
-        const results = await Promise.all(queries);
-        const allFeatures = results.flatMap(r => r.data || []);
+        const allFeatures = [...(byId.data || []), ...(byName.data || [])];
         const unique = Array.from(new Map(allFeatures.map(f => [f.id, f])).values());
         setMyFeatures(unique);
     }
@@ -523,7 +501,6 @@ export default function Dashboard() {
         setFailedIssues(data.map(tc => ({
             ...tc,
             style: priorityMap[tc.priority] || priorityMap.Low,
-            timeAgo: timeAgo(tc.created_at),
         })));
     }
 
@@ -574,18 +551,7 @@ export default function Dashboard() {
             .limit(8);
 
         if (error || !data) return;
-        setRecentExecutions(data.map(e => ({ ...e, timeAgo: timeAgo(e.created_at) })));
-    }
-
-    function timeAgo(ts) {
-        if (!ts) return "";
-        const diff = Date.now() - new Date(ts).getTime();
-        const mins = Math.floor(diff / 60000);
-        if (mins < 1) return "just now";
-        if (mins < 60) return `${mins}m ago`;
-        const hrs = Math.floor(mins / 60);
-        if (hrs < 24) return `${hrs}h ago`;
-        return `${Math.floor(hrs / 24)}d ago`;
+        setRecentExecutions(data);
     }
 
     const execIcon = (status) => {
@@ -612,7 +578,7 @@ export default function Dashboard() {
                     </div>
 
                     {/* ── MY ASSIGNMENTS ── */}
-                    <MyAssignments userId={currentUserId} />
+                    {currentUserId && <MyAssignments userId={currentUserId} />}
 
                     {/* ── Active Versions + Status Chart ── */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
@@ -791,7 +757,6 @@ export default function Dashboard() {
                                                         <i className="fa-solid fa-user text-[10px]" />{issue.assigned_to}
                                                     </span>
                                                 )}
-                                                <span className="text-xs text-muted-foreground ml-auto">{issue.timeAgo}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -901,7 +866,6 @@ export default function Dashboard() {
                                                 </p>
                                                 <p className="text-xs text-muted-foreground truncate">{e.test_cases?.name || "Test case"}</p>
                                                 {e.environment && <p className="text-xs text-muted-foreground">{e.environment} · {e.browser}</p>}
-                                                <p className="text-xs text-muted-foreground mt-0.5">{e.timeAgo}</p>
                                             </div>
                                         </div>
                                     );

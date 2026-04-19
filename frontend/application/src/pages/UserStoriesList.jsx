@@ -275,19 +275,16 @@ const UserStoriesList = () => {
     const [sortBy, setSortBy] = useState('updated_at');
     const [viewMode, setViewMode] = useState('grid');
 
-    // ── Dropdown options fetched from their own tables ──
     const [moduleOpts, setModuleOpts] = useState([]);
     const [featureOpts, setFeatureOpts] = useState([]);
     const [versionOpts, setVersionOpts] = useState([]);
 
-    // ── Edit / Delete state ──
     const [editingStory, setEditingStory] = useState(null);
     const [editForm, setEditForm] = useState({});
     const [editLoading, setEditLoading] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleteLoading, setDeleteLoading] = useState(false);
 
-    // ── Fetch dropdown options from their own tables ──
     useEffect(() => {
         const fetchOptions = async () => {
             const [
@@ -299,7 +296,6 @@ const UserStoriesList = () => {
                 supabase.from('features').select('feature_name').order('feature_name'),
                 supabase.from('versions').select('version_number').order('version_number'),
             ]);
-
             setModuleOpts((modulesData || []).map(m => m.module_name).filter(Boolean));
             setFeatureOpts((featuresData || []).map(f => f.feature_name).filter(Boolean));
             setVersionOpts((versionsData || []).map(v => v.version_number).filter(Boolean));
@@ -307,7 +303,6 @@ const UserStoriesList = () => {
         fetchOptions();
     }, []);
 
-    // ── Fetch stories ──
     useEffect(() => {
         (async () => {
             setLoading(true); setError(null);
@@ -493,7 +488,7 @@ const UserStoriesList = () => {
                         </div>
                     </div>
 
-                    {/* Filter pills — Module, Feature, Version, Status (Criticality removed) */}
+                    {/* Filter pills */}
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 22 }}>
                         <FilterPill label="Module" icon="fa-cube" options={moduleOpts} value={filterModule} onChange={setFilterModule} />
                         <FilterPill label="Feature" icon="fa-puzzle-piece" options={featureOpts} value={filterFeature} onChange={setFilterFeature} />
@@ -541,9 +536,9 @@ const UserStoriesList = () => {
                         </div>
                     )}
 
-                    {/* Grid view */}
+                    {/* Grid view — no fixed row height, cards size to content */}
                     {!loading && !error && filtered.length > 0 && viewMode === 'grid' && (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gridAutoRows: '160px', gap: 16 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gridAutoRows: '220px', gap: 16 }}>
                             {filtered.map((story, i) => (
                                 <div key={story.id} style={{ animation: `fadeUp 0.25s ease ${Math.min(i * 0.04, 0.5)}s both` }}>
                                     <StoryCard story={story} onClick={handleSelectStory} onEdit={openEditModal} onDelete={setDeleteTarget} />
@@ -604,7 +599,6 @@ const UserStoriesList = () => {
                     onClick={() => setEditingStory(null)}>
                     <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.18)', width: '100%', maxWidth: 640, maxHeight: '90vh', overflowY: 'auto', fontFamily: "'DM Sans',sans-serif" }}
                         onClick={e => e.stopPropagation()}>
-
                         <div style={{ padding: '20px 24px 16px', borderBottom: '1.5px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 14, position: 'sticky', top: 0, background: '#fff', zIndex: 10 }}>
                             <div style={{ width: 38, height: 38, background: '#eff6ff', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                 <i className="fa-solid fa-pen-to-square" style={{ color: '#2563eb', fontSize: 15 }} />
@@ -617,39 +611,26 @@ const UserStoriesList = () => {
                                 <i className="fa-solid fa-times" />
                             </button>
                         </div>
-
                         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
                             <div>
-                                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                    Story Title <span style={{ color: '#ef4444' }}>*</span>
-                                </label>
-                                <input value={editForm.story_title} onChange={e => setEditForm(f => ({ ...f, story_title: e.target.value }))}
-                                    placeholder="e.g., User can reset their password"
-                                    style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13.5, color: '#0f172a', outline: 'none', boxSizing: 'border-box' }}
-                                    onFocus={e => e.target.style.borderColor = '#22c55e'}
-                                    onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
+                                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Story Title <span style={{ color: '#ef4444' }}>*</span></label>
+                                <input value={editForm.story_title} onChange={e => setEditForm(f => ({ ...f, story_title: e.target.value }))} placeholder="e.g., User can reset their password" style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13.5, color: '#0f172a', outline: 'none', boxSizing: 'border-box' }} onFocus={e => e.target.style.borderColor = '#22c55e'} onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
                             </div>
                             <div>
                                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Summary</label>
-                                <textarea value={editForm.story_summary} onChange={e => setEditForm(f => ({ ...f, story_summary: e.target.value }))}
-                                    rows={3} placeholder="Brief description…"
-                                    style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', resize: 'none', boxSizing: 'border-box' }}
-                                    onFocus={e => e.target.style.borderColor = '#22c55e'}
-                                    onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
+                                <textarea value={editForm.story_summary} onChange={e => setEditForm(f => ({ ...f, story_summary: e.target.value }))} rows={3} placeholder="Brief description…" style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', resize: 'none', boxSizing: 'border-box' }} onFocus={e => e.target.style.borderColor = '#22c55e'} onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                                 <div>
                                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Story Type</label>
-                                    <select value={editForm.story_type} onChange={e => setEditForm(f => ({ ...f, story_type: e.target.value }))}
-                                        style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                                    <select value={editForm.story_type} onChange={e => setEditForm(f => ({ ...f, story_type: e.target.value }))} style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', background: '#fff', cursor: 'pointer' }}>
                                         <option value="">Select type…</option>
                                         {['Feature', 'Bug Fix', 'Improvement', 'Technical', 'Research'].map(t => <option key={t} value={t}>{t}</option>)}
                                     </select>
                                 </div>
                                 <div>
                                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</label>
-                                    <select value={editForm.current_status} onChange={e => setEditForm(f => ({ ...f, current_status: e.target.value }))}
-                                        style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                                    <select value={editForm.current_status} onChange={e => setEditForm(f => ({ ...f, current_status: e.target.value }))} style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', background: '#fff', cursor: 'pointer' }}>
                                         {Object.keys(STATUS_META).map(s => <option key={s} value={s}>{s}</option>)}
                                     </select>
                                 </div>
@@ -657,46 +638,29 @@ const UserStoriesList = () => {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                                 <div>
                                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Criticality</label>
-                                    <select value={editForm.criticality} onChange={e => setEditForm(f => ({ ...f, criticality: e.target.value }))}
-                                        style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                                    <select value={editForm.criticality} onChange={e => setEditForm(f => ({ ...f, criticality: e.target.value }))} style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', background: '#fff', cursor: 'pointer' }}>
                                         <option value="">Select…</option>
                                         {Object.keys(CRIT_META).map(c => <option key={c} value={c}>{c}</option>)}
                                     </select>
                                 </div>
                                 <div>
                                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Story Points</label>
-                                    <input type="number" min="0" value={editForm.story_points} onChange={e => setEditForm(f => ({ ...f, story_points: e.target.value }))}
-                                        placeholder="e.g., 5"
-                                        style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', boxSizing: 'border-box' }}
-                                        onFocus={e => e.target.style.borderColor = '#22c55e'}
-                                        onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
+                                    <input type="number" min="0" value={editForm.story_points} onChange={e => setEditForm(f => ({ ...f, story_points: e.target.value }))} placeholder="e.g., 5" style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', boxSizing: 'border-box' }} onFocus={e => e.target.style.borderColor = '#22c55e'} onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
                                 </div>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                                 <div>
                                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Module</label>
-                                    <input value={editForm.module} onChange={e => setEditForm(f => ({ ...f, module: e.target.value }))}
-                                        placeholder="e.g., Billing"
-                                        style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', boxSizing: 'border-box' }}
-                                        onFocus={e => e.target.style.borderColor = '#22c55e'}
-                                        onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
+                                    <input value={editForm.module} onChange={e => setEditForm(f => ({ ...f, module: e.target.value }))} placeholder="e.g., Billing" style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', boxSizing: 'border-box' }} onFocus={e => e.target.style.borderColor = '#22c55e'} onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
                                 </div>
                                 <div>
                                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Feature</label>
-                                    <input value={editForm.feature} onChange={e => setEditForm(f => ({ ...f, feature: e.target.value }))}
-                                        placeholder="e.g., Invoice generation"
-                                        style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', boxSizing: 'border-box' }}
-                                        onFocus={e => e.target.style.borderColor = '#22c55e'}
-                                        onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
+                                    <input value={editForm.feature} onChange={e => setEditForm(f => ({ ...f, feature: e.target.value }))} placeholder="e.g., Invoice generation" style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', boxSizing: 'border-box' }} onFocus={e => e.target.style.borderColor = '#22c55e'} onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
                                 </div>
                             </div>
                             <div>
                                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Planned Release / Version</label>
-                                <input value={editForm.planned_release} onChange={e => setEditForm(f => ({ ...f, planned_release: e.target.value }))}
-                                    placeholder="e.g., v2.1.0"
-                                    style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', boxSizing: 'border-box' }}
-                                    onFocus={e => e.target.style.borderColor = '#22c55e'}
-                                    onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
+                                <input value={editForm.planned_release} onChange={e => setEditForm(f => ({ ...f, planned_release: e.target.value }))} placeholder="e.g., v2.1.0" style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', boxSizing: 'border-box' }} onFocus={e => e.target.style.borderColor = '#22c55e'} onBlur={e => e.target.style.borderColor = '#e2e8f0'} />
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
                                 {[
@@ -706,8 +670,7 @@ const UserStoriesList = () => {
                                 ].map(({ key, label, opts }) => (
                                     <div key={key}>
                                         <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</label>
-                                        <select value={editForm[key]} onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))}
-                                            style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 12, color: '#374151', outline: 'none', background: '#fff', cursor: 'pointer' }}>
+                                        <select value={editForm[key]} onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))} style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 12, color: '#374151', outline: 'none', background: '#fff', cursor: 'pointer' }}>
                                             <option value="">Select…</option>
                                             {opts.map(o => <option key={o} value={o}>{o}</option>)}
                                         </select>
@@ -715,14 +678,9 @@ const UserStoriesList = () => {
                                 ))}
                             </div>
                         </div>
-
                         <div style={{ padding: '14px 24px', borderTop: '1.5px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', bottom: 0, background: '#fff' }}>
-                            <button onClick={() => setEditingStory(null)}
-                                style={{ padding: '9px 22px', border: '1.5px solid #e2e8f0', borderRadius: 9, background: '#fff', color: '#475569', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
-                                Cancel
-                            </button>
-                            <button onClick={handleUpdateStory} disabled={editLoading}
-                                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 24px', border: 'none', borderRadius: 9, background: '#15803d', color: '#fff', fontSize: 13, fontWeight: 600, cursor: editLoading ? 'not-allowed' : 'pointer', opacity: editLoading ? 0.7 : 1 }}>
+                            <button onClick={() => setEditingStory(null)} style={{ padding: '9px 22px', border: '1.5px solid #e2e8f0', borderRadius: 9, background: '#fff', color: '#475569', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
+                            <button onClick={handleUpdateStory} disabled={editLoading} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 24px', border: 'none', borderRadius: 9, background: '#15803d', color: '#fff', fontSize: 13, fontWeight: 600, cursor: editLoading ? 'not-allowed' : 'pointer', opacity: editLoading ? 0.7 : 1 }}>
                                 {editLoading ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : <><i className="fa-solid fa-check" /> Save Changes</>}
                             </button>
                         </div>
@@ -751,16 +709,11 @@ const UserStoriesList = () => {
                         </div>
                         <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginBottom: 24, display: 'flex', gap: 10 }}>
                             <i className="fa-solid fa-triangle-exclamation" style={{ color: '#dc2626', fontSize: 13, marginTop: 1, flexShrink: 0 }} />
-                            <p style={{ fontSize: 12, color: '#b91c1c', margin: 0, lineHeight: 1.5 }}>
-                                Deleting this story will permanently remove it and all its associations including linked test cases.
-                            </p>
+                            <p style={{ fontSize: 12, color: '#b91c1c', margin: 0, lineHeight: 1.5 }}>Deleting this story will permanently remove it and all its associations including linked test cases.</p>
                         </div>
                         <div style={{ display: 'flex', gap: 12 }}>
-                            <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px', border: '1.5px solid #e2e8f0', borderRadius: 9, background: '#fff', color: '#475569', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
-                                Cancel
-                            </button>
-                            <button onClick={handleDeleteStory} disabled={deleteLoading}
-                                style={{ flex: 1, padding: '10px', border: 'none', borderRadius: 9, background: '#dc2626', color: '#fff', fontSize: 13, fontWeight: 600, cursor: deleteLoading ? 'not-allowed' : 'pointer', opacity: deleteLoading ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                            <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px', border: '1.5px solid #e2e8f0', borderRadius: 9, background: '#fff', color: '#475569', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
+                            <button onClick={handleDeleteStory} disabled={deleteLoading} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: 9, background: '#dc2626', color: '#fff', fontSize: 13, fontWeight: 600, cursor: deleteLoading ? 'not-allowed' : 'pointer', opacity: deleteLoading ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                                 {deleteLoading ? <><i className="fa-solid fa-spinner fa-spin" /> Deleting…</> : <><i className="fa-solid fa-trash" /> Delete Story</>}
                             </button>
                         </div>
