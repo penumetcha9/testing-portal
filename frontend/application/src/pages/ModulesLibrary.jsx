@@ -59,17 +59,18 @@ const VALID_STATUSES = ["Active", "Inactive", "Archived"];
 const VALID_COLORS = ["blue", "green", "purple", "red", "indigo", "pink", "teal", "orange"];
 
 const COLUMN_REFERENCE = [
-    { label: "Module Name", required: true, hint: "Any text" },
-    { label: "Description", required: true, hint: "Brief description of the module" },
-    { label: "Module Owner", required: true, hint: "Must match an existing user name" },
-    { label: "Priority", required: true, hint: "High | Medium | Low" },
-    { label: "Status", required: true, hint: "Active | Inactive | Archived" },
-    { label: "Icon Color", required: false, hint: "blue | green | purple | red | indigo | pink | teal | orange" },
+    { label: "Module Name", required: true, hint: "Any text. Must be unique." },
+    { label: "Description", required: true, hint: "Any descriptive text." },
+    { label: "Module Owner", required: true, hint: "Full name — must match an existing user." },
+    { label: "Priority", required: true, hint: "High  |  Medium  |  Low" },
+    { label: "Status", required: true, hint: "Active  |  Inactive  |  Archived" },
+    { label: "Icon Color", required: false, hint: "blue | green | purple | red | teal | orange | gray | indigo | pink" },
 ];
 
 const downloadImportTemplate = () => {
-    const header = COLUMN_REFERENCE.map(c => c.label).join(",");
-    const csv = header;
+    const header = "Module Name,Description,Module Owner,Priority,Status,Icon Color";
+    const example = '"User Management","Handles user roles and profile management","John Doe","High","Active","blue"';
+    const csv = header + "\n" + example;
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
     const a = document.createElement("a");
     a.href = url;
@@ -78,63 +79,119 @@ const downloadImportTemplate = () => {
     document.body.removeChild(a); URL.revokeObjectURL(url);
 };
 
-const parseCSV = (text) => {
-    const lines = text.trim().split(/\r?\n/);
-    if (lines.length < 2) return { rows: [], errors: ["CSV must have a header row and at least one data row."] };
-
-    const rawHeaders = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim());
-    const keyMap = {
-        "module name": "module_name",
-        "description": "description",
-        "module owner": "module_owner",
-        "priority": "priority",
-        "status": "status",
-        "icon color": "color",
-    };
-    const idxMap = {};
-    rawHeaders.forEach((h, i) => { const k = keyMap[h.toLowerCase()]; if (k) idxMap[k] = i; });
-
-    const requiredKeys = ["module_name", "description", "module_owner", "priority", "status"];
-    const missing = requiredKeys.filter(k => idxMap[k] === undefined)
-        .map(k => COLUMN_REFERENCE.find(c => keyMap[c.label.toLowerCase()] === k)?.label || k);
-    if (missing.length) return { rows: [], errors: [`Missing required columns: ${missing.join(", ")}. Please use the provided template.`] };
-
-    const dataLines = lines.slice(1).filter(l => l.trim() !== "");
-    const rows = [], errors = [];
-
-    dataLines.forEach((line, i) => {
-        const cells = [];
-        let inQ = false, cur = "";
-        for (const ch of line) {
-            if (ch === '"') { inQ = !inQ; }
-            else if (ch === "," && !inQ) { cells.push(cur.trim()); cur = ""; }
-            else cur += ch;
+// Split one CSV line respecting RFC-4180 quoting
+const splitLine = (line) => {
+    const cells = [];
+    let inQ = false, cur = "";
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+            if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+            else { inQ = !inQ; }
+        } else if (ch === ',' && !inQ) {
+            cells.push(cur.trim());
+            cur = "";
+        } else {
+            cur += ch;
         }
-        cells.push(cur.trim());
+    }
+    cells.push(cur.trim());
+    return cells;
+};
 
-        const get = (k) => (cells[idxMap[k]] || "").replace(/^"|"$/g, "").trim();
-        const rowNum = i + 2, errs = [];
-        const module_name = get("module_name");
-        const description = get("description");
-        const module_owner = get("module_owner");
-        const priority = get("priority");
-        const status = get("status");
-        const color = (get("color") || "blue").toLowerCase();
+// FIX 1: parseCSV now returns per-row validation errors alongside parsed rows
+// so the preview step has everything it needs without undefined variables.
+const parseCSV = (text) => {
+    const allLines = text
+        .replace(/^\uFEFF/, '')
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .split('\n')
+        .filter(l => l.trim().length > 0);
 
-        if (!module_name) errs.push("Module Name is required");
-        if (!description) errs.push("Description is required");
-        if (!module_owner) errs.push("Module Owner is required");
-        if (!priority) errs.push("Priority is required");
-        else if (!VALID_PRIORITIES.includes(priority)) errs.push(`Invalid Priority "${priority}"`);
-        if (!status) errs.push("Status is required");
-        else if (!VALID_STATUSES.includes(status)) errs.push(`Invalid Status "${status}"`);
-        if (color && !VALID_COLORS.includes(color)) errs.push(`Invalid Icon Color "${color}"`);
+    if (allLines.length < 2) {
+        return { rows: [], validRows: [], errors: [], error: 'CSV must have a header row and at least one data row.' };
+    }
 
-        if (errs.length) errors.push({ row: rowNum, messages: errs });
-        else rows.push({ module_name, description, module_owner, priority, status, color });
-    });
+    const rawHeaders = splitLine(allLines[0]).map(h => h.replace(/^"|"$/g, '').trim());
+    const norm = (s) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+    const normMap = {};
+    rawHeaders.forEach((h, i) => { normMap[norm(h)] = i; });
 
-    return { rows, errors };
+    const resolve = (...candidates) => {
+        for (const c of candidates) {
+            if (normMap[norm(c)] !== undefined) return normMap[norm(c)];
+        }
+        return -1;
+    };
+
+    const idx = {
+        module_name: resolve('Module Name', 'module name', 'name', 'modulename'),
+        description: resolve('Description', 'description', 'desc'),
+        module_owner: resolve('Module Owner', 'module owner', 'owner', 'moduleowner'),
+        priority: resolve('Priority', 'priority'),
+        status: resolve('Status', 'status'),
+        color: resolve('Icon Color', 'icon color', 'color', 'colour', 'iconcolor'),
+    };
+
+    const LABELS = {
+        module_name: 'Module Name',
+        description: 'Description',
+        module_owner: 'Module Owner',
+        priority: 'Priority',
+        status: 'Status',
+    };
+    const missing = Object.entries(LABELS).filter(([k]) => idx[k] === -1).map(([, v]) => v);
+    if (missing.length) {
+        return {
+            rows: [],
+            validRows: [],
+            errors: [],
+            error: `Missing required column${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}. Detected headers: ${rawHeaders.join(', ')}`,
+        };
+    }
+
+    // FIX 2: Validate each row during parse and separate valid from invalid rows
+    const allRows = allLines.slice(1).map((line, i) => {
+        const cells = splitLine(line);
+        const get = (k) => idx[k] !== -1 ? (cells[idx[k]] || '').replace(/^"|"$/g, '').trim() : '';
+        return {
+            _row: i + 2,
+            module_name: get('module_name'),
+            description: get('description'),
+            module_owner: get('module_owner'),
+            priority: get('priority'),
+            status: get('status'),
+            color: get('color') || 'blue',
+        };
+    }).filter(r => r.module_name.length > 0);
+
+    const validRows = [];
+    const errors = [];
+
+    for (const row of allRows) {
+        const rowErrs = [];
+        if (!row.description) rowErrs.push("Description is empty");
+        if (!row.module_owner) rowErrs.push("Module Owner is empty");
+        if (!row.priority) {
+            rowErrs.push("Priority is empty");
+        } else if (!VALID_PRIORITIES.includes(row.priority)) {
+            rowErrs.push(`Priority must be High, Medium or Low (got "${row.priority}")`);
+        }
+        if (!row.status) {
+            rowErrs.push("Status is empty");
+        } else if (!VALID_STATUSES.includes(row.status)) {
+            rowErrs.push(`Status must be Active, Inactive or Archived (got "${row.status}")`);
+        }
+
+        if (rowErrs.length > 0) {
+            errors.push({ row: row._row, name: row.module_name, messages: rowErrs });
+        } else {
+            validRows.push(row);
+        }
+    }
+
+    return { rows: allRows, validRows, errors, error: null };
 };
 
 // ─── Utilities ─────────────────────────────────────────────────────────────────
@@ -259,20 +316,38 @@ function Field({ label, required, children, hint }) {
 }
 
 // ─── Import Modules Modal ──────────────────────────────────────────────────────
-function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [] }) {
+function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [], users = [] }) {
     const fileInputRef = useRef(null);
     const [file, setFile] = useState(null);
     const [parsed, setParsed] = useState(null);
+    // FIX 3: Start on "upload" step; "preview" step now works correctly
     const [step, setStep] = useState("upload");
     const [dragOver, setDragOver] = useState(false);
     const [importing, setImporting] = useState(false);
     const [result, setResult] = useState(null);
 
+    // FIX 4: Reset all state when modal is closed and re-opened
+    const handleClose = () => {
+        setFile(null);
+        setParsed(null);
+        setStep("upload");
+        setDragOver(false);
+        setImporting(false);
+        setResult(null);
+        onClose();
+    };
+
     const handleFile = (f) => {
-        if (!f?.name.endsWith(".csv")) { alert("Only .csv files are supported."); return; }
+        if (!f || (!f.name.toLowerCase().endsWith(".csv"))) {
+            alert("Only .csv files are supported."); return;
+        }
         setFile(f);
+        setParsed(null); // reset previous parse result
         const reader = new FileReader();
-        reader.onload = (e) => { setParsed(parseCSV(e.target.result)); };
+        reader.onload = (e) => {
+            const result = parseCSV(e.target.result);
+            setParsed(result);
+        };
         reader.readAsText(f);
     };
 
@@ -281,33 +356,73 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [] }) {
         if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
     };
 
+    // FIX 5: handleImport uses validRows (pre-validated) instead of re-validating inline
+    // FIX 6: owner resolution now uses case-insensitive matching against full_name
     const handleImport = async () => {
-        if (!parsed?.rows?.length) return;
+        if (!parsed?.validRows?.length) {
+            alert("No valid rows to import. Please check your CSV file and try again.");
+            return;
+        }
         setImporting(true);
+
+        // Build a case-insensitive map: lowercase full_name → actual full_name stored in DB
+        const userMap = {};
+        for (const u of users) {
+            if (u.name) userMap[u.name.trim().toLowerCase()] = u.name.trim();
+        }
+
         let codes = [...existingModuleCodes];
         const success = [], failed = [];
-        for (const row of parsed.rows) {
+
+        for (const row of parsed.validRows) {
+            // FIX 7: Case-insensitive owner lookup; null if not found (row still imports)
+            const resolvedOwner = userMap[row.module_owner.trim().toLowerCase()] || null;
+
+            // Color — invalid value silently defaults to "blue"
+            const colorVal = (row.color || "blue").toLowerCase();
+            const finalColor = VALID_COLORS.includes(colorVal) ? colorVal : "blue";
+
             const code = generateModuleCode(codes);
             codes.push(code);
+
             const { error } = await supabase.from("modules").insert([{
-                module_code: code, module_name: row.module_name, description: row.description,
-                module_owner: row.module_owner || null, priority: row.priority, status: row.status, color: row.color,
+                module_code: code,
+                module_name: row.module_name.trim(),
+                description: row.description.trim(),
+                module_owner: resolvedOwner,
+                priority: row.priority.trim(),
+                status: row.status.trim(),
+                color: finalColor,
             }]);
+
             if (error) failed.push({ name: row.module_name, reason: error.message });
             else success.push(row.module_name);
         }
-        setResult({ success, failed });
+
+        // FIX 8: Also surface rows that were skipped at parse/validation time
+        const skipped = (parsed.errors || []).map(e => ({
+            name: e.name || `Row ${e.row}`,
+            reason: e.messages.join(" · "),
+        }));
+
+        setResult({ success, failed: [...skipped, ...failed] });
         setImporting(false);
         setStep("done");
         if (success.length) onSuccess();
     };
 
-    const validRows = parsed?.rows?.length || 0;
-    const errorCount = parsed?.errors?.length || 0;
-    const colorHex = { blue: "#3B82F6", green: "#1B5E3B", purple: "#8B5CF6", red: "#E53E3E", indigo: "#6366F1", pink: "#EC4899", teal: "#14B8A6", orange: "#F97316" };
+    const validRows = parsed?.validRows?.length || 0;
+    const errorRows = parsed?.errors?.length || 0;
+    const parseError = parsed?.error || null;
+
+    const colorHex = {
+        blue: "#3B82F6", green: "#1B5E3B", purple: "#8B5CF6",
+        red: "#E53E3E", indigo: "#6366F1", pink: "#EC4899",
+        teal: "#14B8A6", orange: "#F97316",
+    };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.45)" }} onClick={onClose}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.45)" }} onClick={handleClose}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl flex flex-col overflow-hidden" style={{ maxHeight: "90vh" }} onClick={e => e.stopPropagation()}>
 
                 {/* Header */}
@@ -316,7 +431,7 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [] }) {
                         <h2 className="text-lg font-bold text-gray-900">Import Modules</h2>
                         <p className="text-sm text-gray-400 mt-0.5">Upload a CSV file to bulk import modules</p>
                     </div>
-                    <button onClick={onClose} className="ml-4 mt-0.5 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors flex-shrink-0">
+                    <button onClick={handleClose} className="ml-4 mt-0.5 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors flex-shrink-0">
                         <i className="fa-solid fa-xmark text-lg" />
                     </button>
                 </div>
@@ -327,7 +442,7 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [] }) {
                     {/* ── UPLOAD step ── */}
                     {step === "upload" && (
                         <>
-                            {/* Template banner — blue, matches screenshot */}
+                            {/* Template banner */}
                             <div className="flex items-center justify-between gap-4 px-4 py-4 bg-blue-50 border border-blue-100 rounded-xl">
                                 <div>
                                     <p className="text-sm font-semibold text-blue-700">Download Import Template</p>
@@ -339,7 +454,7 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [] }) {
                                 </button>
                             </div>
 
-                            {/* Column reference — matches screenshot layout exactly */}
+                            {/* Column reference */}
                             <div className="border border-gray-200 rounded-xl overflow-hidden">
                                 <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
                                     <p className="text-xs font-bold text-gray-400 tracking-widest uppercase">Column Reference</p>
@@ -355,7 +470,7 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [] }) {
                                 ))}
                             </div>
 
-                            {/* Drop zone — matches screenshot */}
+                            {/* Drop zone */}
                             <div
                                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                                 onDragLeave={() => setDragOver(false)}
@@ -364,7 +479,7 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [] }) {
                                 className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed cursor-pointer py-10 transition-all
                                     ${dragOver ? "border-green-500 bg-green-50" : file ? "border-green-400 bg-green-50" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"}`}>
                                 <input ref={fileInputRef} type="file" accept=".csv" className="hidden"
-                                    onChange={e => e.target.files[0] && handleFile(e.target.files[0])} />
+                                    onChange={e => { if (e.target.files[0]) handleFile(e.target.files[0]); e.target.value = ""; }} />
                                 <div className={`w-12 h-12 rounded-full flex items-center justify-center ${file ? "bg-green-100" : "bg-gray-100"}`}>
                                     <i className={`fa-solid text-2xl ${file ? "fa-file-csv text-green-700" : "fa-cloud-arrow-up text-gray-400"}`} />
                                 </div>
@@ -375,93 +490,106 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [] }) {
                                     </>
                                 ) : (
                                     <>
-                                        <p className="text-sm font-semibold text-gray-600">Click to upload CSV</p>
+                                        <p className="text-sm font-semibold text-gray-600">Click to upload or drag &amp; drop CSV</p>
                                         <p className="text-xs text-gray-400">Only .csv files are supported</p>
                                     </>
                                 )}
                             </div>
 
-                            {/* File parse summary */}
+                            {/* FIX 9: Richer parse summary with per-row error details */}
                             {parsed && (
-                                <div className={`flex items-start gap-3 p-3.5 rounded-xl border text-sm
-                                    ${errorCount && !validRows ? "bg-red-50 border-red-200"
-                                        : errorCount ? "bg-yellow-50 border-yellow-200"
-                                            : "bg-green-50 border-green-200"}`}>
-                                    <i className={`fa-solid mt-0.5 flex-shrink-0
-                                        ${errorCount && !validRows ? "fa-circle-xmark text-red-500"
-                                            : errorCount ? "fa-triangle-exclamation text-yellow-500"
-                                                : "fa-circle-check text-green-600"}`} />
-                                    <span className={errorCount && !validRows ? "text-red-700" : errorCount ? "text-yellow-700" : "text-green-700"}>
-                                        {validRows > 0 && `${validRows} valid row${validRows > 1 ? "s" : ""} ready to import. `}
-                                        {errorCount > 0 && `${errorCount} row${errorCount > 1 ? "s" : ""} have errors and will be skipped.`}
-                                    </span>
-                                </div>
-                            )}
-                        </>
-                    )}
-
-                    {/* ── PREVIEW step ── */}
-                    {step === "preview" && parsed && (
-                        <>
-                            {errorCount > 0 && (
-                                <div className="border border-red-200 rounded-xl overflow-hidden">
-                                    <div className="px-4 py-2.5 bg-red-50 border-b border-red-100 flex items-center gap-2">
-                                        <i className="fa-solid fa-triangle-exclamation text-red-500 text-xs" />
-                                        <p className="text-xs font-bold text-red-600 uppercase tracking-wider">{errorCount} Row{errorCount > 1 ? "s" : ""} Skipped</p>
-                                    </div>
-                                    <div className="divide-y divide-red-50 max-h-36 overflow-y-auto">
-                                        {parsed.errors.map((err, i) => (
-                                            <div key={i} className="flex gap-3 px-4 py-2.5 text-xs">
-                                                <span className="font-mono text-red-400 flex-shrink-0">Row {err.row}</span>
-                                                <span className="text-red-600">{err.messages.join(" · ")}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                            {validRows > 0 ? (
-                                <div className="border border-gray-200 rounded-xl overflow-hidden">
-                                    <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
-                                        <i className="fa-solid fa-circle-check text-green-600 text-xs" />
-                                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">{validRows} Valid Row{validRows > 1 ? "s" : ""} — Ready to Import</p>
-                                    </div>
-                                    <div className="overflow-x-auto max-h-72">
-                                        <table className="w-full text-xs min-w-[520px]">
-                                            <thead>
-                                                <tr className="border-b border-gray-100 bg-gray-50">
-                                                    {["Module Name", "Description", "Owner", "Priority", "Status", "Color"].map(h => (
-                                                        <th key={h} className="text-left px-3 py-2 text-gray-400 font-semibold uppercase tracking-wider">{h}</th>
-                                                    ))}
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-50">
-                                                {parsed.rows.map((row, i) => (
-                                                    <tr key={i} className="hover:bg-gray-50">
-                                                        <td className="px-3 py-2.5 font-semibold text-gray-800 max-w-[120px] truncate">{row.module_name}</td>
-                                                        <td className="px-3 py-2.5 text-gray-500 max-w-[140px] truncate">{row.description}</td>
-                                                        <td className="px-3 py-2.5 text-gray-600">{row.module_owner || "—"}</td>
-                                                        <td className="px-3 py-2.5">
-                                                            <span className={`px-2 py-0.5 rounded-full font-medium ${row.priority === "High" ? "bg-red-50 text-red-600" : row.priority === "Medium" ? "bg-yellow-50 text-yellow-600" : "bg-gray-100 text-gray-500"}`}>{row.priority}</span>
-                                                        </td>
-                                                        <td className="px-3 py-2.5">
-                                                            <span className={`px-2 py-0.5 rounded-full font-medium ${row.status === "Active" ? "bg-green-50 text-green-600" : row.status === "Inactive" ? "bg-yellow-50 text-yellow-600" : "bg-gray-100 text-gray-500"}`}>{row.status}</span>
-                                                        </td>
-                                                        <td className="px-3 py-2.5">
-                                                            <span className="flex items-center gap-1.5">
-                                                                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: colorHex[row.color] || "#6B7280" }} />
-                                                                <span className="text-gray-500 capitalize">{row.color}</span>
-                                                            </span>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="flex flex-col items-center py-10 gap-3 text-center">
-                                    <i className="fa-solid fa-file-circle-xmark text-4xl text-gray-200" />
-                                    <p className="text-sm text-gray-400">No valid rows to import. Fix the errors and re-upload.</p>
+                                <div className="space-y-2">
+                                    {parseError ? (
+                                        <div className="flex items-start gap-3 p-3.5 rounded-xl border bg-red-50 border-red-200 text-sm">
+                                            <i className="fa-solid fa-circle-xmark text-red-500 mt-0.5 flex-shrink-0" />
+                                            <span className="text-red-700">{parseError}</span>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {validRows > 0 && (
+                                                <div className="flex items-start gap-3 p-3.5 rounded-xl border bg-green-50 border-green-200 text-sm">
+                                                    <i className="fa-solid fa-circle-check text-green-600 mt-0.5 flex-shrink-0" />
+                                                    <span className="text-green-700">
+                                                        <strong>{validRows}</strong> valid row{validRows !== 1 ? "s" : ""} ready to import.
+                                                        {errorRows > 0 && <> <strong>{errorRows}</strong> row{errorRows !== 1 ? "s" : ""} will be skipped due to errors.</>}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {validRows === 0 && errorRows > 0 && (
+                                                <div className="flex items-start gap-3 p-3.5 rounded-xl border bg-red-50 border-red-200 text-sm">
+                                                    <i className="fa-solid fa-circle-xmark text-red-500 mt-0.5 flex-shrink-0" />
+                                                    <span className="text-red-700">All <strong>{errorRows}</strong> rows have errors. Please fix them and re-upload.</span>
+                                                </div>
+                                            )}
+                                            {/* Show per-row errors inline */}
+                                            {errorRows > 0 && (
+                                                <div className="border border-red-200 rounded-xl overflow-hidden">
+                                                    <div className="px-4 py-2.5 bg-red-50 border-b border-red-100 flex items-center gap-2">
+                                                        <i className="fa-solid fa-triangle-exclamation text-red-500 text-xs" />
+                                                        <p className="text-xs font-bold text-red-600 uppercase tracking-wider">
+                                                            {errorRows} Row{errorRows > 1 ? "s" : ""} with Errors (will be skipped)
+                                                        </p>
+                                                    </div>
+                                                    <div className="divide-y divide-red-50 max-h-36 overflow-y-auto">
+                                                        {parsed.errors.map((err, i) => (
+                                                            <div key={i} className="flex gap-3 px-4 py-2.5 text-xs">
+                                                                <span className="font-mono text-red-400 flex-shrink-0 whitespace-nowrap">Row {err.row}</span>
+                                                                <span className="font-semibold text-gray-700 flex-shrink-0 truncate max-w-[100px]">{err.name}</span>
+                                                                <span className="text-red-600">{err.messages.join(" · ")}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {/* Preview table of valid rows */}
+                                            {validRows > 0 && (
+                                                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                                                    <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+                                                        <i className="fa-solid fa-circle-check text-green-600 text-xs" />
+                                                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                                                            Preview — {validRows} Valid Row{validRows > 1 ? "s" : ""}
+                                                        </p>
+                                                    </div>
+                                                    <div className="overflow-x-auto max-h-52">
+                                                        <table className="w-full text-xs min-w-[520px]">
+                                                            <thead>
+                                                                <tr className="border-b border-gray-100 bg-gray-50">
+                                                                    {["Module Name", "Description", "Owner", "Priority", "Status", "Color"].map(h => (
+                                                                        <th key={h} className="text-left px-3 py-2 text-gray-400 font-semibold uppercase tracking-wider whitespace-nowrap">{h}</th>
+                                                                    ))}
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-gray-50">
+                                                                {parsed.validRows.map((row, i) => (
+                                                                    <tr key={i} className="hover:bg-gray-50">
+                                                                        <td className="px-3 py-2.5 font-semibold text-gray-800 max-w-[120px] truncate">{row.module_name}</td>
+                                                                        <td className="px-3 py-2.5 text-gray-500 max-w-[140px] truncate">{row.description}</td>
+                                                                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{row.module_owner || "—"}</td>
+                                                                        <td className="px-3 py-2.5 whitespace-nowrap">
+                                                                            <span className={`px-2 py-0.5 rounded-full font-medium ${row.priority === "High" ? "bg-red-50 text-red-600" : row.priority === "Medium" ? "bg-yellow-50 text-yellow-600" : "bg-gray-100 text-gray-500"}`}>
+                                                                                {row.priority}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="px-3 py-2.5 whitespace-nowrap">
+                                                                            <span className={`px-2 py-0.5 rounded-full font-medium ${row.status === "Active" ? "bg-green-50 text-green-600" : row.status === "Inactive" ? "bg-yellow-50 text-yellow-600" : "bg-gray-100 text-gray-500"}`}>
+                                                                                {row.status}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="px-3 py-2.5">
+                                                                            <span className="flex items-center gap-1.5">
+                                                                                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: colorHex[row.color] || "#6B7280" }} />
+                                                                                <span className="text-gray-500 capitalize">{row.color}</span>
+                                                                            </span>
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
                                 </div>
                             )}
                         </>
@@ -477,7 +605,7 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [] }) {
                                 </div>
                                 <div className={`p-5 rounded-xl text-center border ${result.failed.length ? "bg-red-50 border-red-100" : "bg-gray-50 border-gray-100"}`}>
                                     <p className={`text-3xl font-bold ${result.failed.length ? "text-red-600" : "text-gray-400"}`}>{result.failed.length}</p>
-                                    <p className={`text-xs font-semibold mt-1 uppercase tracking-wider ${result.failed.length ? "text-red-500" : "text-gray-400"}`}>Failed</p>
+                                    <p className={`text-xs font-semibold mt-1 uppercase tracking-wider ${result.failed.length ? "text-red-500" : "text-gray-400"}`}>Failed / Skipped</p>
                                 </div>
                             </div>
                             {result.success.length > 0 && (
@@ -500,7 +628,7 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [] }) {
                                 <div className="border border-red-200 rounded-xl overflow-hidden">
                                     <div className="px-4 py-2.5 bg-red-50 border-b border-red-100 flex items-center gap-2">
                                         <i className="fa-solid fa-triangle-exclamation text-red-500 text-xs" />
-                                        <p className="text-xs font-bold text-red-600 uppercase tracking-wider">Failed</p>
+                                        <p className="text-xs font-bold text-red-600 uppercase tracking-wider">Failed / Skipped</p>
                                     </div>
                                     <div className="divide-y divide-red-50 max-h-48 overflow-y-auto">
                                         {result.failed.map((f, i) => (
@@ -516,29 +644,28 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [] }) {
                     )}
                 </div>
 
-                {/* Footer — Cancel + action button, matches screenshot */}
+                {/* Footer */}
                 <div className="border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-3">
-                    <button onClick={onClose} disabled={importing}
-                        className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
-                        Cancel
-                    </button>
-                    {step === "upload" && file && parsed && (
-                        <button onClick={() => setStep("preview")}
-                            className="px-5 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity flex items-center gap-2">
-                            Review <i className="fa-solid fa-arrow-right text-xs" />
-                        </button>
-                    )}
-                    {step === "preview" && validRows > 0 && (
-                        <button onClick={handleImport} disabled={importing}
-                            className="px-6 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2">
-                            {importing
-                                ? <><i className="fa-solid fa-spinner fa-spin text-xs" /> Importing…</>
-                                : <><i className="fa-solid fa-file-import text-xs" /> Import {validRows} Module{validRows !== 1 ? "s" : ""}</>
-                            }
-                        </button>
+                    {step === "upload" && (
+                        <>
+                            <button onClick={handleClose} disabled={importing}
+                                className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleImport}
+                                // FIX 10: Disable import if no valid rows OR if there's a parse-level error
+                                disabled={importing || !file || !!parseError || validRows === 0}
+                                className="px-6 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
+                                {importing
+                                    ? <><i className="fa-solid fa-spinner fa-spin text-xs" /> Importing…</>
+                                    : <><i className="fa-solid fa-file-import text-xs" /> Import {validRows > 0 ? `${validRows} Module${validRows !== 1 ? "s" : ""}` : "Modules"}</>
+                                }
+                            </button>
+                        </>
                     )}
                     {step === "done" && (
-                        <button onClick={onClose} className="px-5 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity">
+                        <button onClick={handleClose} className="px-5 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity">
                             Done
                         </button>
                     )}
@@ -1052,17 +1179,14 @@ export default function ModulesLibrary() {
                         <p className="text-sm text-gray-500 mt-0.5">Manage all modules for NexTech RMS</p>
                     </div>
                     <div className="flex items-center gap-3">
-                        {/* Export */}
                         <button onClick={() => exportToCSV(modules)}
                             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
                             <i className="fa-solid fa-download" /> Export
                         </button>
-                        {/* Import — same style as Export, upload icon to match screenshot */}
                         <button onClick={() => setShowImportModal(true)}
                             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
                             <i className="fa-solid fa-upload" /> Import
                         </button>
-                        {/* Create Module */}
                         <button onClick={() => setShowModal(true)}
                             className="flex items-center gap-2 px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity">
                             <i className="fa-solid fa-plus" /> Create Module
@@ -1160,7 +1284,7 @@ export default function ModulesLibrary() {
                 <ViewDetailsModal module={viewingModule} onClose={() => setViewingModule(null)} onEdit={handleEditModule} moduleFeatures={moduleFeatures} featuresLoading={featuresLoading} />
             )}
             {showImportModal && (
-                <ImportModulesModal onClose={() => setShowImportModal(false)} onSuccess={fetchModules} existingModuleCodes={existingModuleCodes} />
+                <ImportModulesModal onClose={() => setShowImportModal(false)} onSuccess={fetchModules} existingModuleCodes={existingModuleCodes} users={users} />
             )}
         </div>
     );
