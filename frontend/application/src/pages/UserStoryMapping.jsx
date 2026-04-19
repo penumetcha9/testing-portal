@@ -245,8 +245,6 @@ const TestCasesTab = ({ storyId, storyUUID }) => {
             }
             setTestCases(combined);
 
-            // Resolve assigned_to values to names.
-            // assigned_to can store a UUID, email, or name — handle all three.
             const assignedValues = [...new Set(combined.map(tc => tc.assigned_to).filter(Boolean))];
             if (assignedValues.length > 0) {
                 const [byId, byEmail, byName] = await Promise.all([
@@ -255,7 +253,6 @@ const TestCasesTab = ({ storyId, storyUUID }) => {
                     supabase.from('profiles').select('id, full_name, email').in('full_name', assignedValues),
                 ]);
                 const map = {};
-                // Priority: full_name > email fallback
                 const applyProfile = (p, key) => { map[key] = p.full_name || p.email || key; };
                 (byId.data || []).forEach(p => applyProfile(p, p.id));
                 (byEmail.data || []).forEach(p => applyProfile(p, p.email));
@@ -350,7 +347,6 @@ const CommentsTab = ({ storyId, storyUUID }) => {
                 .eq('story_id', storyUUID)
                 .order('created_at', { ascending: true });
             if (error) {
-                // fallback without join
                 const { data: plain, error: e2 } = await supabase
                     .from('comments').select('*').eq('story_id', storyUUID).order('created_at', { ascending: true });
                 if (e2) throw e2;
@@ -508,9 +504,6 @@ const T = {
 };
 const font = 'Inter, system-ui, -apple-system, sans-serif';
 
-// ── FIX: AttachmentRow extracted as a proper component ────────────────────────
-// Previously useState was called inside .map() which violates React's rules of hooks
-// and caused the Attachments tab to crash entirely.
 const AttachmentRow = ({ att, fileIcon, formatSize, onDelete }) => {
     const [hov, setHov] = useState(false);
     return (
@@ -857,7 +850,6 @@ const AttachmentsTab = ({ storyId, storyUUID }) => {
                     {attachments.length > 0 && <span style={{ padding: '2px 10px', borderRadius: 99, background: 'rgba(16,185,129,0.10)', color: '#065F46', fontFamily: font, ...T.label, fontWeight: 600 }}>{attachments.length}</span>}
                 </div>
 
-                {/* Upload zone */}
                 <div
                     onDragOver={e => e.preventDefault()}
                     onDrop={e => {
@@ -885,7 +877,6 @@ const AttachmentsTab = ({ storyId, storyUUID }) => {
                     </div>
                 </div>
 
-                {/* File list — uses AttachmentRow component to avoid useState-in-map */}
                 {loading
                     ? <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}><div style={{ width: 20, height: 20, border: '2px solid #059669', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }}></div></div>
                     : attachments.length === 0
@@ -1004,6 +995,10 @@ const UserStoryMapping = () => {
     const [featuresLoading, setFeaturesLoading] = useState(true);
     const [versions, setVersions] = useState([]);
 
+    // ── NEW: modules state ────────────────────────────────────────────────────
+    const [modules, setModules] = useState([]);
+    const [modulesLoading, setModulesLoading] = useState(true);
+
     useEffect(() => {
         const fetchProfiles = async () => {
             setProfilesLoading(true);
@@ -1039,6 +1034,23 @@ const UserStoryMapping = () => {
             } catch (err) { console.error("Versions unexpected error:", err); }
         };
         fetchVersions();
+    }, []);
+
+    // ── NEW: fetch modules from DB ────────────────────────────────────────────
+    useEffect(() => {
+        const fetchModules = async () => {
+            setModulesLoading(true);
+            try {
+                const { data, error } = await supabase
+                    .from('modules')
+                    .select('id, module_name, module_code')
+                    .order('module_name', { ascending: true });
+                if (error) { console.error('Modules fetch error:', error); return; }
+                setModules(data || []);
+            } catch (err) { console.error('Modules unexpected error:', err); }
+            finally { setModulesLoading(false); }
+        };
+        fetchModules();
     }, []);
 
     useEffect(() => {
@@ -1304,7 +1316,17 @@ const UserStoryMapping = () => {
     };
 
     const storyTypeOpts = ['Feature Enhancement', 'New Feature', 'Bug Fix', 'Technical Debt'];
-    const moduleIdOpts = ['MOD-001 - Dashboard', 'MOD-002 - User Management', 'MOD-003 - Reports', 'MOD-004 - Settings'];
+
+    // ── NEW: dynamic moduleIdOpts from DB ─────────────────────────────────────
+    const moduleIdOpts = modules
+        .filter(m => m.module_name && m.module_name.trim() !== '')
+        .map(m => ({
+            value: m.module_code || m.id,
+            label: m.module_code
+                ? `${m.module_code} - ${m.module_name}`
+                : m.module_name,
+        }));
+
     const businessDomainOpts = ['Operations', 'Finance', 'Sales', 'HR'];
     const transactionTypeOpts = ['Read', 'Create', 'Update', 'Delete'];
     const criticalityOpts = ['High', 'Medium', 'Low', 'Critical'];
@@ -1445,7 +1467,16 @@ const UserStoryMapping = () => {
                                                 <div><label className={labelCls}>Story Type</label><CustomSelect value={formData.storyType} onChange={v => handleInputChange('storyType', v)} options={storyTypeOpts} /></div>
                                                 <div className="sm:col-span-2"><label className={labelCls}>Story Title <span className="text-destructive">*</span></label><input type="text" value={formData.storyTitle} onChange={e => handleInputChange('storyTitle', e.target.value)} placeholder="Enter story title..." className={inputCls} /></div>
                                                 <div className="sm:col-span-2"><label className={labelCls}>Story Summary</label><textarea rows="3" value={formData.storySummary} onChange={e => handleInputChange('storySummary', e.target.value)} className={inputCls} placeholder="Brief summary..." /></div>
-                                                <div><label className={labelCls}>Module ID</label><CustomSelect value={formData.moduleId} onChange={v => handleInputChange('moduleId', v)} options={moduleIdOpts} /></div>
+                                                {/* ── UPDATED: Module ID now uses dynamic DB options ── */}
+                                                <div>
+                                                    <label className={labelCls}>Module ID</label>
+                                                    <CustomSelect
+                                                        value={formData.moduleId}
+                                                        onChange={v => handleInputChange('moduleId', v)}
+                                                        options={moduleIdOpts}
+                                                        placeholder={modulesLoading ? 'Loading modules…' : moduleIdOpts.length === 0 ? 'No modules found' : 'Select…'}
+                                                    />
+                                                </div>
                                                 <div><label className={labelCls}>Parent Story ID</label><input type="text" value={formData.parentStoryId} onChange={e => handleInputChange('parentStoryId', e.target.value)} placeholder="US-XXX" className={inputCls} /></div>
                                                 <div><label className={labelCls}>Sequence/Order</label><input type="number" value={formData.sequence} onChange={e => handleInputChange('sequence', e.target.value)} placeholder="e.g. 1" className={inputCls} /></div>
                                             </div>

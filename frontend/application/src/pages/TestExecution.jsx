@@ -935,11 +935,8 @@ function ExecuteView({ testCase, onBack }) {
                                         {uploadedFiles.length > 0 && <div className="mt-2 space-y-1.5">{uploadedFiles.map(f => (<div key={f.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg"><div className="flex items-center gap-2"><div className="w-7 h-7 bg-blue-100 rounded flex items-center justify-center"><i className="fa-solid fa-image text-blue-500 text-xs" /></div><div><p className="text-xs font-medium">{f.name}</p><p className="text-[10px] text-slate-400">{f.size}</p></div></div><div className="flex items-center gap-2">{f.url && <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-600"><i className="fa-solid fa-external-link-alt text-xs" /></a>}<button onClick={() => setUploadedFiles(p => p.filter(x => x.id !== f.id))} className="text-red-400 hover:text-red-600"><i className="fa-solid fa-trash text-xs" /></button></div></div>))}</div>}
                                     </div>
                                     <div>
-                                        <label className="text-xs font-semibold text-slate-700 mb-1.5 block">Linked Bug ID</label>
-                                        <div className="flex gap-2">
-                                            <input type="text" value={linkedBugId} onChange={e => setLinkedBugId(e.target.value)} placeholder="e.g. BUG-0001" onKeyDown={e => e.key === "Enter" && handleLinkBug()} className="flex-1 px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                                            <button onClick={handleLinkBug} className="px-3 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50"><i className="fa-solid fa-link mr-1" />Link</button>
-                                        </div>
+
+
                                         {linkedIssue && (<div className="mt-2 flex items-center justify-between p-2.5 bg-amber-50 border border-amber-200 rounded-lg"><div className="flex items-center gap-2"><i className="fa-solid fa-bug text-amber-600 text-xs" /><div><p className="text-xs font-medium">{linkedIssue.bug_id}</p><p className="text-[10px] text-slate-500">Status: {linkedIssue.status} · Priority: {linkedIssue.priority}</p></div></div><button onClick={() => { setLinkedIssue(null); setLinkedBugId(""); }} className="text-red-400 hover:text-red-600"><i className="fa-solid fa-times text-xs" /></button></div>)}
                                     </div>
                                 </div>
