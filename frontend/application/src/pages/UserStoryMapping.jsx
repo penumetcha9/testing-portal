@@ -922,7 +922,6 @@ const UserStoryMapping = () => {
             assigned_backend_developer: formData.assignedBackendDeveloper.length > 0 ? formData.assignedBackendDeveloper : null,
             assigned_tester: formData.assignedTester.length > 0 ? formData.assignedTester : null,
             linked_features: formData.linkedFeatures.length > 0 ? formData.linkedFeatures : null,
-            related_story_ids: formData.relatedStoryIds.length > 0 ? formData.relatedStoryIds : null,
             approval_status: formData.approvalStatus || null, development_status: formData.developmentStatus || null,
             qa_status: formData.qaStatus || null, release_status: formData.releaseStatus || null,
             approved_by: formData.approvedBy || null, approved_at: approvedAt, created_by: formData.createdBy || null,
@@ -1025,124 +1024,6 @@ const UserStoryMapping = () => {
                 </div>
             )}
 
-            {/* ── Related Stories Modal ── */}
-            {showRelatedStories && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-                    onClick={() => setShowRelatedStories(false)}>
-                    <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.18)', width: '100%', maxWidth: 680, maxHeight: '85vh', display: 'flex', flexDirection: 'column', fontFamily: "'Roboto', sans-serif" }}
-                        onClick={e => e.stopPropagation()}>
-                        {/* Modal header */}
-                        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                <div style={{ width: 36, height: 36, background: '#eff6ff', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <i className="fa-solid fa-link" style={{ color: '#2563eb', fontSize: 14 }}></i>
-                                </div>
-                                <div>
-                                    <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0 }}>Related User Stories</h3>
-                                    <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>Link other stories to {formData.storyId}</p>
-                                </div>
-                            </div>
-                            <button onClick={() => setShowRelatedStories(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 18, padding: 4 }}>
-                                <i className="fa-solid fa-times"></i>
-                            </button>
-                        </div>
-
-                        {/* Dropdown selector */}
-                        <div style={{ padding: '16px 24px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
-                            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                Add Related Story
-                            </label>
-                            {allStoriesLoading ? (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', border: '1.5px solid #e2e6f0', borderRadius: 10, color: '#94a3b8', fontSize: 13 }}>
-                                    <div style={{ width: 14, height: 14, border: '2px solid #94a3b8', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }}></div>
-                                    Loading stories…
-                                </div>
-                            ) : (
-                                <select
-                                    onChange={e => {
-                                        const val = e.target.value;
-                                        if (!val) return;
-                                        if (!formData.relatedStoryIds.includes(val)) {
-                                            handleInputChange('relatedStoryIds', [...formData.relatedStoryIds, val]);
-                                        }
-                                        e.target.value = '';
-                                    }}
-                                    defaultValue=""
-                                    style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e2e6f0', borderRadius: 10, fontSize: 13, color: '#374151', background: '#fff', cursor: 'pointer', outline: 'none' }}
-                                >
-                                    <option value="">— Select a story to link —</option>
-                                    {relatedStoryOpts.filter(o => !formData.relatedStoryIds.includes(o.value)).map(o => (
-                                        <option key={o.value} value={o.value}>{o.label}</option>
-                                    ))}
-                                </select>
-                            )}
-                        </div>
-
-                        {/* Table of linked stories */}
-                        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px 20px' }}>
-                            {relatedStoryObjects.length === 0 ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 0', gap: 10 }}>
-                                    <div style={{ width: 48, height: 48, background: '#f1f5f9', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <i className="fa-solid fa-link-slash" style={{ color: '#94a3b8', fontSize: 20 }}></i>
-                                    </div>
-                                    <p style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>No related stories linked yet</p>
-                                    <p style={{ fontSize: 12, color: '#94a3b8' }}>Use the dropdown above to link stories</p>
-                                </div>
-                            ) : (
-                                <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                                        <thead>
-                                            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                                                {['Story ID', 'Title', 'Status', 'Criticality', ''].map(h => (
-                                                    <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
-                                                ))}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {relatedStoryObjects.map((s, i) => {
-                                                const sm = STATUS_META[s.current_status] || STATUS_META['Draft'];
-                                                return (
-                                                    <tr key={s.story_id} style={{ borderBottom: i < relatedStoryObjects.length - 1 ? '1px solid #f1f5f9' : 'none', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                                                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
-                                                            <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#16a34a', background: '#f0fdf4', padding: '2px 8px', borderRadius: 5 }}>{s.story_id}</span>
-                                                        </td>
-                                                        <td style={{ padding: '10px 14px', color: '#0f172a', fontWeight: 500, maxWidth: 240 }}>
-                                                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.story_title || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Untitled</span>}</div>
-                                                        </td>
-                                                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
-                                                            {s.current_status ? (
-                                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 99, background: sm.bg, color: sm.color, fontSize: 11, fontWeight: 600 }}>
-                                                                    {s.current_status}
-                                                                </span>
-                                                            ) : <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span>}
-                                                        </td>
-                                                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontSize: 12, color: '#64748b' }}>{s.criticality || '—'}</td>
-                                                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                                                            <button
-                                                                onClick={() => handleInputChange('relatedStoryIds', formData.relatedStoryIds.filter(id => id !== s.story_id))}
-                                                                style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 7, background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: 11 }}
-                                                                title="Remove"
-                                                            >
-                                                                <i className="fa-solid fa-trash"></i>
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Footer */}
-                        <div style={{ padding: '14px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-                            <span style={{ fontSize: 12, color: '#94a3b8' }}>{formData.relatedStoryIds.length} related {formData.relatedStoryIds.length === 1 ? 'story' : 'stories'} linked</span>
-                            <button onClick={() => setShowRelatedStories(false)} style={{ padding: '9px 22px', background: '#15803d', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Done</button>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             <style>{`
                 ::-webkit-scrollbar { display: none; }
@@ -1445,6 +1326,118 @@ const UserStoryMapping = () => {
                             </div>
                         </div>
                     </footer>
+
+                    {showRelatedStories && (
+                        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+                            onClick={() => setShowRelatedStories(false)}>
+                            <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.18)', width: '100%', maxWidth: 680, maxHeight: '85vh', display: 'flex', flexDirection: 'column', fontFamily: "'Roboto', sans-serif" }}
+                                onClick={e => e.stopPropagation()}>
+                                {/* Modal header */}
+                                <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                        <div style={{ width: 36, height: 36, background: '#eff6ff', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <i className="fa-solid fa-link" style={{ color: '#2563eb', fontSize: 14 }}></i>
+                                        </div>
+                                        <div>
+                                            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0 }}>Related User Stories</h3>
+                                            <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>Link other stories to {formData.storyId}</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setShowRelatedStories(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 18, padding: 4 }}>
+                                        <i className="fa-solid fa-times"></i>
+                                    </button>
+                                </div>
+
+                                {/* Dropdown selector */}
+                                <div style={{ padding: '16px 24px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
+                                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                        Add Related Story
+                                    </label>
+                                    {allStoriesLoading ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', border: '1.5px solid #e2e6f0', borderRadius: 10, color: '#94a3b8', fontSize: 13 }}>
+                                            <div style={{ width: 14, height: 14, border: '2px solid #94a3b8', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }}></div>
+                                            Loading stories…
+                                        </div>
+                                    ) : (
+                                        <CustomSelect
+                                            value=""
+                                            onChange={val => {
+                                                if (!val) return;
+                                                if (!formData.relatedStoryIds.includes(val)) {
+                                                    handleInputChange('relatedStoryIds', [...formData.relatedStoryIds, val]);
+                                                }
+                                            }}
+                                            options={relatedStoryOpts.filter(o => !formData.relatedStoryIds.includes(o.value))}
+                                            placeholder="— Select a story to link —"
+                                        />
+                                    )}
+                                </div>
+
+                                {/* Table of linked stories */}
+                                <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px 20px' }}>
+                                    {relatedStoryObjects.length === 0 ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 0', gap: 10 }}>
+                                            <div style={{ width: 48, height: 48, background: '#f1f5f9', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <i className="fa-solid fa-link-slash" style={{ color: '#94a3b8', fontSize: 20 }}></i>
+                                            </div>
+                                            <p style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>No related stories linked yet</p>
+                                            <p style={{ fontSize: 12, color: '#94a3b8' }}>Use the dropdown above to link stories</p>
+                                        </div>
+                                    ) : (
+                                        <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                                                <thead>
+                                                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                                                        {['Story ID', 'Title', 'Status', 'Criticality', ''].map(h => (
+                                                            <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {relatedStoryObjects.map((s, i) => {
+                                                        const sm = STATUS_META[s.current_status] || STATUS_META['Draft'];
+                                                        return (
+                                                            <tr key={s.story_id} style={{ borderBottom: i < relatedStoryObjects.length - 1 ? '1px solid #f1f5f9' : 'none', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                                                                <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                                                                    <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#16a34a', background: '#f0fdf4', padding: '2px 8px', borderRadius: 5 }}>{s.story_id}</span>
+                                                                </td>
+                                                                <td style={{ padding: '10px 14px', color: '#0f172a', fontWeight: 500, maxWidth: 240 }}>
+                                                                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.story_title || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Untitled</span>}</div>
+                                                                </td>
+                                                                <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                                                                    {s.current_status ? (
+                                                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 99, background: sm.bg, color: sm.color, fontSize: 11, fontWeight: 600 }}>
+                                                                            {s.current_status}
+                                                                        </span>
+                                                                    ) : <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span>}
+                                                                </td>
+                                                                <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontSize: 12, color: '#64748b' }}>{s.criticality || '—'}</td>
+                                                                <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', textAlign: 'right' }}>
+                                                                    <button
+                                                                        onClick={() => handleInputChange('relatedStoryIds', formData.relatedStoryIds.filter(id => id !== s.story_id))}
+                                                                        style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 7, background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: 11 }}
+                                                                        title="Remove"
+                                                                    >
+                                                                        <i className="fa-solid fa-trash"></i>
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Footer */}
+                                <div style={{ padding: '14px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+                                    <span style={{ fontSize: 12, color: '#94a3b8' }}>{formData.relatedStoryIds.length} related {formData.relatedStoryIds.length === 1 ? 'story' : 'stories'} linked</span>
+                                    <button onClick={() => setShowRelatedStories(false)} style={{ padding: '9px 22px', background: '#15803d', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Done</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {showHistoryModal && <div className="modal-overlay" onClick={() => setShowHistoryModal(false)}><div className="modal-content" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold mb-4">Story History</h3><p className="text-sm text-gray-600 mb-4">Version history for this user story.</p><div className="border-l-4 border-blue-500 pl-4 py-2"><p className="text-sm font-medium">Draft Created</p><p className="text-xs text-gray-500">Just now by System</p></div><button onClick={() => setShowHistoryModal(false)} className="mt-6 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">Close</button></div></div>}
                 </div>
