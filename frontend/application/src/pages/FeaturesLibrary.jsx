@@ -239,9 +239,9 @@ const STATUS_OPTIONS = [{ id: "Active", name: "Active" }, { id: "Draft", name: "
 const FILTER_STATUS_OPT = [{ id: "", name: "All Status" }, { id: "Active", name: "Active" }, { id: "Draft", name: "Draft" }, { id: "Archived", name: "Archived" }];
 const PRIORITY_WITH_PH = [{ id: "", name: "Select Priority" }, ...PRIORITY_OPTIONS];
 
-const emptyForm = { id: "", name: "", description: "", testScenario: "", preconditions: "", steps: "", expected: "", assignee: "", status: "Active", priority: "", testType: "", tags: "", userStoryIds: [] };
-const emptyFeatureForm = { moduleId: "", name: "", code: "", user_story: "", description: "", assign_to: "" };
-const emptyEditFeatureForm = { id: "", moduleId: "", name: "", code: "", user_story: "", description: "", assign_to: "" };
+const emptyForm = { id: "", name: "", testScenario: "", preconditions: "", steps: "", expected: "", assignee: "", status: "Active", priority: "", testType: "", tags: "", userStoryIds: [] };
+const emptyFeatureForm = { moduleId: "", name: "", code: "", user_story: "", assign_to: "" };
+const emptyEditFeatureForm = { id: "", moduleId: "", name: "", code: "", user_story: "", assign_to: "" };
 
 const generateUUID = () =>
     'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -249,7 +249,6 @@ const generateUUID = () =>
         return v.toString(16);
     });
 
-// Derives the next TC-NNN id from an existing flat list of test cases
 const generateNextTcId = (allTestCases) => {
     let max = 0;
     for (const tc of allTestCases) {
@@ -259,7 +258,6 @@ const generateNextTcId = (allTestCases) => {
     return `TC-${String(max + 1).padStart(3, "0")}`;
 };
 
-// Derives the next FEAT-NNN code from an existing flat list of features
 const generateNextFeatCode = (allFeatures) => {
     let max = 0;
     for (const f of allFeatures) {
@@ -293,10 +291,11 @@ const FEATURE_COLUMNS = [
     { label: "Description", required: true, hint: "Brief description of the feature." },
     { label: "Assign To", required: true, hint: "Full name — must match an existing user." },
 ];
+
+// ── Description column removed from TC import template ──
 const TC_COLUMNS = [
     { label: "Feature Code", required: true, hint: "Must match an existing feature code e.g. FEAT-001" },
     { label: "Test Case Name", required: true, hint: "Descriptive name for the test case." },
-    { label: "Description", required: true, hint: "Brief description of what is being tested." },
     { label: "Priority", required: true, hint: "High | Medium | Low" },
     { label: "Status", required: true, hint: "Active | Draft | Archived" },
     { label: "Test Type", required: true, hint: "Functional | Regression | Smoke | Sanity | Integration | UAT | Performance | Security" },
@@ -577,10 +576,23 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
         const allLines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter(l => l.trim());
         if (allLines.length < 2) return { rows: [], rowErrors: [], fatalError: "CSV must have a header row and at least one data row." };
         const rawHeaders = splitCSVLine(allLines[0]).map(normaliseHeader);
-        const keyMap = { "feature code": "feature_code", "test case name": "name", "description": "description", "priority": "priority", "status": "status", "test type": "test_type", "test scenario": "test_scenario", "pre requisites": "pre_requisites", "test steps": "test_steps", "expected result": "expected_result", "assigned to": "assigned_to", "user story codes": "user_story_codes" };
+        // ── description removed from keyMap and required list ──
+        const keyMap = {
+            "feature code": "feature_code",
+            "test case name": "name",
+            "priority": "priority",
+            "status": "status",
+            "test type": "test_type",
+            "test scenario": "test_scenario",
+            "pre requisites": "pre_requisites",
+            "test steps": "test_steps",
+            "expected result": "expected_result",
+            "assigned to": "assigned_to",
+            "user story codes": "user_story_codes",
+        };
         const idxMap = {};
         rawHeaders.forEach((h, i) => { const k = keyMap[h]; if (k) idxMap[k] = i; });
-        const required = ["feature_code", "name", "description", "priority", "status", "test_type", "test_scenario", "pre_requisites", "test_steps", "expected_result", "assigned_to", "user_story_codes"];
+        const required = ["feature_code", "name", "priority", "status", "test_type", "test_scenario", "pre_requisites", "test_steps", "expected_result", "assigned_to", "user_story_codes"];
         const missing = required.filter(k => idxMap[k] === undefined).map(k => TC_COLUMNS.find(c => keyMap[normaliseHeader(c.label)] === k)?.label || k);
         if (missing.length) return { rows: [], rowErrors: [], fatalError: `Missing required column${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}. Please use the provided template.` };
         const rows = [], rowErrors = [];
@@ -588,11 +600,10 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
             const cells = splitCSVLine(line);
             const get = (k) => idxMap[k] !== undefined ? (cells[idxMap[k]] || "").replace(/^"|"$/g, "").trim() : "";
             const rowNum = i + 2;
-            const feature_code = get("feature_code"), name = get("name"), description = get("description"), priority = get("priority"), status = get("status"), test_type = get("test_type"), assigned_to = get("assigned_to"), user_story_codes = get("user_story_codes");
+            const feature_code = get("feature_code"), name = get("name"), priority = get("priority"), status = get("status"), test_type = get("test_type"), assigned_to = get("assigned_to"), user_story_codes = get("user_story_codes");
             const errs = [];
             if (!feature_code) errs.push("Feature Code is required");
             if (!name) errs.push("Test Case Name is required");
-            if (!description) errs.push("Description is required");
             if (!priority) errs.push("Priority is required"); else if (!VALID_PRIORITIES.includes(priority)) errs.push(`Invalid Priority "${priority}"`);
             if (!status) errs.push("Status is required"); else if (!VALID_STATUSES.includes(status)) errs.push(`Invalid Status "${status}"`);
             if (!test_type) errs.push("Test Type is required"); else if (!VALID_TEST_TYPES.includes(test_type)) errs.push(`Invalid Test Type "${test_type}"`);
@@ -603,7 +614,8 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
             if (!assigned_to) errs.push("Assigned To is required");
             if (!user_story_codes) errs.push("User Story Codes is required");
             if (errs.length) rowErrors.push({ row: rowNum, name: name || `Row ${rowNum}`, messages: errs });
-            else rows.push({ feature_code, name, description, priority, status, test_type, test_scenario: get("test_scenario"), pre_requisites: get("pre_requisites"), test_steps: get("test_steps"), expected_result: get("expected_result"), assigned_to, user_story_codes });
+            // ── description omitted from parsed row ──
+            else rows.push({ feature_code, name, priority, status, test_type, test_scenario: get("test_scenario"), pre_requisites: get("pre_requisites"), test_steps: get("test_steps"), expected_result: get("expected_result"), assigned_to, user_story_codes });
         });
         return { rows, rowErrors, fatalError: null };
     };
@@ -634,7 +646,26 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
             }
             const nextTcId = generateNextTcId(allTCIds);
             allTCIds.push({ tcId: nextTcId });
-            const { error } = await supabase.from("test_cases").insert([{ id: generateUUID(), test_case_id: nextTcId, name: row.name, description: row.description, test_scenario: row.test_scenario || null, preconditions: row.pre_requisites || null, test_steps: row.test_steps ? row.test_steps.split("|").map(s => s.trim()).filter(Boolean) : null, expected_result: row.expected_result || null, feature_id: feat.id, module_id: feat.moduleId, priority: row.priority, status: row.status, test_type: row.test_type, assigned_to: assignId, user_story_ids: storyIds.length > 0 ? storyIds : null, created_by: authUser?.id || null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }]);
+            // ── description omitted from insert payload ──
+            const { error } = await supabase.from("test_cases").insert([{
+                id: generateUUID(),
+                test_case_id: nextTcId,
+                name: row.name,
+                test_scenario: row.test_scenario || null,
+                preconditions: row.pre_requisites || null,
+                test_steps: row.test_steps ? row.test_steps.split("|").map(s => s.trim()).filter(Boolean) : null,
+                expected_result: row.expected_result || null,
+                feature_id: feat.id,
+                module_id: feat.moduleId,
+                priority: row.priority,
+                status: row.status,
+                test_type: row.test_type,
+                assigned_to: assignId,
+                user_story_ids: storyIds.length > 0 ? storyIds : null,
+                created_by: authUser?.id || null,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            }]);
             if (error) failed.push({ name: row.name, reason: error.message });
             else success.push(row.name);
         }
@@ -1091,7 +1122,6 @@ export default function FeaturesLibrary() {
             if (!user) { alert("Must be logged in"); return; }
             const { error } = await supabase.from("test_cases").insert([{
                 id: generateUUID(), test_case_id: form.id, name: form.name,
-                description: form.description,
                 test_scenario: form.testScenario || null,
                 preconditions: form.preconditions || null,
                 test_steps: form.steps ? form.steps.split("\n").map(s => s.trim()).filter(Boolean) : null,
@@ -1408,7 +1438,6 @@ export default function FeaturesLibrary() {
                                 <p style={{ fontSize: 13, fontWeight: 600, color: T.text, margin: "0 0 2px" }}>{deleteFeatureTarget?.feature_name || deleteFeatureTarget?.name}</p>
                                 <p style={{ fontSize: 12, color: T.textMuted, margin: 0, fontFamily: T.mono }}>{deleteFeatureTarget?.feature_code || deleteFeatureTarget?.code}</p>
                             </div>
-                            {/* Module context in delete dialog */}
                             <div style={{ background: T.blueTint, border: `1px solid rgba(37,99,235,0.15)`, borderRadius: 8, padding: "10px 14px", marginBottom: deleteFeatureTarget?.testCasesCount > 0 ? 10 : 16 }}>
                                 <p style={{ fontSize: 12, color: "#1D4ED8", margin: 0, display: "flex", alignItems: "center", gap: 6 }}>
                                     <i className="fa-solid fa-puzzle-piece" style={{ fontSize: 11 }}></i>
@@ -1459,9 +1488,7 @@ export default function FeaturesLibrary() {
                             <Field label="Test Case Name" required>
                                 <input className="fl-input" type="text" placeholder="e.g., Valid login with correct credentials" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
                             </Field>
-                            <Field label="Description" required>
-                                <textarea className="fl-input" rows="3" placeholder="Brief description…" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "none" }} />
-                            </Field>
+                            {/* Description field removed */}
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                                 <Field label="Test Type" required>
                                     <Dropdown options={TEST_TYPE_WITH_PH} selected={form.testType} onChange={v => setForm(f => ({ ...f, testType: v }))} placeholder="Select Test Type" />
