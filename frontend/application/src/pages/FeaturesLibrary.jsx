@@ -90,6 +90,17 @@ const GLOBAL_STYLES = `
 
   .fl-modal-enter { animation: fadeUp 0.2s cubic-bezier(.4,0,.2,1); }
 
+  .fl-page-btn {
+    background: none; border: 1px solid #DDE3D8; color: #4A5568;
+    border-radius: 6px; font-size: 11px; font-weight: 500;
+    cursor: pointer; padding: 4px 10px; display: inline-flex;
+    align-items: center; gap: 4px; transition: all 0.13s;
+    font-family: 'DM Sans', system-ui, sans-serif;
+  }
+  .fl-page-btn:hover:not(:disabled) { background: #EFF3EC; border-color: #B8C9AE; color: #1D3D2F; }
+  .fl-page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .fl-page-btn.active { background: #15803d; border-color: #15803d; color: #fff; }
+
   input[type="number"]::-webkit-outer-spin-button,
   input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
   input[type="number"] { -moz-appearance: textfield; }
@@ -240,8 +251,8 @@ const FILTER_STATUS_OPT = [{ id: "", name: "All Status" }, { id: "Active", name:
 const PRIORITY_WITH_PH = [{ id: "", name: "Select Priority" }, ...PRIORITY_OPTIONS];
 
 const emptyForm = { id: "", name: "", testScenario: "", preconditions: "", steps: "", expected: "", assignee: "", status: "Active", priority: "", testType: "", tags: "", userStoryIds: [] };
-const emptyFeatureForm = { moduleId: "", name: "", code: "", user_story: "", assign_to: "" };
-const emptyEditFeatureForm = { id: "", moduleId: "", name: "", code: "", user_story: "", assign_to: "" };
+const emptyFeatureForm = { moduleId: "", name: "", code: "", user_story: "", description: "", assign_to: "" };
+const emptyEditFeatureForm = { id: "", moduleId: "", name: "", code: "", user_story: "", description: "", assign_to: "" };
 
 const generateUUID = () =>
     'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -252,10 +263,13 @@ const generateUUID = () =>
 const generateNextTcId = (allTestCases) => {
     let max = 0;
     for (const tc of allTestCases) {
-        const m = (tc.tcId || tc.id || "").match(/^TC-(\d+)$/i);
-        if (m) max = Math.max(max, parseInt(m[1], 10));
+        const id = tc.tcId || tc.id || "";
+        const m1 = id.match(/^TC-0*(\d+)$/i);
+        if (m1) { max = Math.max(max, parseInt(m1[1], 10)); continue; }
+        const m2 = id.match(/(\d+)$/);
+        if (m2) max = Math.max(max, parseInt(m2[1], 10));
     }
-    return `TC-${String(max + 1).padStart(3, "0")}`;
+    return `TC-${String(max + 1).padStart(4, "0")}`;
 };
 
 const generateNextFeatCode = (allFeatures) => {
@@ -292,7 +306,6 @@ const FEATURE_COLUMNS = [
     { label: "Assign To", required: true, hint: "Full name — must match an existing user." },
 ];
 
-// ── Description column removed from TC import template ──
 const TC_COLUMNS = [
     { label: "Feature Code", required: true, hint: "Must match an existing feature code e.g. FEAT-001" },
     { label: "Test Case Name", required: true, hint: "Descriptive name for the test case." },
@@ -304,7 +317,7 @@ const TC_COLUMNS = [
     { label: "Test Steps", required: true, hint: "Step-by-step instructions, use | to separate steps." },
     { label: "Expected Result", required: true, hint: "What the expected outcome should be." },
     { label: "Assigned To", required: true, hint: "Full name — must match an existing user." },
-    { label: "User Story Codes", required: true, hint: "Semicolon-separated story codes e.g. US-001;US-002." },
+    { label: "User Story Codes", required: false, hint: "Semicolon-separated story codes e.g. US-001;US-002. Optional." },
 ];
 const VALID_PRIORITIES = ["High", "Medium", "Low"];
 const VALID_STATUSES = ["Active", "Draft", "Archived"];
@@ -478,23 +491,35 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
     const [parsed, setParsed] = useState(null);
     const [importing, setImporting] = useState(false);
     const [result, setResult] = useState(null);
+
     const handleClose = () => { setFile(null); setParsed(null); setImporting(false); setResult(null); onClose(); };
+
     const parseCSV = (text) => {
         const allLines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter(l => l.trim());
         if (allLines.length < 2) return { rows: [], rowErrors: [], fatalError: "CSV must have a header row and at least one data row." };
         const rawHeaders = splitCSVLine(allLines[0]).map(normaliseHeader);
-        const keyMap = { "module name": "module_name", "feature name": "feature_name", "feature code": "feature_code", "user story": "user_story", "description": "description", "assign to": "assign_to" };
+        const keyMap = {
+            "module name": "module_name",
+            "feature name": "feature_name",
+            "feature code": "feature_code",
+            "user story": "user_story",
+            "description": "description",
+            "assign to": "assign_to",
+        };
         const idxMap = {};
         rawHeaders.forEach((h, i) => { const k = keyMap[h]; if (k) idxMap[k] = i; });
         const required = ["module_name", "feature_name", "feature_code", "user_story", "description", "assign_to"];
         const missing = required.filter(k => idxMap[k] === undefined).map(k => FEATURE_COLUMNS.find(c => keyMap[normaliseHeader(c.label)] === k)?.label || k);
         if (missing.length) return { rows: [], rowErrors: [], fatalError: `Missing required column${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}. Please use the provided template.` };
+
         const rows = [], rowErrors = [];
         allLines.slice(1).forEach((line, i) => {
             const cells = splitCSVLine(line);
             const get = (k) => idxMap[k] !== undefined ? (cells[idxMap[k]] || "").replace(/^"|"$/g, "").trim() : "";
             const rowNum = i + 2;
-            const module_name = get("module_name"), feature_name = get("feature_name"), feature_code = get("feature_code"), user_story = get("user_story"), description = get("description"), assign_to = get("assign_to");
+            const module_name = get("module_name"), feature_name = get("feature_name"),
+                feature_code = get("feature_code"), user_story = get("user_story"),
+                description = get("description"), assign_to = get("assign_to");
             const errs = [];
             if (!module_name) errs.push("Module Name is required");
             if (!feature_name) errs.push("Feature Name is required");
@@ -507,30 +532,68 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
         });
         return { rows, rowErrors, fatalError: null };
     };
-    const handleFile = (f) => { setFile(f); setResult(null); setParsed(null); const reader = new FileReader(); reader.onload = (e) => setParsed(parseCSV(e.target.result)); reader.readAsText(f); };
+
+    const handleFile = (f) => {
+        setFile(f); setResult(null); setParsed(null);
+        const reader = new FileReader();
+        reader.onload = (e) => setParsed(parseCSV(e.target.result));
+        reader.readAsText(f);
+    };
+
     const handleImport = async () => {
         if (!parsed?.rows?.length) return;
         setImporting(true);
         const success = [], failed = [];
+
         const moduleMap = {};
-        for (const m of modules) { const key = (m.module_name || m.name || "").toLowerCase().trim(); if (key) moduleMap[key] = m.id; }
+        for (const m of modules) {
+            const key = (m.module_name || m.name || "").toLowerCase().trim();
+            if (key) moduleMap[key] = m.id;
+        }
+
         const userMap = {};
-        for (const u of users) { if (u.name) userMap[u.name.toLowerCase().trim()] = u.id; }
+        for (const u of users) {
+            if (u.name) userMap[u.name.toLowerCase().trim()] = u.id;
+        }
+
         for (const row of parsed.rows) {
             const moduleId = moduleMap[row.module_name.toLowerCase().trim()];
-            if (!moduleId) { failed.push({ name: row.feature_name, reason: `Module "${row.module_name}" not found.` }); continue; }
+            if (!moduleId) {
+                failed.push({ name: row.feature_name, reason: `Module "${row.module_name}" not found. Available: ${Object.keys(moduleMap).join(", ")}` });
+                continue;
+            }
             const assignId = row.assign_to ? (userMap[row.assign_to.toLowerCase().trim()] || null) : null;
-            const { error } = await supabase.from("features").insert([{ module_id: moduleId, feature_name: row.feature_name, feature_code: row.feature_code, user_story: row.user_story || null, description: row.description, assign_to: assignId, created_at: new Date().toISOString() }]);
-            if (error) failed.push({ name: row.feature_name, reason: error.message });
-            else success.push(row.feature_name);
+
+            const { error } = await supabase.from("features").insert([{
+                module_id: moduleId,
+                feature_name: row.feature_name,
+                feature_code: row.feature_code,
+                user_story: row.user_story || null,
+                description: row.description,
+                assign_to: assignId,
+                created_at: new Date().toISOString(),
+            }]);
+
+            if (error) {
+                console.error("Feature insert error:", error, row);
+                failed.push({ name: row.feature_name, reason: error.message });
+            } else {
+                success.push(row.feature_name);
+            }
         }
-        const skipped = (parsed.rowErrors || []).map(e => ({ name: e.name || `Row ${e.row}`, reason: Array.isArray(e.messages) ? e.messages.join(" · ") : e.messages }));
+
+        const skipped = (parsed.rowErrors || []).map(e => ({
+            name: e.name || `Row ${e.row}`,
+            reason: Array.isArray(e.messages) ? e.messages.join(" · ") : e.messages,
+        }));
         setResult({ success, failed: [...skipped, ...failed] });
         setImporting(false);
         if (success.length) onSuccess();
     };
+
     const validRows = parsed?.rows?.length || 0;
     const canImport = !importing && !!file && !parsed?.fatalError && validRows > 0;
+
     return (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={handleClose}>
             <div className="fl-modal-enter" style={{ background: T.surface, borderRadius: 16, boxShadow: "0 24px 64px rgba(0,0,0,0.18)", width: "100%", maxWidth: 600, maxHeight: "90vh", overflowY: "auto", fontFamily: T.sans }} onClick={e => e.stopPropagation()}>
@@ -544,7 +607,14 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
                             <div><p style={{ fontSize: 13, fontWeight: 700, color: T.blue, margin: "0 0 2px" }}>Download Import Template</p><p style={{ fontSize: 12, color: "#3B82F6", margin: 0 }}>Get the CSV template with all required columns.</p></div>
                             <button onClick={() => downloadCSV(FEATURE_COLUMNS, "features_import_template.csv", ["Login Module", "Two-Factor Auth", "FEAT-001", "US-015", "Adds 2FA via TOTP", "Jane Smith"])} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", background: T.surface, border: `1px solid rgba(37,99,235,0.3)`, color: T.blue, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.sans }}><i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Template</button>
                         </div>
-                        {modules.length > 0 && (<div style={{ padding: "10px 14px", background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 9 }}><p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Available Module Names</p><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{modules.map(m => (<span key={m.id} style={{ fontSize: 11, fontFamily: T.mono, background: T.surface, border: `1px solid ${T.border}`, color: T.textMid, padding: "2px 8px", borderRadius: 5 }}>{m.module_name || m.name}</span>))}</div></div>)}
+                        {modules.length > 0 && (
+                            <div style={{ padding: "10px 14px", background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 9 }}>
+                                <p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Available Module Names</p>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                    {modules.map(m => (<span key={m.id} style={{ fontSize: 11, fontFamily: T.mono, background: T.surface, border: `1px solid ${T.border}`, color: T.textMid, padding: "2px 8px", borderRadius: 5 }}>{m.module_name || m.name}</span>))}
+                                </div>
+                            </div>
+                        )}
                         <ColumnReference columns={FEATURE_COLUMNS} />
                         <DropZone file={file} onFile={handleFile} />
                         <ParseFeedback parsed={parsed} />
@@ -571,12 +641,13 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
     const [parsed, setParsed] = useState(null);
     const [importing, setImporting] = useState(false);
     const [result, setResult] = useState(null);
+
     const handleClose = () => { setFile(null); setParsed(null); setImporting(false); setResult(null); onClose(); };
+
     const parseCSV = (text) => {
         const allLines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter(l => l.trim());
         if (allLines.length < 2) return { rows: [], rowErrors: [], fatalError: "CSV must have a header row and at least one data row." };
         const rawHeaders = splitCSVLine(allLines[0]).map(normaliseHeader);
-        // ── description removed from keyMap and required list ──
         const keyMap = {
             "feature code": "feature_code",
             "test case name": "name",
@@ -592,68 +663,140 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
         };
         const idxMap = {};
         rawHeaders.forEach((h, i) => { const k = keyMap[h]; if (k) idxMap[k] = i; });
-        const required = ["feature_code", "name", "priority", "status", "test_type", "test_scenario", "pre_requisites", "test_steps", "expected_result", "assigned_to", "user_story_codes"];
+
+        const required = ["feature_code", "name", "priority", "status", "test_type", "test_scenario", "pre_requisites", "test_steps", "expected_result", "assigned_to"];
         const missing = required.filter(k => idxMap[k] === undefined).map(k => TC_COLUMNS.find(c => keyMap[normaliseHeader(c.label)] === k)?.label || k);
         if (missing.length) return { rows: [], rowErrors: [], fatalError: `Missing required column${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}. Please use the provided template.` };
+
         const rows = [], rowErrors = [];
         allLines.slice(1).forEach((line, i) => {
             const cells = splitCSVLine(line);
             const get = (k) => idxMap[k] !== undefined ? (cells[idxMap[k]] || "").replace(/^"|"$/g, "").trim() : "";
             const rowNum = i + 2;
-            const feature_code = get("feature_code"), name = get("name"), priority = get("priority"), status = get("status"), test_type = get("test_type"), assigned_to = get("assigned_to"), user_story_codes = get("user_story_codes");
+            const feature_code = get("feature_code"), name = get("name"),
+                priority = get("priority"), status = get("status"),
+                test_type = get("test_type"), assigned_to = get("assigned_to"),
+                user_story_codes = get("user_story_codes");
             const errs = [];
             if (!feature_code) errs.push("Feature Code is required");
             if (!name) errs.push("Test Case Name is required");
-            if (!priority) errs.push("Priority is required"); else if (!VALID_PRIORITIES.includes(priority)) errs.push(`Invalid Priority "${priority}"`);
-            if (!status) errs.push("Status is required"); else if (!VALID_STATUSES.includes(status)) errs.push(`Invalid Status "${status}"`);
-            if (!test_type) errs.push("Test Type is required"); else if (!VALID_TEST_TYPES.includes(test_type)) errs.push(`Invalid Test Type "${test_type}"`);
+            if (!priority) errs.push("Priority is required");
+            else if (!VALID_PRIORITIES.includes(priority)) errs.push(`Invalid Priority "${priority}" — must be one of: ${VALID_PRIORITIES.join(", ")}`);
+            if (!status) errs.push("Status is required");
+            else if (!VALID_STATUSES.includes(status)) errs.push(`Invalid Status "${status}" — must be one of: ${VALID_STATUSES.join(", ")}`);
+            if (!test_type) errs.push("Test Type is required");
+            else if (!VALID_TEST_TYPES.includes(test_type)) errs.push(`Invalid Test Type "${test_type}" — must be one of: ${VALID_TEST_TYPES.join(", ")}`);
             if (!get("test_scenario")) errs.push("Test Scenario is required");
             if (!get("pre_requisites")) errs.push("Pre Requisites is required");
             if (!get("test_steps")) errs.push("Test Steps is required");
             if (!get("expected_result")) errs.push("Expected Result is required");
             if (!assigned_to) errs.push("Assigned To is required");
-            if (!user_story_codes) errs.push("User Story Codes is required");
+
             if (errs.length) rowErrors.push({ row: rowNum, name: name || `Row ${rowNum}`, messages: errs });
-            // ── description omitted from parsed row ──
-            else rows.push({ feature_code, name, priority, status, test_type, test_scenario: get("test_scenario"), pre_requisites: get("pre_requisites"), test_steps: get("test_steps"), expected_result: get("expected_result"), assigned_to, user_story_codes });
+            else rows.push({
+                feature_code, name, priority, status, test_type,
+                test_scenario: get("test_scenario"),
+                pre_requisites: get("pre_requisites"),
+                test_steps: get("test_steps"),
+                expected_result: get("expected_result"),
+                assigned_to,
+                user_story_codes,
+            });
         });
         return { rows, rowErrors, fatalError: null };
     };
-    const handleFile = (f) => { setFile(f); setResult(null); setParsed(null); const reader = new FileReader(); reader.onload = (e) => setParsed(parseCSV(e.target.result)); reader.readAsText(f); };
+
+    const handleFile = (f) => {
+        setFile(f); setResult(null); setParsed(null);
+        const reader = new FileReader();
+        reader.onload = (e) => setParsed(parseCSV(e.target.result));
+        reader.readAsText(f);
+    };
+
     const handleImport = async () => {
         if (!parsed?.rows?.length) return;
         setImporting(true);
         const success = [], failed = [];
+
         const featureMap = {};
-        for (const f of flatFeatures) { const key = (f.feature_code || f.code || "").toLowerCase().trim(); if (key) featureMap[key] = { id: f.id, moduleId: f.moduleId }; }
+        for (const f of flatFeatures) {
+            const key = (f.feature_code || f.code || "").toLowerCase().trim();
+            if (key) featureMap[key] = { id: f.id, moduleId: f.moduleId || f.module_id };
+        }
+
         const userMap = {};
-        for (const u of users) { if (u.name) userMap[u.name.toLowerCase().trim()] = u.id; }
+        for (const u of users) {
+            if (u.name) userMap[u.name.toLowerCase().trim()] = u.id;
+        }
+
         const storyMap = {};
-        for (const s of userStories) { if (s.code) storyMap[s.code.toLowerCase().trim()] = s.id; }
-        const { data: existingTCs } = await supabase.from("test_cases").select("test_case_id");
-        let allTCIds = (existingTCs || []).map(t => ({ tcId: t.test_case_id }));
-        const { data: { user: authUser } } = await supabase.auth.getUser();
+        for (const s of userStories) {
+            if (s.code) storyMap[s.code.toLowerCase().trim()] = s.id;
+            if (s.id) storyMap[String(s.id).toLowerCase().trim()] = s.id;
+        }
+
+        let allTCIds = [];
+        {
+            let from = 0;
+            while (true) {
+                const { data: page } = await supabase
+                    .from("test_cases")
+                    .select("test_case_id")
+                    .range(from, from + 999);
+                if (!page || page.length === 0) break;
+                allTCIds = allTCIds.concat(page.map(t => ({ tcId: t.test_case_id })));
+                if (page.length < 1000) break;
+                from += 1000;
+            }
+        }
+
+        const { data: authData } = await supabase.auth.getUser();
+        const authUserId = authData?.user?.id || null;
+
         for (const row of parsed.rows) {
-            const feat = featureMap[row.feature_code.toLowerCase().trim()];
-            if (!feat) { failed.push({ name: row.name, reason: `Feature code "${row.feature_code}" not found.` }); continue; }
+            const featKey = row.feature_code.toLowerCase().trim();
+            const feat = featureMap[featKey];
+            if (!feat) {
+                failed.push({
+                    name: row.name,
+                    reason: `Feature code "${row.feature_code}" not found. Available codes: ${Object.keys(featureMap).slice(0, 10).join(", ")}${Object.keys(featureMap).length > 10 ? "…" : ""}`,
+                });
+                continue;
+            }
+
             const assignId = row.assigned_to ? (userMap[row.assigned_to.toLowerCase().trim()] || null) : null;
+
             let storyIds = [];
-            if (row.user_story_codes) {
-                const storyCodes = row.user_story_codes.split(";").map(s => s.trim()).filter(Boolean);
+            if (row.user_story_codes && row.user_story_codes.trim()) {
+                const storyCodes = row.user_story_codes
+                    .split(";")
+                    .map(s => s.trim())
+                    .filter(Boolean);
                 const notFound = storyCodes.filter(code => !storyMap[code.toLowerCase().trim()]);
-                if (notFound.length) { failed.push({ name: row.name, reason: `User story code(s) not found: ${notFound.join(", ")}` }); continue; }
+                if (notFound.length) {
+                    failed.push({
+                        name: row.name,
+                        reason: `User story code(s) not found: ${notFound.join(", ")}. Available: ${Object.keys(storyMap).slice(0, 10).join(", ")}${Object.keys(storyMap).length > 10 ? "…" : ""}`,
+                    });
+                    continue;
+                }
                 storyIds = storyCodes.map(code => storyMap[code.toLowerCase().trim()]);
             }
+
             const nextTcId = generateNextTcId(allTCIds);
             allTCIds.push({ tcId: nextTcId });
-            // ── description omitted from insert payload ──
+
+            const stepsArray = row.test_steps
+                ? row.test_steps.split("|").map(s => s.trim()).filter(Boolean)
+                : null;
+
             const { error } = await supabase.from("test_cases").insert([{
                 id: generateUUID(),
                 test_case_id: nextTcId,
                 name: row.name,
                 test_scenario: row.test_scenario || null,
                 preconditions: row.pre_requisites || null,
-                test_steps: row.test_steps ? row.test_steps.split("|").map(s => s.trim()).filter(Boolean) : null,
+                test_steps: stepsArray,
                 expected_result: row.expected_result || null,
                 feature_id: feat.id,
                 module_id: feat.moduleId,
@@ -662,20 +805,31 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
                 test_type: row.test_type,
                 assigned_to: assignId,
                 user_story_ids: storyIds.length > 0 ? storyIds : null,
-                created_by: authUser?.id || null,
+                created_by: authUserId,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
             }]);
-            if (error) failed.push({ name: row.name, reason: error.message });
-            else success.push(row.name);
+
+            if (error) {
+                console.error("TC insert error:", error, row);
+                failed.push({ name: row.name, reason: error.message });
+            } else {
+                success.push(row.name);
+            }
         }
-        const skipped = (parsed.rowErrors || []).map(e => ({ name: e.name || `Row ${e.row}`, reason: Array.isArray(e.messages) ? e.messages.join(" · ") : e.messages }));
+
+        const skipped = (parsed.rowErrors || []).map(e => ({
+            name: e.name || `Row ${e.row}`,
+            reason: Array.isArray(e.messages) ? e.messages.join(" · ") : e.messages,
+        }));
         setResult({ success, failed: [...skipped, ...failed] });
         setImporting(false);
         if (success.length) onSuccess();
     };
+
     const validRows = parsed?.rows?.length || 0;
     const canImport = !importing && !!file && !parsed?.fatalError && validRows > 0;
+
     return (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={handleClose}>
             <div className="fl-modal-enter" style={{ background: T.surface, borderRadius: 16, boxShadow: "0 24px 64px rgba(0,0,0,0.18)", width: "100%", maxWidth: 640, maxHeight: "90vh", overflowY: "auto", fontFamily: T.sans }} onClick={e => e.stopPropagation()}>
@@ -687,9 +841,32 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
                     {!result ? (<>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, padding: "14px 18px", background: T.blueTint, border: `1px solid rgba(37,99,235,0.18)`, borderRadius: 10 }}>
                             <div><p style={{ fontSize: 13, fontWeight: 700, color: T.blue, margin: "0 0 2px" }}>Download Import Template</p><p style={{ fontSize: 12, color: "#3B82F6", margin: 0 }}>Get the CSV template with all required columns.</p></div>
-                            <button onClick={() => downloadCSV(TC_COLUMNS, "test_cases_import_template.csv", null)} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", background: T.surface, border: `1px solid rgba(37,99,235,0.3)`, color: T.blue, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.sans }}><i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Template</button>
+                            <button onClick={() => downloadCSV(TC_COLUMNS, "test_cases_import_template.csv", ["FEAT-001", "Login with valid credentials", "High", "Active", "Functional", "Verify user can log in", "Registered account exists", "Navigate to login|Enter credentials|Click Login", "User redirected to dashboard", "Jane Smith", "US-001;US-002"])} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", background: T.surface, border: `1px solid rgba(37,99,235,0.3)`, color: T.blue, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.sans }}><i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Template</button>
                         </div>
-                        {flatFeatures.length > 0 && (<div style={{ padding: "10px 14px", background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 9 }}><p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Available Feature Codes</p><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{flatFeatures.map(f => (<span key={f.id} style={{ fontSize: 11, fontFamily: T.mono, background: T.surface, border: `1px solid ${T.border}`, color: T.purple, padding: "2px 8px", borderRadius: 5 }}>{f.feature_code || f.code}</span>))}</div></div>)}
+                        {flatFeatures.length > 0 && (
+                            <div style={{ padding: "10px 14px", background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 9 }}>
+                                <p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Available Feature Codes</p>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                    {flatFeatures.map(f => (
+                                        <span key={f.id} style={{ fontSize: 11, fontFamily: T.mono, background: T.surface, border: `1px solid ${T.border}`, color: T.purple, padding: "2px 8px", borderRadius: 5 }}>
+                                            {f.feature_code || f.code}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {userStories.length > 0 && (
+                            <div style={{ padding: "10px 14px", background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 9 }}>
+                                <p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Available User Story Codes (optional)</p>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                    {userStories.map(s => (
+                                        <span key={s.id} style={{ fontSize: 11, fontFamily: T.mono, background: T.surface, border: `1px solid ${T.border}`, color: T.red, padding: "2px 8px", borderRadius: 5 }}>
+                                            {s.code}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                         <ColumnReference columns={TC_COLUMNS} />
                         <DropZone file={file} onFile={handleFile} />
                         <ParseFeedback parsed={parsed} />
@@ -722,12 +899,7 @@ const STAT_COLORS = {
 const StatCard = ({ stat }) => {
     const c = STAT_COLORS[stat.color] || STAT_COLORS.blue;
     return (
-        <div style={{
-            background: T.surface, border: `1px solid ${T.borderLight}`,
-            borderRadius: 10, padding: "16px 18px",
-            display: "flex", flexDirection: "column", gap: 10,
-            fontFamily: T.sans,
-        }}>
+        <div style={{ background: T.surface, border: `1px solid ${T.borderLight}`, borderRadius: 10, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 10, fontFamily: T.sans }}>
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
                 <p style={{ fontSize: 12, color: T.textMuted, fontWeight: 500, margin: 0, lineHeight: 1.4, letterSpacing: "0.01em" }}>{stat.label}</p>
                 <div style={{ width: 32, height: 32, borderRadius: 8, background: c.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginLeft: 8 }}>
@@ -747,7 +919,6 @@ const TestCaseRow = memo(({ tc, onEdit, onDelete }) => (
         </td>
         <td style={{ padding: "10px 16px" }}>
             <p style={{ fontSize: 12, color: T.text, fontWeight: 500, margin: 0, fontFamily: T.sans }}>{tc.name}</p>
-            {tc.description && <p style={{ fontSize: 11, color: T.textMuted, marginTop: 1, fontFamily: T.sans, lineHeight: 1.4 }}>{tc.description}</p>}
         </td>
         <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
             <Chip label={tc.priority} style={PRIORITY_STYLE[tc.priority] || {}} mono />
@@ -756,9 +927,9 @@ const TestCaseRow = memo(({ tc, onEdit, onDelete }) => (
             <Chip label={tc.status} style={STATUS_STYLE[tc.status] || STATUS_STYLE["Active"]} />
         </td>
         <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
-            {tc.assignee
+            {tc.assigneeName
                 ? <span style={{ fontSize: 11, color: T.textMid, fontFamily: T.sans, display: "flex", alignItems: "center", gap: 5 }}>
-                    <i className="fa-solid fa-user" style={{ fontSize: 9, color: T.textFaint }}></i>{tc.assignee}
+                    <i className="fa-solid fa-user" style={{ fontSize: 9, color: T.textFaint }}></i>{tc.assigneeName}
                 </span>
                 : <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>—</span>
             }
@@ -773,117 +944,125 @@ const TestCaseRow = memo(({ tc, onEdit, onDelete }) => (
     </tr>
 ));
 
-// ─── Feature Card (PRIMARY level) ─────────────────────────────────────────────
-const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEdit, onDelete }) => (
-    <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, overflow: "hidden" }}>
-
-        {/* ── Feature header row ── */}
-        <div
-            className="fl-feat-card-row"
-            style={{ padding: "14px 20px", cursor: "pointer", background: T.surface }}
-            onClick={onToggle}
-        >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                {/* Left: icon + meta */}
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
-                    <div style={{
-                        width: 36, height: 36, borderRadius: 9, flexShrink: 0,
-                        background: T.greenLight, display: "flex", alignItems: "center", justifyContent: "center",
-                    }}>
-                        <i className="fa-solid fa-list-check" style={{ color: T.green, fontSize: 14 }}></i>
-                    </div>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginBottom: 3 }}>
-                            <span style={{ fontSize: 14, fontWeight: 700, color: T.text, fontFamily: T.sans, letterSpacing: "-0.01em" }}>{feat.name}</span>
-                            <Chip label={feat.code} style={{ background: T.purpleTint, color: T.purple }} mono />
-                            {feat.user_story && <Chip label={feat.user_story} style={{ background: T.redTint, color: T.red }} mono />}
-                            <Chip label={feat.status || "Active"} style={STATUS_STYLE[feat.status] || STATUS_STYLE["Active"]} />
+// ─── Feature Card ──────────────────────────────────────────────────────────────
+const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEditTC, onDeleteTC, onEdit, onDelete, tcPage, onTcPageChange, tcPageSize }) => {
+    const totalTCs = feat.testCases.length;
+    const totalPages = Math.ceil(totalTCs / tcPageSize);
+    const currentPage = tcPage || 0;
+    const pagedTCs = feat.testCases.slice(currentPage * tcPageSize, (currentPage + 1) * tcPageSize);
+    return (
+        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, overflow: "hidden" }}>
+            <div className="fl-feat-card-row" style={{ padding: "14px 20px", cursor: "pointer", background: T.surface }} onClick={onToggle}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 9, flexShrink: 0, background: T.greenLight, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <i className="fa-solid fa-list-check" style={{ color: T.green, fontSize: 14 }}></i>
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                            {feat.description && (
-                                <span style={{ fontSize: 11, color: T.textMuted, fontFamily: T.sans, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 340 }}>{feat.description}</span>
-                            )}
-                            <span style={{ fontSize: 11, color: T.textMuted, display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-                                <i className="fa-solid fa-vial" style={{ fontSize: 9 }}></i>
-                                {feat.testCasesCount} test{feat.testCasesCount !== 1 ? "s" : ""}
-                            </span>
-                            {feat.assign_to && (
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginBottom: 3 }}>
+                                <span style={{ fontSize: 14, fontWeight: 700, color: T.text, fontFamily: T.sans, letterSpacing: "-0.01em" }}>{feat.name}</span>
+                                <Chip label={feat.code} style={{ background: T.purpleTint, color: T.purple }} mono />
+                                {feat.user_story && <Chip label={feat.user_story} style={{ background: T.redTint, color: T.red }} mono />}
+                                <Chip label={feat.status || "Active"} style={STATUS_STYLE[feat.status] || STATUS_STYLE["Active"]} />
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                                {feat.description && (
+                                    <span style={{ fontSize: 11, color: T.textMuted, fontFamily: T.sans, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 340 }}>{feat.description}</span>
+                                )}
                                 <span style={{ fontSize: 11, color: T.textMuted, display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-                                    <i className="fa-solid fa-user" style={{ fontSize: 9 }}></i> {feat.assign_to_name || feat.assign_to}
+                                    <i className="fa-solid fa-vial" style={{ fontSize: 9 }}></i>
+                                    {feat.testCasesCount} test{feat.testCasesCount !== 1 ? "s" : ""}
                                 </span>
-                            )}
+                                {feat.assign_to_name && (
+                                    <span style={{ fontSize: 11, color: T.textMuted, display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                                        <i className="fa-solid fa-user" style={{ fontSize: 9 }}></i> {feat.assign_to_name}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </div>
-                </div>
-
-                {/* Right: actions */}
-                <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                    <button className="fl-btn-primary" onClick={(e) => { e.stopPropagation(); onAddTC(e, feat.moduleId, feat.id); }}>
-                        <i className="fa-solid fa-plus" style={{ fontSize: 10 }}></i> Test Case
-                    </button>
-                    <button className="fl-btn-ghost" onClick={onEdit} title="Edit Feature">
-                        <i className="fa-solid fa-pen-to-square" style={{ fontSize: 11 }}></i>
-                    </button>
-                    <button className="fl-btn-danger-sm" onClick={onDelete} title="Delete Feature">
-                        <i className="fa-solid fa-trash" style={{ fontSize: 11 }}></i>
-                    </button>
-                    <i className={`fa-solid fa-chevron-right fl-chevron${isOpen ? " open" : ""}`}
-                        style={{ color: T.textFaint, fontSize: 10 }}></i>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                        <button className="fl-btn-primary" onClick={(e) => { e.stopPropagation(); onAddTC(e, feat.moduleId, feat.id); }}>
+                            <i className="fa-solid fa-plus" style={{ fontSize: 10 }}></i> Test Case
+                        </button>
+                        <button className="fl-btn-ghost" onClick={onEdit} title="Edit Feature">
+                            <i className="fa-solid fa-pen-to-square" style={{ fontSize: 11 }}></i>
+                        </button>
+                        <button className="fl-btn-danger-sm" onClick={onDelete} title="Delete Feature">
+                            <i className="fa-solid fa-trash" style={{ fontSize: 11 }}></i>
+                        </button>
+                        <i className={`fa-solid fa-chevron-right fl-chevron${isOpen ? " open" : ""}`} style={{ color: T.textFaint, fontSize: 10 }}></i>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        {/* ── Module badge — always visible ── */}
-        <div style={{
-            background: T.surfaceAlt,
-            borderTop: `1px solid ${T.borderLight}`,
-            padding: "8px 20px",
-            display: "flex", alignItems: "center", gap: 10,
-        }}>
-            <span style={{
-                fontSize: 10, fontWeight: 700, color: T.textFaint,
-                textTransform: "uppercase", letterSpacing: "0.07em",
-                fontFamily: T.sans, flexShrink: 0,
-            }}>Module</span>
-            <div style={{ width: 5, height: 5, borderRadius: "50%", background: T.blue, flexShrink: 0 }} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: T.textMid, fontFamily: T.sans }}>{feat.moduleName}</span>
-            <Chip label={feat.moduleCode} style={{ background: T.blueTint, color: T.blue }} mono />
-        </div>
+            <div style={{ background: T.surfaceAlt, borderTop: `1px solid ${T.borderLight}`, padding: "8px 20px", display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: T.textFaint, textTransform: "uppercase", letterSpacing: "0.07em", fontFamily: T.sans, flexShrink: 0 }}>Module</span>
+                <div style={{ width: 5, height: 5, borderRadius: "50%", background: T.blue, flexShrink: 0 }} />
+                <span style={{ fontSize: 12, fontWeight: 600, color: T.textMid, fontFamily: T.sans }}>{feat.moduleName}</span>
+                <Chip label={feat.moduleCode} style={{ background: T.blueTint, color: T.blue }} mono />
+            </div>
 
-        {/* ── Test cases (expanded) ── */}
-        {isOpen && feat.testCases.length > 0 && (
-            <div style={{ borderTop: `1px solid ${T.borderLight}` }}>
-                <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                        <thead>
-                            <tr style={{ background: T.surfaceAlt, borderBottom: `1px solid ${T.border}` }}>
-                                {["ID", "Name", "Priority", "Status", "Assignee", "Updated", ""].map(h => (
-                                    <th key={h} style={{ padding: "8px 16px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.07em", fontFamily: T.sans }}>{h}</th>
+            {isOpen && feat.testCases.length > 0 && (
+                <div style={{ borderTop: `1px solid ${T.borderLight}` }}>
+                    <div style={{ overflowX: "auto" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                            <thead>
+                                <tr style={{ background: T.surfaceAlt, borderBottom: `1px solid ${T.border}` }}>
+                                    {["ID", "Name", "Priority", "Status", "Assignee", "Updated", ""].map(h => (
+                                        <th key={h} style={{ padding: "8px 16px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.07em", fontFamily: T.sans }}>{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody style={{ background: T.surface }}>
+                                {pagedTCs.map(tc => (
+                                    <TestCaseRow
+                                        key={tc.id}
+                                        tc={tc}
+                                        onEdit={(e) => { e.stopPropagation(); onEditTC(e, feat.moduleId, feat.id, tc); }}
+                                        onDelete={(e) => { e.stopPropagation(); onDeleteTC(e, feat.moduleId, feat.id, tc); }}
+                                    />
                                 ))}
-                            </tr>
-                        </thead>
-                        <tbody style={{ background: T.surface }}>
-                            {feat.testCases.map(tc => (
-                                <TestCaseRow
-                                    key={tc.id}
-                                    tc={tc}
-                                    onEdit={(e) => { e.stopPropagation(); onAddTC.__editTC(e, feat.moduleId, feat.id, tc); }}
-                                    onDelete={(e) => { e.stopPropagation(); onAddTC.__deleteTC(e, feat.moduleId, feat.id, tc); }}
-                                />
-                            ))}
-                        </tbody>
-                    </table>
+                            </tbody>
+                        </table>
+                    </div>
+                    {totalPages > 1 && (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderTop: `1px solid ${T.borderLight}`, background: T.surfaceAlt }} onClick={e => e.stopPropagation()}>
+                            <span style={{ fontSize: 11, color: T.textMuted, fontFamily: T.sans }}>
+                                Showing {currentPage * tcPageSize + 1}–{Math.min((currentPage + 1) * tcPageSize, totalTCs)} of {totalTCs} test cases
+                            </span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                <button className="fl-page-btn" disabled={currentPage === 0} onClick={() => onTcPageChange(feat.id, 0)}>«</button>
+                                <button className="fl-page-btn" disabled={currentPage === 0} onClick={() => onTcPageChange(feat.id, currentPage - 1)}>‹</button>
+                                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                                    let pg = i;
+                                    if (totalPages > 7) {
+                                        if (currentPage <= 3) pg = i;
+                                        else if (currentPage >= totalPages - 4) pg = totalPages - 7 + i;
+                                        else pg = currentPage - 3 + i;
+                                    }
+                                    return (
+                                        <button key={pg} className={`fl-page-btn${pg === currentPage ? " active" : ""}`} onClick={() => onTcPageChange(feat.id, pg)}>
+                                            {pg + 1}
+                                        </button>
+                                    );
+                                })}
+                                <button className="fl-page-btn" disabled={currentPage >= totalPages - 1} onClick={() => onTcPageChange(feat.id, currentPage + 1)}>›</button>
+                                <button className="fl-page-btn" disabled={currentPage >= totalPages - 1} onClick={() => onTcPageChange(feat.id, totalPages - 1)}>»</button>
+                            </div>
+                        </div>
+                    )}
                 </div>
-            </div>
-        )}
+            )}
 
-        {isOpen && feat.testCases.length === 0 && (
-            <div style={{ borderTop: `1px solid ${T.borderLight}`, background: "#F9FAF8", padding: "18px 20px", textAlign: "center" }}>
-                <p style={{ fontSize: 12, color: T.textFaint, margin: 0, fontFamily: T.sans }}>No test cases yet — add one above</p>
-            </div>
-        )}
-    </div>
-));
+            {isOpen && feat.testCases.length === 0 && (
+                <div style={{ borderTop: `1px solid ${T.borderLight}`, background: "#F9FAF8", padding: "18px 20px", textAlign: "center" }}>
+                    <p style={{ fontSize: 12, color: T.textFaint, margin: 0, fontFamily: T.sans }}>No test cases yet — add one above</p>
+                </div>
+            )}
+        </div>
+    );
+});
 
 // ─── Modal primitives ──────────────────────────────────────────────────────────
 const OVERLAY = {
@@ -922,7 +1101,6 @@ const BTN_DANGER = {
     cursor: "pointer", fontFamily: T.sans,
 };
 
-// ─── Form field helpers ────────────────────────────────────────────────────────
 const Field = ({ label, required, children }) => (
     <div>
         <label className="fl-label">{label}{required && <span style={{ color: T.red, marginLeft: 3 }}>*</span>}</label>
@@ -936,6 +1114,10 @@ export default function FeaturesLibrary() {
     const [users, setUsers] = useState([]);
     const [userStories, setUserStories] = useState([]);
     const [openFeatures, setOpenFeatures] = useState({});
+    const [tcPages, setTcPages] = useState({});
+    const TC_PAGE_SIZE = 20;
+    const [featPage, setFeatPage] = useState(0);
+    const FEAT_PAGE_SIZE = 10;
     const [searchQuery, setSearchQuery] = useState("");
     const [filterStatus, setFilterStatus] = useState("");
     const [loading, setLoading] = useState(true);
@@ -948,31 +1130,44 @@ export default function FeaturesLibrary() {
     const [deleteModal, setDeleteModal] = useState({ open: false, tc: null, featureId: null, moduleId: null });
     const [addFeatureModal, setAddFeatureModal] = useState(false);
     const [featureForm, setFeatureForm] = useState(emptyFeatureForm);
-
     const [editFeatureModal, setEditFeatureModal] = useState(false);
     const [editFeatureForm, setEditFeatureForm] = useState(emptyEditFeatureForm);
     const [deleteFeatureModal, setDeleteFeatureModal] = useState(false);
     const [deleteFeatureTarget, setDeleteFeatureTarget] = useState(null);
     const [form, setForm] = useState(emptyForm);
 
+    const usersRef = useRef(users);
+    useEffect(() => { usersRef.current = users; }, [users]);
+
+    const fetchAllRows = useCallback(async (table, selectCols, orderCol = null) => {
+        const PAGE = 1000;
+        let allData = [];
+        let from = 0;
+        while (true) {
+            let q = supabase.from(table).select(selectCols).range(from, from + PAGE - 1);
+            if (orderCol) q = q.order(orderCol, { ascending: true });
+            const { data, error } = await q;
+            if (error) throw error;
+            if (!data || data.length === 0) break;
+            allData = allData.concat(data);
+            if (data.length < PAGE) break;
+            from += PAGE;
+        }
+        return allData;
+    }, []);
+
     const fetchModulesWithFeatures = useCallback(async () => {
         try {
             setLoading(true); setError(null);
-            const [
-                { data: modulesData, error: modulesError },
-                { data: featuresData, error: featuresError },
-                { data: testCasesData, error: testCasesError },
-            ] = await Promise.all([
-                supabase.from("modules").select("*").order("module_code", { ascending: false }),
-                supabase.from("features").select("*"),
-                supabase.from("test_cases").select("id, test_case_id, name, description, priority, status, updated_at, feature_id, module_id, assigned_to"),
+            const [modulesData, featuresData, testCasesData] = await Promise.all([
+                fetchAllRows("modules", "*", "module_code"),
+                fetchAllRows("features", "*", "feature_code"),
+                fetchAllRows("test_cases", "id, test_case_id, name, priority, status, test_type, test_scenario, preconditions, test_steps, expected_result, updated_at, feature_id, module_id, assigned_to, user_story_ids"),
             ]);
-            if (modulesError) throw modulesError;
-            if (featuresError) console.warn("Features:", featuresError.message);
-            if (testCasesError) console.warn("Test cases:", testCasesError.message);
 
             const feats = featuresData || [];
             const tcs = testCasesData || [];
+
             const tcsByFeature = {};
             for (const tc of tcs) {
                 if (!tc.feature_id) continue;
@@ -980,31 +1175,41 @@ export default function FeaturesLibrary() {
                 tcsByFeature[tc.feature_id].push({
                     id: tc.id,
                     tcId: tc.test_case_id || tc.id,
-                    name: tc.name, description: tc.description,
-                    priority: tc.priority, status: tc.status,
-                    assignee: tc.assigned_to || null,
-                    updated: new Date(tc.updated_at).toLocaleDateString(),
+                    name: tc.name,
+                    priority: tc.priority,
+                    status: tc.status,
+                    testType: tc.test_type,
+                    testScenario: tc.test_scenario,
+                    preconditions: tc.preconditions,
+                    steps: Array.isArray(tc.test_steps) ? tc.test_steps.join("\n") : (tc.test_steps || ""),
+                    expected: tc.expected_result,
+                    assigneeId: tc.assigned_to || null,
+                    assigneeName: null,
+                    userStoryIds: tc.user_story_ids || [],
+                    updated: tc.updated_at ? new Date(tc.updated_at).toLocaleDateString() : "—",
                 });
             }
+
             const featsByModule = {};
             for (const f of feats) {
                 if (!featsByModule[f.module_id]) featsByModule[f.module_id] = [];
                 featsByModule[f.module_id].push(f);
             }
+
             const enriched = (modulesData || []).map(mod => {
                 const mf = featsByModule[mod.id] || [];
-                const ef = mf.map(feat => {
-                    return {
-                        ...feat,
-                        name: feat.feature_name || feat.name,
-                        code: feat.feature_code || feat.code,
-                        moduleId: mod.id,
-                        moduleName: mod.module_name || mod.name,
-                        moduleCode: mod.module_code,
-                        testCasesCount: (tcsByFeature[feat.id] || []).length,
-                        testCases: tcsByFeature[feat.id] || [],
-                    };
-                });
+                const ef = mf.map(feat => ({
+                    ...feat,
+                    // ── FIX: explicitly set name/code/moduleName/moduleCode so
+                    //    flatFeatures spread always carries these fields ──
+                    name: feat.feature_name || feat.name,
+                    code: feat.feature_code || feat.code,
+                    moduleId: mod.id,
+                    moduleName: mod.module_name || mod.name,
+                    moduleCode: mod.module_code,
+                    testCasesCount: (tcsByFeature[feat.id] || []).length,
+                    testCases: tcsByFeature[feat.id] || [],
+                }));
                 return {
                     ...mod,
                     name: mod.module_name || mod.name,
@@ -1015,9 +1220,12 @@ export default function FeaturesLibrary() {
                 };
             });
             setModules(enriched);
-        } catch (err) { setError(err.message || "Failed to load"); }
-        finally { setLoading(false); }
-    }, []);
+        } catch (err) {
+            setError(err.message || "Failed to load");
+        } finally {
+            setLoading(false);
+        }
+    }, [fetchAllRows]);
 
     const fetchUsers = useCallback(async () => {
         try {
@@ -1034,56 +1242,138 @@ export default function FeaturesLibrary() {
         } catch (err) { console.error(err); }
     }, []);
 
-    useEffect(() => { Promise.all([fetchModulesWithFeatures(), fetchUsers(), fetchUserStories()]); }, [fetchModulesWithFeatures, fetchUsers, fetchUserStories]);
+    const [totalTestCasesCount, setTotalTestCasesCount] = useState(0);
 
-    // ── Flat features list (primary view) ──────────────────────────────────────
-    const flatFeatures = useMemo(() =>
-        modules.flatMap(mod => mod.features.map(feat => {
-            const assignedUser = users.find(u => u.id === feat.assign_to);
-            return {
-                ...feat,
-                assign_to_name: assignedUser ? assignedUser.name : (feat.assign_to || null),
-            };
-        })),
-        [modules, users]
-    );
+    const fetchTotalTCCount = useCallback(async () => {
+        try {
+            const { count } = await supabase
+                .from("test_cases")
+                .select("*", { count: "exact", head: true });
+            if (count !== null) setTotalTestCasesCount(count);
+        } catch (err) { console.error(err); }
+    }, []);
+
+    useEffect(() => {
+        Promise.all([fetchModulesWithFeatures(), fetchUsers(), fetchUserStories(), fetchTotalTCCount()]);
+    }, [fetchModulesWithFeatures, fetchUsers, fetchUserStories, fetchTotalTCCount]);
+
+    useEffect(() => {
+        setFeatPage(0);
+    }, [searchQuery, filterStatus]);
+
+    // ── FIX: flatFeatures resolves assignee names for both features AND test cases.
+    //    moduleName / moduleCode / name / code are explicitly spread from the
+    //    enriched object so search always finds them.
+    const flatFeatures = useMemo(() => {
+        const userMap = {};
+        for (const u of users) { if (u.id) userMap[u.id] = u.name; }
+
+        return modules.flatMap(mod =>
+            mod.features.map(feat => {
+                const assignedUserName = feat.assign_to ? (userMap[feat.assign_to] || null) : null;
+                const resolvedTCs = feat.testCases.map(tc => ({
+                    ...tc,
+                    assigneeName: tc.assigneeId ? (userMap[tc.assigneeId] || tc.assigneeId) : null,
+                }));
+                return {
+                    ...feat,
+                    // Guarantee these are always present after spread
+                    name: feat.name || feat.feature_name || "",
+                    code: feat.code || feat.feature_code || "",
+                    moduleName: feat.moduleName || mod.module_name || mod.name || "",
+                    moduleCode: feat.moduleCode || mod.module_code || "",
+                    assign_to_name: assignedUserName,
+                    testCases: resolvedTCs,
+                };
+            })
+        );
+    }, [modules, users]);
 
     const totalFeatures = useMemo(() => flatFeatures.length, [flatFeatures]);
     const totalModules = useMemo(() => modules.length, [modules]);
-    const totalTestCases = useMemo(() => flatFeatures.reduce((a, f) => a + f.testCasesCount, 0), [flatFeatures]);
 
     const userOptions = useMemo(() => [{ id: "", name: "Select Assignee" }, ...users.map(u => ({ id: u.id, name: u.name }))], [users]);
-    const testerOptions = useMemo(() => [{ id: "", name: "Select Tester" }, ...users.map(u => ({ id: u.name, name: u.name }))], [users]);
+    const testerOptions = useMemo(() => [{ id: "", name: "Select Tester" }, ...users.map(u => ({ id: u.id, name: u.name }))], [users]);
     const moduleOptions = useMemo(() => [{ id: "", name: "Choose Module" }, ...modules.map(m => ({ id: m.id, name: m.name }))], [modules]);
 
-    // ── Filtered flat features ──────────────────────────────────────────────────
+    // ── FIX: clean, reliable search + filter ─────────────────────────────────
     const filteredFeatures = useMemo(() => {
         let list = flatFeatures;
+
+        // Status filter — treat null/undefined as "Active" (matches DB default)
         if (filterStatus) {
-            list = list.filter(f => (f.status || "Active").toLowerCase() === filterStatus.toLowerCase());
-        }
-        if (searchQuery) {
-            const q = searchQuery.toLowerCase();
             list = list.filter(f =>
-                f.name.toLowerCase().includes(q) ||
-                f.code.toLowerCase().includes(q) ||
-                (f.moduleName || "").toLowerCase().includes(q) ||
-                (f.moduleCode || "").toLowerCase().includes(q) ||
-                f.testCases.some(tc => (tc.tcId || tc.id).toLowerCase().includes(q) || tc.name.toLowerCase().includes(q))
+                (f.status || "Active").toLowerCase() === filterStatus.toLowerCase()
             );
         }
+
+        // Search filter — covers all meaningful text fields
+        const q = searchQuery.trim().toLowerCase();
+        if (q) {
+            list = list.filter(f => {
+                // Feature fields
+                if ((f.name || "").toLowerCase().includes(q)) return true;
+                if ((f.feature_name || "").toLowerCase().includes(q)) return true;
+                if ((f.code || "").toLowerCase().includes(q)) return true;
+                if ((f.feature_code || "").toLowerCase().includes(q)) return true;
+                if ((f.description || "").toLowerCase().includes(q)) return true;
+                if ((f.user_story || "").toLowerCase().includes(q)) return true;
+                // Module fields — always populated via the double-guarantee in flatFeatures
+                if ((f.moduleName || "").toLowerCase().includes(q)) return true;
+                if (q) {
+                    list = list.filter(f => {
+                        const str = (v) => String(v ?? "").toLowerCase();
+                        if (str(f.name).includes(q)) return true;
+                        if (str(f.feature_name).includes(q)) return true;
+                        if (str(f.code).includes(q)) return true;
+                        if (str(f.feature_code).includes(q)) return true;
+                        if (str(f.description).includes(q)) return true;
+                        if (str(f.user_story).includes(q)) return true;
+                        if (str(f.moduleName).includes(q)) return true;
+                        if (str(f.moduleCode).includes(q)) return true;
+                        if (str(f.assign_to_name).includes(q)) return true;
+                        if (f.testCases.some(tc =>
+                            str(tc.tcId).includes(q) ||
+                            str(tc.name).includes(q) ||
+                            str(tc.assigneeName).includes(q)
+                        )) return true;
+                        return false;
+                    });
+                }
+                // Assignee
+                if ((f.assign_to_name || "").toLowerCase().includes(q)) return true;
+                // Test case fields
+                if (f.testCases.some(tc =>
+                    (tc.tcId || "").toLowerCase().includes(q) ||
+                    (tc.name || "").toLowerCase().includes(q) ||
+                    (tc.assigneeName || "").toLowerCase().includes(q)
+                )) return true;
+                return false;
+            });
+        }
+
         return list;
     }, [flatFeatures, searchQuery, filterStatus]);
 
     const stats = useMemo(() => [
         { label: "Modules", value: totalModules, icon: "fa-puzzle-piece", color: "blue" },
         { label: "Features", value: totalFeatures, icon: "fa-list-check", color: "green" },
-        { label: "Test Cases", value: totalTestCases.toLocaleString(), icon: "fa-vial", color: "purple" },
+        { label: "Test Cases", value: totalTestCasesCount.toLocaleString(), icon: "fa-vial", color: "purple" },
         { label: "Active Features", value: flatFeatures.filter(f => (f.status || "Active") === "Active").length, icon: "fa-check-circle", color: "amber" },
         { label: "Team Members", value: users.length, icon: "fa-users", color: "red" },
-    ], [totalModules, totalFeatures, totalTestCases, flatFeatures, users.length]);
+    ], [totalModules, totalFeatures, totalTestCasesCount, flatFeatures, users.length]);
 
-    const toggleFeature = useCallback(id => setOpenFeatures(p => ({ ...p, [id]: !p[id] })), []);
+    const totalFeatPages = Math.ceil(filteredFeatures.length / FEAT_PAGE_SIZE);
+    const pagedFeatures = filteredFeatures.slice(featPage * FEAT_PAGE_SIZE, (featPage + 1) * FEAT_PAGE_SIZE);
+
+    const toggleFeature = useCallback(id => {
+        setOpenFeatures(p => ({ ...p, [id]: !p[id] }));
+        setTcPages(p => ({ ...p, [id]: 0 }));
+    }, []);
+
+    const handleTcPageChange = useCallback((featureId, page) => {
+        setTcPages(p => ({ ...p, [featureId]: page }));
+    }, []);
 
     const openAddFeatureModal = useCallback(() => {
         const nextCode = generateNextFeatCode(flatFeatures);
@@ -1098,21 +1388,49 @@ export default function FeaturesLibrary() {
         setForm({ ...emptyForm, id: nextId });
         setAddModal({ open: true, featureId, moduleId });
     }, [modules]);
+
     const openEditModal = useCallback((e, moduleId, featureId, tc) => {
         e.stopPropagation();
-        setForm({ id: tc.tcId, name: tc.name, description: tc.description, testScenario: tc.testScenario || "", preconditions: tc.preconditions || "", steps: tc.steps || "", expected: tc.expected || "", assignee: tc.assignee || "", status: tc.status, priority: tc.priority, testType: tc.testType || "", tags: "", userStoryIds: tc.userStoryIds || [] });
+        setForm({
+            id: tc.tcId,
+            name: tc.name || "",
+            testScenario: tc.testScenario || "",
+            preconditions: tc.preconditions || "",
+            steps: tc.steps || "",
+            expected: tc.expected || "",
+            assignee: tc.assigneeId || "",
+            status: tc.status || "Active",
+            priority: tc.priority || "",
+            testType: tc.testType || "",
+            tags: "",
+            userStoryIds: tc.userStoryIds || [],
+        });
         setEditModal({ open: true, tc, featureId, moduleId });
     }, []);
+
     const openDeleteModal = useCallback((e, moduleId, featureId, tc) => {
-        e.stopPropagation(); setDeleteModal({ open: true, tc, featureId, moduleId });
+        e.stopPropagation();
+        setDeleteModal({ open: true, tc, featureId, moduleId });
     }, []);
+
     const openEditFeatureModal = useCallback((e, feat) => {
         e.stopPropagation();
-        setEditFeatureForm({ id: feat.id, moduleId: feat.moduleId, name: feat.feature_name || feat.name || "", code: feat.feature_code || feat.code || "", user_story: feat.user_story || "", description: feat.description || "", assign_to: feat.assign_to || "" });
+        setEditFeatureForm({
+            id: feat.id,
+            moduleId: feat.moduleId,
+            name: feat.feature_name || feat.name || "",
+            code: feat.feature_code || feat.code || "",
+            user_story: feat.user_story || "",
+            description: feat.description || "",
+            assign_to: feat.assign_to || "",
+        });
         setEditFeatureModal(true);
     }, []);
+
     const openDeleteFeatureModal = useCallback((e, feat) => {
-        e.stopPropagation(); setDeleteFeatureTarget(feat); setDeleteFeatureModal(true);
+        e.stopPropagation();
+        setDeleteFeatureTarget(feat);
+        setDeleteFeatureModal(true);
     }, []);
 
     const handleAddTestCase = useCallback(async () => {
@@ -1121,42 +1439,51 @@ export default function FeaturesLibrary() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) { alert("Must be logged in"); return; }
             const { error } = await supabase.from("test_cases").insert([{
-                id: generateUUID(), test_case_id: form.id, name: form.name,
+                id: generateUUID(),
+                test_case_id: form.id,
+                name: form.name,
                 test_scenario: form.testScenario || null,
                 preconditions: form.preconditions || null,
                 test_steps: form.steps ? form.steps.split("\n").map(s => s.trim()).filter(Boolean) : null,
                 expected_result: form.expected || null,
                 feature_id: addModal.featureId || null,
                 module_id: addModal.moduleId || null,
-                priority: form.priority, status: form.status,
+                priority: form.priority,
+                status: form.status,
                 test_type: form.testType || null,
                 created_by: user.id,
                 assigned_to: form.assignee || null,
                 user_story_ids: form.userStoryIds.length > 0 ? form.userStoryIds : null,
-                created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
             }]);
             if (error) throw error;
-            setAddModal({ open: false }); fetchModulesWithFeatures();
+            setAddModal({ open: false });
+            fetchModulesWithFeatures();
+            fetchTotalTCCount();
         } catch (err) { alert(`Error: ${err.message}`); }
-    }, [form, addModal.featureId, addModal.moduleId, fetchModulesWithFeatures]);
+    }, [form, addModal.featureId, addModal.moduleId, fetchModulesWithFeatures, fetchTotalTCCount]);
 
     const handleEditTestCase = useCallback(async () => {
         if (!form.name || !form.priority || !form.testType) { alert("Name, Priority and Test Type are required"); return; }
         if (!editModal.tc?.id) return;
         try {
             const { error } = await supabase.from("test_cases").update({
-                name: form.name, description: form.description,
+                name: form.name,
                 test_scenario: form.testScenario || null,
                 preconditions: form.preconditions || null,
                 test_steps: form.steps ? form.steps.split("\n").map(s => s.trim()).filter(Boolean) : null,
                 expected_result: form.expected || null,
-                priority: form.priority, status: form.status,
+                priority: form.priority,
+                status: form.status,
                 test_type: form.testType || null,
+                assigned_to: form.assignee || null,
                 user_story_ids: form.userStoryIds.length > 0 ? form.userStoryIds : null,
                 updated_at: new Date().toISOString(),
             }).eq("id", editModal.tc.id);
             if (error) throw error;
-            setEditModal({ open: false, tc: null, featureId: null, moduleId: null }); fetchModulesWithFeatures();
+            setEditModal({ open: false, tc: null, featureId: null, moduleId: null });
+            fetchModulesWithFeatures();
         } catch (err) { alert(`Error: ${err.message}`); }
     }, [form, editModal.tc, fetchModulesWithFeatures]);
 
@@ -1164,23 +1491,28 @@ export default function FeaturesLibrary() {
         try {
             const { error } = await supabase.from("test_cases").delete().eq("id", deleteModal.tc.id);
             if (error) throw error;
-            setDeleteModal({ open: false }); fetchModulesWithFeatures();
+            setDeleteModal({ open: false });
+            fetchModulesWithFeatures();
+            fetchTotalTCCount();
         } catch (err) { alert(`Error: ${err.message}`); }
-    }, [deleteModal.tc, fetchModulesWithFeatures]);
+    }, [deleteModal.tc, fetchModulesWithFeatures, fetchTotalTCCount]);
 
     const handleAddFeature = useCallback(async () => {
         if (!featureForm.moduleId || !featureForm.name) { alert("Module and Name required"); return; }
         try {
-            const ins = {
-                module_id: featureForm.moduleId, feature_name: featureForm.name,
-                feature_code: featureForm.code, description: featureForm.description,
+            const { error } = await supabase.from("features").insert([{
+                module_id: featureForm.moduleId,
+                feature_name: featureForm.name,
+                feature_code: featureForm.code,
+                description: featureForm.description || null,
+                user_story: featureForm.user_story || null,
+                assign_to: featureForm.assign_to || null,
                 created_at: new Date().toISOString(),
-            };
-            if (featureForm.user_story) ins.user_story = featureForm.user_story;
-            if (featureForm.assign_to) ins.assign_to = featureForm.assign_to;
-            const { error } = await supabase.from("features").insert([ins]);
+            }]);
             if (error) throw error;
-            setAddFeatureModal(false); setFeatureForm(emptyFeatureForm); fetchModulesWithFeatures();
+            setAddFeatureModal(false);
+            setFeatureForm(emptyFeatureForm);
+            fetchModulesWithFeatures();
         } catch (err) { alert(`Error: ${err.message}`); }
     }, [featureForm, fetchModulesWithFeatures]);
 
@@ -1188,14 +1520,17 @@ export default function FeaturesLibrary() {
         if (!editFeatureForm.name || !editFeatureForm.code) { alert("Name and Code required"); return; }
         try {
             const { error } = await supabase.from("features").update({
-                feature_name: editFeatureForm.name, feature_code: editFeatureForm.code,
-                description: editFeatureForm.description,
+                feature_name: editFeatureForm.name,
+                feature_code: editFeatureForm.code,
+                description: editFeatureForm.description || null,
                 user_story: editFeatureForm.user_story || null,
                 assign_to: editFeatureForm.assign_to || null,
                 module_id: editFeatureForm.moduleId,
             }).eq("id", editFeatureForm.id);
             if (error) throw error;
-            setEditFeatureModal(false); setEditFeatureForm(emptyEditFeatureForm); fetchModulesWithFeatures();
+            setEditFeatureModal(false);
+            setEditFeatureForm(emptyEditFeatureForm);
+            fetchModulesWithFeatures();
         } catch (err) { alert(`Error: ${err.message}`); }
     }, [editFeatureForm, fetchModulesWithFeatures]);
 
@@ -1205,7 +1540,9 @@ export default function FeaturesLibrary() {
             await supabase.from("test_cases").delete().eq("feature_id", deleteFeatureTarget.id);
             const { error } = await supabase.from("features").delete().eq("id", deleteFeatureTarget.id);
             if (error) throw error;
-            setDeleteFeatureModal(false); setDeleteFeatureTarget(null); fetchModulesWithFeatures();
+            setDeleteFeatureModal(false);
+            setDeleteFeatureTarget(null);
+            fetchModulesWithFeatures();
         } catch (err) { alert(`Error: ${err.message}`); }
     }, [deleteFeatureTarget, fetchModulesWithFeatures]);
 
@@ -1229,10 +1566,6 @@ export default function FeaturesLibrary() {
         a.click();
     }, [flatFeatures]);
 
-    const addTCHandler = useCallback((e, moduleId, featureId) => openAddModal(e, moduleId, featureId), [openAddModal]);
-    addTCHandler.__editTC = openEditModal;
-    addTCHandler.__deleteTC = openDeleteModal;
-
     if (loading) return (
         <div className="fl-root" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ textAlign: "center", color: T.textMuted, fontSize: 13 }}>
@@ -1246,7 +1579,7 @@ export default function FeaturesLibrary() {
         <div className="fl-root" style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, background: T.bg }}>
             <style>{GLOBAL_STYLES}</style>
 
-            {/* ── Header ──────────────────────────────────────────────────────────── */}
+            {/* ── Header ── */}
             <header style={{ background: T.surface, borderBottom: `1px solid ${T.border}`, zIndex: 40, position: "sticky", top: 0 }}>
                 <div style={{ padding: "14px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
                     <div>
@@ -1299,13 +1632,10 @@ export default function FeaturesLibrary() {
                                 <i className="fa-solid fa-search" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: T.textFaint, fontSize: 12 }}></i>
                             </div>
                             <Dropdown options={FILTER_STATUS_OPT} selected={filterStatus} onChange={setFilterStatus} placeholder="All Status" />
-                            <button className="fl-btn-ghost" onClick={() => { setSearchQuery(""); setFilterStatus(""); }} style={{ justifyContent: "center" }}>
-                                Clear
-                            </button>
+                            <button className="fl-btn-ghost" onClick={() => { setSearchQuery(""); setFilterStatus(""); }} style={{ justifyContent: "center" }}>Clear</button>
                         </div>
                     </div>
 
-                    {/* Empty */}
                     {filteredFeatures.length === 0 && (
                         <div style={{ textAlign: "center", padding: "48px 0" }}>
                             <div style={{ width: 48, height: 48, background: T.surfaceAlt, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
@@ -1315,24 +1645,64 @@ export default function FeaturesLibrary() {
                         </div>
                     )}
 
-                    {/* ── Feature cards (primary level) ── */}
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {filteredFeatures.map(feat => (
+                        {pagedFeatures.map(feat => (
                             <FeatureCard
                                 key={feat.id}
                                 feat={feat}
                                 isOpen={!!openFeatures[feat.id]}
                                 onToggle={() => toggleFeature(feat.id)}
-                                onAddTC={addTCHandler}
+                                onAddTC={openAddModal}
+                                onEditTC={openEditModal}
+                                onDeleteTC={openDeleteModal}
                                 onEdit={(e) => openEditFeatureModal(e, feat)}
                                 onDelete={(e) => openDeleteFeatureModal(e, feat)}
+                                tcPage={tcPages[feat.id] || 0}
+                                onTcPageChange={handleTcPageChange}
+                                tcPageSize={TC_PAGE_SIZE}
                             />
                         ))}
                     </div>
+
+                    {totalFeatPages > 1 && (
+                        <div style={{
+                            display: "flex", alignItems: "center", justifyContent: "space-between",
+                            marginTop: 16, padding: "12px 18px",
+                            background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10,
+                        }}>
+                            <span style={{ fontSize: 12, color: T.textMuted, fontFamily: T.sans }}>
+                                Showing {featPage * FEAT_PAGE_SIZE + 1}–{Math.min((featPage + 1) * FEAT_PAGE_SIZE, filteredFeatures.length)} of {filteredFeatures.length} features
+                            </span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                <button className="fl-page-btn" disabled={featPage === 0} onClick={() => setFeatPage(0)}>«</button>
+                                <button className="fl-page-btn" disabled={featPage === 0} onClick={() => setFeatPage(p => p - 1)}>‹</button>
+                                {Array.from({ length: Math.min(totalFeatPages, 7) }, (_, i) => {
+                                    let pg = i;
+                                    if (totalFeatPages > 7) {
+                                        if (featPage <= 3) pg = i;
+                                        else if (featPage >= totalFeatPages - 4) pg = totalFeatPages - 7 + i;
+                                        else pg = featPage - 3 + i;
+                                    }
+                                    return (
+                                        <button
+                                            key={pg}
+                                            className={`fl-page-btn${pg === featPage ? " active" : ""}`}
+                                            onClick={() => setFeatPage(pg)}
+                                        >
+                                            {pg + 1}
+                                        </button>
+                                    );
+                                })}
+                                <button className="fl-page-btn" disabled={featPage >= totalFeatPages - 1} onClick={() => setFeatPage(p => p + 1)}>›</button>
+                                <button className="fl-page-btn" disabled={featPage >= totalFeatPages - 1} onClick={() => setFeatPage(totalFeatPages - 1)}>»</button>
+                            </div>
+                        </div>
+                    )}
+
                 </div>
             </main>
 
-            {/* ── Add Feature Modal ──────────────────────────────────────────────── */}
+            {/* ── Add Feature Modal ── */}
             {addFeatureModal && (
                 <div style={OVERLAY} onClick={() => setAddFeatureModal(false)}>
                     <div className="fl-modal-enter" style={modalBox()} onClick={e => e.stopPropagation()}>
@@ -1349,11 +1719,7 @@ export default function FeaturesLibrary() {
                             </Field>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                                 <Field label="Feature Code">
-                                    <div style={{
-                                        display: "flex", alignItems: "center", gap: 8,
-                                        padding: "9px 13px", background: T.surfaceAlt,
-                                        border: `1px solid ${T.border}`, borderRadius: 8,
-                                    }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 13px", background: T.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 8 }}>
                                         <span style={{ fontSize: 13, fontWeight: 700, color: T.purple, fontFamily: T.mono }}>{featureForm.code}</span>
                                         <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>Auto-generated</span>
                                     </div>
@@ -1377,7 +1743,7 @@ export default function FeaturesLibrary() {
                 </div>
             )}
 
-            {/* ── Edit Feature Modal ─────────────────────────────────────────────── */}
+            {/* ── Edit Feature Modal ── */}
             {editFeatureModal && (
                 <div style={OVERLAY} onClick={() => setEditFeatureModal(false)}>
                     <div className="fl-modal-enter" style={modalBox()} onClick={e => e.stopPropagation()}>
@@ -1420,7 +1786,7 @@ export default function FeaturesLibrary() {
                 </div>
             )}
 
-            {/* ── Delete Feature Modal ───────────────────────────────────────────── */}
+            {/* ── Delete Feature Modal ── */}
             {deleteFeatureModal && (
                 <div style={OVERLAY} onClick={() => setDeleteFeatureModal(false)}>
                     <div className="fl-modal-enter" style={{ ...modalBox("440px"), maxHeight: "none" }} onClick={e => e.stopPropagation()}>
@@ -1461,7 +1827,7 @@ export default function FeaturesLibrary() {
                 </div>
             )}
 
-            {/* ── Add Test Case Modal ────────────────────────────────────────────── */}
+            {/* ── Add Test Case Modal ── */}
             {addModal.open && (
                 <div style={OVERLAY} onClick={() => setAddModal({ open: false })}>
                     <div className="fl-modal-enter" style={modalBox("620px")} onClick={e => e.stopPropagation()}>
@@ -1472,11 +1838,7 @@ export default function FeaturesLibrary() {
                         <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                                 <Field label="Test Case ID">
-                                    <div style={{
-                                        display: "flex", alignItems: "center", gap: 8,
-                                        padding: "9px 13px", background: T.surfaceAlt,
-                                        border: `1px solid ${T.border}`, borderRadius: 8,
-                                    }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 13px", background: T.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 8 }}>
                                         <span style={{ fontSize: 13, fontWeight: 700, color: T.purple, fontFamily: T.mono }}>{form.id}</span>
                                         <span style={{ fontSize: 11, color: T.textFaint, fontFamily: T.sans }}>Auto-generated</span>
                                     </div>
@@ -1488,7 +1850,6 @@ export default function FeaturesLibrary() {
                             <Field label="Test Case Name" required>
                                 <input className="fl-input" type="text" placeholder="e.g., Valid login with correct credentials" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
                             </Field>
-                            {/* Description field removed */}
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                                 <Field label="Test Type" required>
                                     <Dropdown options={TEST_TYPE_WITH_PH} selected={form.testType} onChange={v => setForm(f => ({ ...f, testType: v }))} placeholder="Select Test Type" />
@@ -1507,7 +1868,7 @@ export default function FeaturesLibrary() {
                                 <textarea className="fl-input" rows="2" placeholder="e.g., User must have a registered account" value={form.preconditions} onChange={e => setForm(f => ({ ...f, preconditions: e.target.value }))} style={{ resize: "none" }} />
                             </Field>
                             <Field label="Test Steps">
-                                <textarea className="fl-input" rows="4" placeholder="1. Navigate to login page&#10;2. Enter valid credentials&#10;3. Click Login button" value={form.steps} onChange={e => setForm(f => ({ ...f, steps: e.target.value }))} style={{ resize: "none" }} />
+                                <textarea className="fl-input" rows="4" placeholder={"1. Navigate to login page\n2. Enter valid credentials\n3. Click Login button"} value={form.steps} onChange={e => setForm(f => ({ ...f, steps: e.target.value }))} style={{ resize: "none" }} />
                             </Field>
                             <Field label="Expected Result">
                                 <textarea className="fl-input" rows="2" placeholder="e.g., User is redirected to dashboard" value={form.expected} onChange={e => setForm(f => ({ ...f, expected: e.target.value }))} style={{ resize: "none" }} />
@@ -1521,7 +1882,7 @@ export default function FeaturesLibrary() {
                 </div>
             )}
 
-            {/* ── Edit Test Case Modal ───────────────────────────────────────────── */}
+            {/* ── Edit Test Case Modal ── */}
             {editModal.open && (
                 <div style={OVERLAY} onClick={() => setEditModal({ open: false })}>
                     <div className="fl-modal-enter" style={modalBox("620px")} onClick={e => e.stopPropagation()}>
@@ -1541,9 +1902,6 @@ export default function FeaturesLibrary() {
                             <Field label="Test Case Name" required>
                                 <input className="fl-input" type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
                             </Field>
-                            <Field label="Description">
-                                <textarea className="fl-input" rows="3" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "none" }} />
-                            </Field>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                                 <Field label="Test Type" required>
                                     <Dropdown options={TEST_TYPE_OPTIONS} selected={form.testType} onChange={v => setForm(f => ({ ...f, testType: v }))} placeholder="Select Test Type" />
@@ -1552,17 +1910,20 @@ export default function FeaturesLibrary() {
                                     <Dropdown options={STATUS_OPTIONS} selected={form.status} onChange={v => setForm(f => ({ ...f, status: v }))} placeholder="Select Status" />
                                 </Field>
                             </div>
+                            <Field label="Assigned To">
+                                <Dropdown options={testerOptions} selected={form.assignee} onChange={v => setForm(f => ({ ...f, assignee: v }))} placeholder="Select Tester" />
+                            </Field>
                             <Field label="Test Scenario">
-                                <input className="fl-input" type="text" placeholder="e.g., Verify user can log in with valid credentials" value={form.testScenario} onChange={e => setForm(f => ({ ...f, testScenario: e.target.value }))} />
+                                <input className="fl-input" type="text" value={form.testScenario} onChange={e => setForm(f => ({ ...f, testScenario: e.target.value }))} />
                             </Field>
                             <Field label="Pre-Requisites">
-                                <textarea className="fl-input" rows="2" placeholder="e.g., User must have a registered account" value={form.preconditions} onChange={e => setForm(f => ({ ...f, preconditions: e.target.value }))} style={{ resize: "none" }} />
+                                <textarea className="fl-input" rows="2" value={form.preconditions} onChange={e => setForm(f => ({ ...f, preconditions: e.target.value }))} style={{ resize: "none" }} />
                             </Field>
                             <Field label="Test Steps">
-                                <textarea className="fl-input" rows="4" placeholder="1. Navigate to login page&#10;2. Enter valid credentials&#10;3. Click Login button" value={form.steps} onChange={e => setForm(f => ({ ...f, steps: e.target.value }))} style={{ resize: "none" }} />
+                                <textarea className="fl-input" rows="4" value={form.steps} onChange={e => setForm(f => ({ ...f, steps: e.target.value }))} style={{ resize: "none" }} />
                             </Field>
                             <Field label="Expected Result">
-                                <textarea className="fl-input" rows="2" placeholder="e.g., User is redirected to dashboard" value={form.expected} onChange={e => setForm(f => ({ ...f, expected: e.target.value }))} style={{ resize: "none" }} />
+                                <textarea className="fl-input" rows="2" value={form.expected} onChange={e => setForm(f => ({ ...f, expected: e.target.value }))} style={{ resize: "none" }} />
                             </Field>
                         </div>
                         <div style={MODAL_FOOTER}>
@@ -1573,7 +1934,7 @@ export default function FeaturesLibrary() {
                 </div>
             )}
 
-            {/* ── Delete Test Case Modal ─────────────────────────────────────────── */}
+            {/* ── Delete Test Case Modal ── */}
             {deleteModal.open && (
                 <div style={OVERLAY} onClick={() => setDeleteModal({ open: false })}>
                     <div className="fl-modal-enter" style={{ ...modalBox("420px"), maxHeight: "none" }} onClick={e => e.stopPropagation()}>
@@ -1611,7 +1972,7 @@ export default function FeaturesLibrary() {
             {importTCModal && (
                 <ImportTestCasesModal
                     onClose={() => setImportTCModal(false)}
-                    onSuccess={fetchModulesWithFeatures}
+                    onSuccess={() => { fetchModulesWithFeatures(); fetchTotalTCCount(); }}
                     flatFeatures={flatFeatures}
                     users={users}
                     userStories={userStories}
