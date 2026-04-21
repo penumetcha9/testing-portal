@@ -78,7 +78,6 @@ const downloadImportTemplate = () => {
     document.body.removeChild(a); URL.revokeObjectURL(url);
 };
 
-// Split one CSV line respecting RFC-4180 quoting
 const splitLine = (line) => {
     const cells = [];
     let inQ = false, cur = "";
@@ -141,9 +140,7 @@ const parseCSV = (text) => {
     const missing = Object.entries(LABELS).filter(([k]) => idx[k] === -1).map(([, v]) => v);
     if (missing.length) {
         return {
-            rows: [],
-            validRows: [],
-            errors: [],
+            rows: [], validRows: [], errors: [],
             error: `Missing required column${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}. Detected headers: ${rawHeaders.join(', ')}`,
         };
     }
@@ -162,31 +159,18 @@ const parseCSV = (text) => {
         };
     }).filter(r => r.module_name.length > 0);
 
-    const validRows = [];
-    const errors = [];
-
+    const validRows = [], errors = [];
     for (const row of allRows) {
         const rowErrs = [];
         if (!row.description) rowErrs.push("Description is empty");
         if (!row.module_owner) rowErrs.push("Module Owner is empty");
-        if (!row.priority) {
-            rowErrs.push("Priority is empty");
-        } else if (!VALID_PRIORITIES.includes(row.priority)) {
-            rowErrs.push(`Priority must be High, Medium or Low (got "${row.priority}")`);
-        }
-        if (!row.status) {
-            rowErrs.push("Status is empty");
-        } else if (!VALID_STATUSES.includes(row.status)) {
-            rowErrs.push(`Status must be Active, Inactive or Archived (got "${row.status}")`);
-        }
-
-        if (rowErrs.length > 0) {
-            errors.push({ row: row._row, name: row.module_name, messages: rowErrs });
-        } else {
-            validRows.push(row);
-        }
+        if (!row.priority) { rowErrs.push("Priority is empty"); }
+        else if (!VALID_PRIORITIES.includes(row.priority)) { rowErrs.push(`Priority must be High, Medium or Low (got "${row.priority}")`); }
+        if (!row.status) { rowErrs.push("Status is empty"); }
+        else if (!VALID_STATUSES.includes(row.status)) { rowErrs.push(`Status must be Active, Inactive or Archived (got "${row.status}")`); }
+        if (rowErrs.length > 0) errors.push({ row: row._row, name: row.module_name, messages: rowErrs });
+        else validRows.push(row);
     }
-
     return { rows: allRows, validRows, errors, error: null };
 };
 
@@ -311,6 +295,68 @@ function Field({ label, required, children, hint }) {
     );
 }
 
+// ─── Pagination ────────────────────────────────────────────────────────────────
+function Pagination({ currentPage, totalPages, totalItems, pageSize, onPageChange, onPageSizeChange }) {
+    const pages = [];
+    const delta = 2;
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= currentPage - delta && i <= currentPage + delta)) {
+            pages.push(i);
+        }
+    }
+    const withEllipsis = [];
+    let prev = null;
+    for (const page of pages) {
+        if (prev !== null && page - prev > 1) withEllipsis.push("...");
+        withEllipsis.push(page);
+        prev = page;
+    }
+
+    const from = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+    const to = Math.min(currentPage * pageSize, totalItems);
+
+    return (
+        <div className="bg-white border border-gray-200 rounded-xl px-5 py-3 flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-500">Rows per page:</span>
+                <select value={pageSize} onChange={e => { onPageSizeChange(Number(e.target.value)); onPageChange(1); }}
+                    className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-green-300">
+                    {[6, 12, 24, 48].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+                <span className="text-xs text-gray-400">{from}–{to} of {totalItems}</span>
+            </div>
+            <div className="flex items-center gap-1">
+                <button onClick={() => onPageChange(1)} disabled={currentPage === 1}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs">
+                    <i className="fa-solid fa-angles-left" />
+                </button>
+                <button onClick={() => onPageChange(currentPage - 1)} disabled={currentPage === 1}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs">
+                    <i className="fa-solid fa-angle-left" />
+                </button>
+                {withEllipsis.map((item, idx) =>
+                    item === "..." ? (
+                        <span key={`e-${idx}`} className="w-7 h-7 flex items-center justify-center text-gray-400 text-xs">…</span>
+                    ) : (
+                        <button key={item} onClick={() => onPageChange(item)}
+                            className={`w-7 h-7 flex items-center justify-center rounded-lg border text-xs font-semibold transition-colors ${item === currentPage ? "bg-green-700 border-green-700 text-white" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"}`}>
+                            {item}
+                        </button>
+                    )
+                )}
+                <button onClick={() => onPageChange(currentPage + 1)} disabled={currentPage === totalPages || totalPages === 0}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs">
+                    <i className="fa-solid fa-angle-right" />
+                </button>
+                <button onClick={() => onPageChange(totalPages)} disabled={currentPage === totalPages || totalPages === 0}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs">
+                    <i className="fa-solid fa-angles-right" />
+                </button>
+            </div>
+        </div>
+    );
+}
+
 // ─── Import Modules Modal ──────────────────────────────────────────────────────
 function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [], users = [] }) {
     const fileInputRef = useRef(null);
@@ -321,118 +367,53 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [], user
     const [importing, setImporting] = useState(false);
     const [result, setResult] = useState(null);
 
-    const handleClose = () => {
-        setFile(null);
-        setParsed(null);
-        setStep("upload");
-        setDragOver(false);
-        setImporting(false);
-        setResult(null);
-        onClose();
-    };
+    const handleClose = () => { setFile(null); setParsed(null); setStep("upload"); setDragOver(false); setImporting(false); setResult(null); onClose(); };
 
     const handleFile = (f) => {
-        if (!f || (!f.name.toLowerCase().endsWith(".csv"))) {
-            alert("Only .csv files are supported."); return;
-        }
+        if (!f || (!f.name.toLowerCase().endsWith(".csv"))) { alert("Only .csv files are supported."); return; }
         setFile(f);
         setParsed(null);
         const reader = new FileReader();
-        reader.onload = (e) => {
-            const result = parseCSV(e.target.result);
-            setParsed(result);
-        };
+        reader.onload = (e) => { const result = parseCSV(e.target.result); setParsed(result); };
         reader.readAsText(f);
     };
 
-    const handleDrop = (e) => {
-        e.preventDefault(); setDragOver(false);
-        if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
-    };
+    const handleDrop = (e) => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); };
 
     const handleImport = async () => {
-        if (!parsed?.validRows?.length) {
-            alert("No valid rows to import. Please check your CSV file and try again.");
-            return;
-        }
+        if (!parsed?.validRows?.length) { alert("No valid rows to import."); return; }
         setImporting(true);
-
-        // Fetch existing module names to prevent duplicates
-        const { data: existing } = await supabase
-            .from("modules")
-            .select("module_name");
-
-        const existingNames = new Set(
-            (existing || []).map(m => m.module_name.trim().toLowerCase())
-        );
-
-        // Build a case-insensitive map: lowercase full_name → actual full_name stored in DB
+        const { data: existing } = await supabase.from("modules").select("module_name");
+        const existingNames = new Set((existing || []).map(m => m.module_name.trim().toLowerCase()));
         const userMap = {};
-        for (const u of users) {
-            if (u.name) userMap[u.name.trim().toLowerCase()] = u.name.trim();
-        }
-
+        for (const u of users) { if (u.name) userMap[u.name.trim().toLowerCase()] = u.name.trim(); }
         let codes = [...existingModuleCodes];
         const success = [], failed = [];
-
         for (const row of parsed.validRows) {
-            // Check for duplicate module name
-            if (existingNames.has(row.module_name.trim().toLowerCase())) {
-                failed.push({ name: row.module_name, reason: "Module name already exists" });
-                continue;
-            }
-
-            // Case-insensitive owner lookup; null if not found (row still imports)
+            if (existingNames.has(row.module_name.trim().toLowerCase())) { failed.push({ name: row.module_name, reason: "Module name already exists" }); continue; }
             const resolvedOwner = userMap[row.module_owner.trim().toLowerCase()] || null;
-
-            // Color — invalid value silently defaults to "blue"
             const colorVal = (row.color || "blue").toLowerCase();
             const finalColor = VALID_COLORS.includes(colorVal) ? colorVal : "blue";
-
             const code = generateModuleCode(codes);
             codes.push(code);
-
-            const { error } = await supabase.from("modules").insert([{
-                module_code: code,
-                module_name: row.module_name.trim(),
-                description: row.description.trim(),
-                module_owner: resolvedOwner,
-                priority: row.priority.trim(),
-                status: row.status.trim(),
-                color: finalColor,
-            }]);
-
+            const { error } = await supabase.from("modules").insert([{ module_code: code, module_name: row.module_name.trim(), description: row.description.trim(), module_owner: resolvedOwner, priority: row.priority.trim(), status: row.status.trim(), color: finalColor }]);
             if (error) failed.push({ name: row.module_name, reason: error.message });
             else success.push(row.module_name);
         }
-
-        // Also surface rows that were skipped at parse/validation time
-        const skipped = (parsed.errors || []).map(e => ({
-            name: e.name || `Row ${e.row}`,
-            reason: e.messages.join(" · "),
-        }));
-
+        const skipped = (parsed.errors || []).map(e => ({ name: e.name || `Row ${e.row}`, reason: e.messages.join(" · ") }));
         setResult({ success, failed: [...skipped, ...failed] });
-        setImporting(false);
-        setStep("done");
+        setImporting(false); setStep("done");
         if (success.length) onSuccess();
     };
 
     const validRows = parsed?.validRows?.length || 0;
     const errorRows = parsed?.errors?.length || 0;
     const parseError = parsed?.error || null;
-
-    const colorHex = {
-        blue: "#3B82F6", green: "#1B5E3B", purple: "#8B5CF6",
-        red: "#E53E3E", indigo: "#6366F1", pink: "#EC4899",
-        teal: "#14B8A6", orange: "#F97316",
-    };
+    const colorHex = { blue: "#3B82F6", green: "#1B5E3B", purple: "#8B5CF6", red: "#E53E3E", indigo: "#6366F1", pink: "#EC4899", teal: "#14B8A6", orange: "#F97316" };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.45)" }} onClick={handleClose}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl flex flex-col overflow-hidden" style={{ maxHeight: "90vh" }} onClick={e => e.stopPropagation()}>
-
-                {/* Header */}
                 <div className="flex items-start justify-between px-6 pt-6 pb-5 border-b border-gray-100">
                     <div>
                         <h2 className="text-lg font-bold text-gray-900">Import Modules</h2>
@@ -442,26 +423,18 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [], user
                         <i className="fa-solid fa-xmark text-lg" />
                     </button>
                 </div>
-
-                {/* Body */}
                 <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-
-                    {/* ── UPLOAD step ── */}
                     {step === "upload" && (
                         <>
-                            {/* Template banner */}
                             <div className="flex items-center justify-between gap-4 px-4 py-4 bg-blue-50 border border-blue-100 rounded-xl">
                                 <div>
                                     <p className="text-sm font-semibold text-blue-700">Download Import Template</p>
-                                    <p className="text-xs text-blue-500 mt-0.5">Get the CSV template with all required columns. Fill it in and upload below.</p>
+                                    <p className="text-xs text-blue-500 mt-0.5">Get the CSV template with all required columns.</p>
                                 </div>
-                                <button onClick={downloadImportTemplate}
-                                    className="flex items-center gap-1.5 px-3.5 py-2 bg-white border border-blue-200 text-blue-600 rounded-lg text-sm font-semibold hover:bg-blue-50 transition-colors flex-shrink-0 whitespace-nowrap">
+                                <button onClick={downloadImportTemplate} className="flex items-center gap-1.5 px-3.5 py-2 bg-white border border-blue-200 text-blue-600 rounded-lg text-sm font-semibold hover:bg-blue-50 transition-colors flex-shrink-0 whitespace-nowrap">
                                     <i className="fa-solid fa-download text-xs" /> Template
                                 </button>
                             </div>
-
-                            {/* Column reference */}
                             <div className="border border-gray-200 rounded-xl overflow-hidden">
                                 <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
                                     <p className="text-xs font-bold text-gray-400 tracking-widest uppercase">Column Reference</p>
@@ -469,41 +442,19 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [], user
                                 {COLUMN_REFERENCE.map((col, i) => (
                                     <div key={i} className={`flex items-center gap-3 px-4 py-2.5 ${i < COLUMN_REFERENCE.length - 1 ? "border-b border-gray-50" : ""}`}>
                                         <span className="w-28 flex-shrink-0 text-xs font-mono text-gray-600 bg-gray-100 px-2 py-0.5 rounded">{col.label}</span>
-                                        <span className={`w-16 flex-shrink-0 text-xs font-semibold ${col.required ? "text-red-500" : "text-gray-400"}`}>
-                                            {col.required ? "Required" : "Optional"}
-                                        </span>
+                                        <span className={`w-16 flex-shrink-0 text-xs font-semibold ${col.required ? "text-red-500" : "text-gray-400"}`}>{col.required ? "Required" : "Optional"}</span>
                                         <span className="text-xs text-gray-500 leading-relaxed">{col.hint}</span>
                                     </div>
                                 ))}
                             </div>
-
-                            {/* Drop zone */}
-                            <div
-                                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                                onDragLeave={() => setDragOver(false)}
-                                onDrop={handleDrop}
-                                onClick={() => fileInputRef.current?.click()}
-                                className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed cursor-pointer py-10 transition-all
-                                    ${dragOver ? "border-green-500 bg-green-50" : file ? "border-green-400 bg-green-50" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"}`}>
-                                <input ref={fileInputRef} type="file" accept=".csv" className="hidden"
-                                    onChange={e => { if (e.target.files[0]) handleFile(e.target.files[0]); e.target.value = ""; }} />
+                            <div onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}
+                                className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed cursor-pointer py-10 transition-all ${dragOver ? "border-green-500 bg-green-50" : file ? "border-green-400 bg-green-50" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"}`}>
+                                <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={e => { if (e.target.files[0]) handleFile(e.target.files[0]); e.target.value = ""; }} />
                                 <div className={`w-12 h-12 rounded-full flex items-center justify-center ${file ? "bg-green-100" : "bg-gray-100"}`}>
                                     <i className={`fa-solid text-2xl ${file ? "fa-file-csv text-green-700" : "fa-cloud-arrow-up text-gray-400"}`} />
                                 </div>
-                                {file ? (
-                                    <>
-                                        <p className="text-sm font-semibold text-green-700">{file.name}</p>
-                                        <p className="text-xs text-gray-400">{(file.size / 1024).toFixed(1)} KB · Click to replace</p>
-                                    </>
-                                ) : (
-                                    <>
-                                        <p className="text-sm font-semibold text-gray-600">Click to upload or drag &amp; drop CSV</p>
-                                        <p className="text-xs text-gray-400">Only .csv files are supported</p>
-                                    </>
-                                )}
+                                {file ? (<><p className="text-sm font-semibold text-green-700">{file.name}</p><p className="text-xs text-gray-400">{(file.size / 1024).toFixed(1)} KB · Click to replace</p></>) : (<><p className="text-sm font-semibold text-gray-600">Click to upload or drag &amp; drop CSV</p><p className="text-xs text-gray-400">Only .csv files are supported</p></>)}
                             </div>
-
-                            {/* Parse summary */}
                             {parsed && (
                                 <div className="space-y-2">
                                     {parseError ? (
@@ -513,168 +464,30 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [], user
                                         </div>
                                     ) : (
                                         <>
-                                            {validRows > 0 && (
-                                                <div className="flex items-start gap-3 p-3.5 rounded-xl border bg-green-50 border-green-200 text-sm">
-                                                    <i className="fa-solid fa-circle-check text-green-600 mt-0.5 flex-shrink-0" />
-                                                    <span className="text-green-700">
-                                                        <strong>{validRows}</strong> valid row{validRows !== 1 ? "s" : ""} ready to import.
-                                                        {errorRows > 0 && <> <strong>{errorRows}</strong> row{errorRows !== 1 ? "s" : ""} will be skipped due to errors.</>}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            {validRows === 0 && errorRows > 0 && (
-                                                <div className="flex items-start gap-3 p-3.5 rounded-xl border bg-red-50 border-red-200 text-sm">
-                                                    <i className="fa-solid fa-circle-xmark text-red-500 mt-0.5 flex-shrink-0" />
-                                                    <span className="text-red-700">All <strong>{errorRows}</strong> rows have errors. Please fix them and re-upload.</span>
-                                                </div>
-                                            )}
-                                            {/* Show per-row errors inline */}
-                                            {errorRows > 0 && (
-                                                <div className="border border-red-200 rounded-xl overflow-hidden">
-                                                    <div className="px-4 py-2.5 bg-red-50 border-b border-red-100 flex items-center gap-2">
-                                                        <i className="fa-solid fa-triangle-exclamation text-red-500 text-xs" />
-                                                        <p className="text-xs font-bold text-red-600 uppercase tracking-wider">
-                                                            {errorRows} Row{errorRows > 1 ? "s" : ""} with Errors (will be skipped)
-                                                        </p>
-                                                    </div>
-                                                    <div className="divide-y divide-red-50 max-h-36 overflow-y-auto">
-                                                        {parsed.errors.map((err, i) => (
-                                                            <div key={i} className="flex gap-3 px-4 py-2.5 text-xs">
-                                                                <span className="font-mono text-red-400 flex-shrink-0 whitespace-nowrap">Row {err.row}</span>
-                                                                <span className="font-semibold text-gray-700 flex-shrink-0 truncate max-w-[100px]">{err.name}</span>
-                                                                <span className="text-red-600">{err.messages.join(" · ")}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                            {/* Preview table of valid rows */}
-                                            {validRows > 0 && (
-                                                <div className="border border-gray-200 rounded-xl overflow-hidden">
-                                                    <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
-                                                        <i className="fa-solid fa-circle-check text-green-600 text-xs" />
-                                                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                                            Preview — {validRows} Valid Row{validRows > 1 ? "s" : ""}
-                                                        </p>
-                                                    </div>
-                                                    <div className="overflow-x-auto max-h-52">
-                                                        <table className="w-full text-xs min-w-[520px]">
-                                                            <thead>
-                                                                <tr className="border-b border-gray-100 bg-gray-50">
-                                                                    {["Module Name", "Description", "Owner", "Priority", "Status", "Color"].map(h => (
-                                                                        <th key={h} className="text-left px-3 py-2 text-gray-400 font-semibold uppercase tracking-wider whitespace-nowrap">{h}</th>
-                                                                    ))}
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody className="divide-y divide-gray-50">
-                                                                {parsed.validRows.map((row, i) => (
-                                                                    <tr key={i} className="hover:bg-gray-50">
-                                                                        <td className="px-3 py-2.5 font-semibold text-gray-800 max-w-[120px] truncate">{row.module_name}</td>
-                                                                        <td className="px-3 py-2.5 text-gray-500 max-w-[140px] truncate">{row.description}</td>
-                                                                        <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{row.module_owner || "—"}</td>
-                                                                        <td className="px-3 py-2.5 whitespace-nowrap">
-                                                                            <span className={`px-2 py-0.5 rounded-full font-medium ${row.priority === "High" ? "bg-red-50 text-red-600" : row.priority === "Medium" ? "bg-yellow-50 text-yellow-600" : "bg-gray-100 text-gray-500"}`}>
-                                                                                {row.priority}
-                                                                            </span>
-                                                                        </td>
-                                                                        <td className="px-3 py-2.5 whitespace-nowrap">
-                                                                            <span className={`px-2 py-0.5 rounded-full font-medium ${row.status === "Active" ? "bg-green-50 text-green-600" : row.status === "Inactive" ? "bg-yellow-50 text-yellow-600" : "bg-gray-100 text-gray-500"}`}>
-                                                                                {row.status}
-                                                                            </span>
-                                                                        </td>
-                                                                        <td className="px-3 py-2.5">
-                                                                            <span className="flex items-center gap-1.5">
-                                                                                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: colorHex[row.color] || "#6B7280" }} />
-                                                                                <span className="text-gray-500 capitalize">{row.color}</span>
-                                                                            </span>
-                                                                        </td>
-                                                                    </tr>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                </div>
-                                            )}
+                                            {validRows > 0 && (<div className="flex items-start gap-3 p-3.5 rounded-xl border bg-green-50 border-green-200 text-sm"><i className="fa-solid fa-circle-check text-green-600 mt-0.5 flex-shrink-0" /><span className="text-green-700"><strong>{validRows}</strong> valid row{validRows !== 1 ? "s" : ""} ready to import.{errorRows > 0 && <> <strong>{errorRows}</strong> row{errorRows !== 1 ? "s" : ""} will be skipped.</>}</span></div>)}
+                                            {validRows === 0 && errorRows > 0 && (<div className="flex items-start gap-3 p-3.5 rounded-xl border bg-red-50 border-red-200 text-sm"><i className="fa-solid fa-circle-xmark text-red-500 mt-0.5 flex-shrink-0" /><span className="text-red-700">All <strong>{errorRows}</strong> rows have errors.</span></div>)}
+                                            {errorRows > 0 && (<div className="border border-red-200 rounded-xl overflow-hidden"><div className="px-4 py-2.5 bg-red-50 border-b border-red-100 flex items-center gap-2"><i className="fa-solid fa-triangle-exclamation text-red-500 text-xs" /><p className="text-xs font-bold text-red-600 uppercase tracking-wider">{errorRows} Row{errorRows > 1 ? "s" : ""} with Errors</p></div><div className="divide-y divide-red-50 max-h-36 overflow-y-auto">{parsed.errors.map((err, i) => (<div key={i} className="flex gap-3 px-4 py-2.5 text-xs"><span className="font-mono text-red-400 flex-shrink-0 whitespace-nowrap">Row {err.row}</span><span className="font-semibold text-gray-700 flex-shrink-0 truncate max-w-[100px]">{err.name}</span><span className="text-red-600">{err.messages.join(" · ")}</span></div>))}</div></div>)}
+                                            {validRows > 0 && (<div className="border border-gray-200 rounded-xl overflow-hidden"><div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center gap-2"><i className="fa-solid fa-circle-check text-green-600 text-xs" /><p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Preview — {validRows} Valid Row{validRows > 1 ? "s" : ""}</p></div><div className="overflow-x-auto max-h-52"><table className="w-full text-xs min-w-[520px]"><thead><tr className="border-b border-gray-100 bg-gray-50">{["Module Name", "Description", "Owner", "Priority", "Status", "Color"].map(h => (<th key={h} className="text-left px-3 py-2 text-gray-400 font-semibold uppercase tracking-wider whitespace-nowrap">{h}</th>))}</tr></thead><tbody className="divide-y divide-gray-50">{parsed.validRows.map((row, i) => (<tr key={i} className="hover:bg-gray-50"><td className="px-3 py-2.5 font-semibold text-gray-800 max-w-[120px] truncate">{row.module_name}</td><td className="px-3 py-2.5 text-gray-500 max-w-[140px] truncate">{row.description}</td><td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{row.module_owner || "—"}</td><td className="px-3 py-2.5 whitespace-nowrap"><span className={`px-2 py-0.5 rounded-full font-medium ${row.priority === "High" ? "bg-red-50 text-red-600" : row.priority === "Medium" ? "bg-yellow-50 text-yellow-600" : "bg-gray-100 text-gray-500"}`}>{row.priority}</span></td><td className="px-3 py-2.5 whitespace-nowrap"><span className={`px-2 py-0.5 rounded-full font-medium ${row.status === "Active" ? "bg-green-50 text-green-600" : row.status === "Inactive" ? "bg-yellow-50 text-yellow-600" : "bg-gray-100 text-gray-500"}`}>{row.status}</span></td><td className="px-3 py-2.5"><span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: colorHex[row.color] || "#6B7280" }} /><span className="text-gray-500 capitalize">{row.color}</span></span></td></tr>))}</tbody></table></div></div>)}
                                         </>
                                     )}
                                 </div>
                             )}
                         </>
                     )}
-
-                    {/* ── DONE step ── */}
                     {step === "done" && result && (
                         <>
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="p-5 bg-green-50 border border-green-100 rounded-xl text-center">
-                                    <p className="text-3xl font-bold text-green-700">{result.success.length}</p>
-                                    <p className="text-xs text-green-600 font-semibold mt-1 uppercase tracking-wider">Imported Successfully</p>
-                                </div>
-                                <div className={`p-5 rounded-xl text-center border ${result.failed.length ? "bg-red-50 border-red-100" : "bg-gray-50 border-gray-100"}`}>
-                                    <p className={`text-3xl font-bold ${result.failed.length ? "text-red-600" : "text-gray-400"}`}>{result.failed.length}</p>
-                                    <p className={`text-xs font-semibold mt-1 uppercase tracking-wider ${result.failed.length ? "text-red-500" : "text-gray-400"}`}>Failed / Skipped</p>
-                                </div>
+                                <div className="p-5 bg-green-50 border border-green-100 rounded-xl text-center"><p className="text-3xl font-bold text-green-700">{result.success.length}</p><p className="text-xs text-green-600 font-semibold mt-1 uppercase tracking-wider">Imported Successfully</p></div>
+                                <div className={`p-5 rounded-xl text-center border ${result.failed.length ? "bg-red-50 border-red-100" : "bg-gray-50 border-gray-100"}`}><p className={`text-3xl font-bold ${result.failed.length ? "text-red-600" : "text-gray-400"}`}>{result.failed.length}</p><p className={`text-xs font-semibold mt-1 uppercase tracking-wider ${result.failed.length ? "text-red-500" : "text-gray-400"}`}>Failed / Skipped</p></div>
                             </div>
-                            {result.success.length > 0 && (
-                                <div className="border border-green-200 rounded-xl overflow-hidden">
-                                    <div className="px-4 py-2.5 bg-green-50 border-b border-green-100 flex items-center gap-2">
-                                        <i className="fa-solid fa-circle-check text-green-600 text-xs" />
-                                        <p className="text-xs font-bold text-green-700 uppercase tracking-wider">Imported</p>
-                                    </div>
-                                    <div className="divide-y divide-gray-50 max-h-48 overflow-y-auto">
-                                        {result.success.map((name, i) => (
-                                            <div key={i} className="flex items-center gap-2 px-4 py-2.5">
-                                                <i className="fa-solid fa-check text-green-500 text-xs flex-shrink-0" />
-                                                <span className="text-sm text-gray-700 font-medium">{name}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                            {result.failed.length > 0 && (
-                                <div className="border border-red-200 rounded-xl overflow-hidden">
-                                    <div className="px-4 py-2.5 bg-red-50 border-b border-red-100 flex items-center gap-2">
-                                        <i className="fa-solid fa-triangle-exclamation text-red-500 text-xs" />
-                                        <p className="text-xs font-bold text-red-600 uppercase tracking-wider">Failed / Skipped</p>
-                                    </div>
-                                    <div className="divide-y divide-red-50 max-h-48 overflow-y-auto">
-                                        {result.failed.map((f, i) => (
-                                            <div key={i} className="px-4 py-2.5">
-                                                <p className="text-sm text-gray-700 font-medium">{f.name}</p>
-                                                <p className="text-xs text-red-500 mt-0.5">{f.reason}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                            {result.success.length > 0 && (<div className="border border-green-200 rounded-xl overflow-hidden"><div className="px-4 py-2.5 bg-green-50 border-b border-green-100 flex items-center gap-2"><i className="fa-solid fa-circle-check text-green-600 text-xs" /><p className="text-xs font-bold text-green-700 uppercase tracking-wider">Imported</p></div><div className="divide-y divide-gray-50 max-h-48 overflow-y-auto">{result.success.map((name, i) => (<div key={i} className="flex items-center gap-2 px-4 py-2.5"><i className="fa-solid fa-check text-green-500 text-xs flex-shrink-0" /><span className="text-sm text-gray-700 font-medium">{name}</span></div>))}</div></div>)}
+                            {result.failed.length > 0 && (<div className="border border-red-200 rounded-xl overflow-hidden"><div className="px-4 py-2.5 bg-red-50 border-b border-red-100 flex items-center gap-2"><i className="fa-solid fa-triangle-exclamation text-red-500 text-xs" /><p className="text-xs font-bold text-red-600 uppercase tracking-wider">Failed / Skipped</p></div><div className="divide-y divide-red-50 max-h-48 overflow-y-auto">{result.failed.map((f, i) => (<div key={i} className="px-4 py-2.5"><p className="text-sm text-gray-700 font-medium">{f.name}</p><p className="text-xs text-red-500 mt-0.5">{f.reason}</p></div>))}</div></div>)}
                         </>
                     )}
                 </div>
-
-                {/* Footer */}
                 <div className="border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-3">
-                    {step === "upload" && (
-                        <>
-                            <button onClick={handleClose} disabled={importing}
-                                className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleImport}
-                                disabled={importing || !file || !!parseError || validRows === 0}
-                                className="px-6 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
-                                {importing
-                                    ? <><i className="fa-solid fa-spinner fa-spin text-xs" /> Importing…</>
-                                    : <><i className="fa-solid fa-file-import text-xs" /> Import {validRows > 0 ? `${validRows} Module${validRows !== 1 ? "s" : ""}` : "Modules"}</>
-                                }
-                            </button>
-                        </>
-                    )}
-                    {step === "done" && (
-                        <button onClick={handleClose} className="px-5 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity">
-                            Done
-                        </button>
-                    )}
+                    {step === "upload" && (<><button onClick={handleClose} disabled={importing} className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">Cancel</button><button onClick={handleImport} disabled={importing || !file || !!parseError || validRows === 0} className="px-6 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">{importing ? <><i className="fa-solid fa-spinner fa-spin text-xs" /> Importing…</> : <><i className="fa-solid fa-file-import text-xs" /> Import {validRows > 0 ? `${validRows} Module${validRows !== 1 ? "s" : ""}` : "Modules"}</>}</button></>)}
+                    {step === "done" && (<button onClick={handleClose} className="px-5 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity">Done</button>)}
                 </div>
             </div>
         </div>
@@ -688,40 +501,17 @@ function DeleteModuleModal({ module, onClose, onConfirm, loading }) {
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
                 <div className="p-6 border-b border-gray-100 flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
-                            <i className="fa-solid fa-trash text-red-500 text-lg" />
-                        </div>
-                        <div>
-                            <h3 className="text-base font-bold text-gray-900">Delete Module</h3>
-                            <p className="text-xs text-gray-400 mt-0.5">This action cannot be undone.</p>
-                        </div>
+                        <div className="w-11 h-11 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0"><i className="fa-solid fa-trash text-red-500 text-lg" /></div>
+                        <div><h3 className="text-base font-bold text-gray-900">Delete Module</h3><p className="text-xs text-gray-400 mt-0.5">This action cannot be undone.</p></div>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1">
-                        <i className="fa-solid fa-times text-lg" />
-                    </button>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1"><i className="fa-solid fa-times text-lg" /></button>
                 </div>
                 <div className="p-6 space-y-4">
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                        <p className="text-sm font-semibold text-gray-900 mb-1">{module?.module_name}</p>
-                        <p className="text-xs text-gray-400 font-mono mb-1">Code: {module?.module_code}</p>
-                        {module?.description && <p className="text-xs text-gray-500 leading-relaxed">{module.description}</p>}
-                    </div>
-                    <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex gap-3">
-                        <i className="fa-solid fa-triangle-exclamation text-red-500 text-sm mt-0.5 flex-shrink-0" />
-                        <p className="text-xs text-red-600 leading-relaxed">
-                            Deleting this module will permanently remove it and all associated data including features and test cases linked to it.
-                        </p>
-                    </div>
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4"><p className="text-sm font-semibold text-gray-900 mb-1">{module?.module_name}</p><p className="text-xs text-gray-400 font-mono mb-1">Code: {module?.module_code}</p>{module?.description && <p className="text-xs text-gray-500 leading-relaxed">{module.description}</p>}</div>
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex gap-3"><i className="fa-solid fa-triangle-exclamation text-red-500 text-sm mt-0.5 flex-shrink-0" /><p className="text-xs text-red-600 leading-relaxed">Deleting this module will permanently remove it and all associated data including features and test cases linked to it.</p></div>
                     <div className="flex gap-3 pt-2">
-                        <button onClick={onClose} disabled={loading}
-                            className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
-                            Cancel
-                        </button>
-                        <button onClick={onConfirm} disabled={loading}
-                            className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-lg text-sm font-semibold hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-                            <i className="fa-solid fa-trash text-xs" />
-                            {loading ? "Deleting..." : "Delete Module"}
-                        </button>
+                        <button onClick={onClose} disabled={loading} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">Cancel</button>
+                        <button onClick={onConfirm} disabled={loading} className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-lg text-sm font-semibold hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"><i className="fa-solid fa-trash text-xs" />{loading ? "Deleting..." : "Delete Module"}</button>
                     </div>
                 </div>
             </div>
@@ -733,11 +523,7 @@ function DeleteModuleModal({ module, onClose, onConfirm, loading }) {
 function EditModuleModal({ module, onClose, onSuccess, users }) {
     const [selectedColor, setSelectedColor] = useState(module?.color || "blue");
     const [loading, setLoading] = useState(false);
-    const [form, setForm] = useState({
-        module_code: module?.module_code || "", module_name: module?.module_name || "",
-        description: module?.description || "", module_owner: module?.module_owner || "",
-        priority: module?.priority || "", status: module?.status || "Active",
-    });
+    const [form, setForm] = useState({ module_code: module?.module_code || "", module_name: module?.module_name || "", description: module?.description || "", module_owner: module?.module_owner || "", priority: module?.priority || "", status: module?.status || "Active" });
     const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
     const userOptions = [{ id: "", name: "Select Owner" }, ...users.map(u => ({ id: u.name || u.id, name: u.name }))];
 
@@ -745,11 +531,7 @@ function EditModuleModal({ module, onClose, onSuccess, users }) {
         if (!form.module_name) { alert("Module Name required"); return; }
         if (!form.priority) { alert("Priority required"); return; }
         setLoading(true);
-        const { error } = await supabase.from("modules").update({
-            module_code: parseInt(form.module_code) || 0, module_name: form.module_name,
-            description: form.description || "", module_owner: form.module_owner || null,
-            priority: form.priority, status: form.status, color: selectedColor,
-        }).eq("id", module.id);
+        const { error } = await supabase.from("modules").update({ module_code: parseInt(form.module_code) || 0, module_name: form.module_name, description: form.description || "", module_owner: form.module_owner || null, priority: form.priority, status: form.status, color: selectedColor }).eq("id", module.id);
         setLoading(false);
         if (error) alert(`Error: ${error.message}`);
         else { onSuccess(); onClose(); }
@@ -759,54 +541,23 @@ function EditModuleModal({ module, onClose, onSuccess, users }) {
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={onClose}>
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="sticky top-0 bg-white z-10 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
-                            <i className="fa-solid fa-pen-to-square text-blue-500" />
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-bold text-gray-900">Edit Module</h3>
-                            <p className="text-xs text-gray-400 mt-0.5">Update module details</p>
-                        </div>
-                    </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-                        <i className="fa-solid fa-times text-lg" />
-                    </button>
+                    <div className="flex items-center gap-3"><div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center"><i className="fa-solid fa-pen-to-square text-blue-500" /></div><div><h3 className="text-lg font-bold text-gray-900">Edit Module</h3><p className="text-xs text-gray-400 mt-0.5">Update module details</p></div></div>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors"><i className="fa-solid fa-times text-lg" /></button>
                 </div>
                 <div className="p-6 space-y-5">
-                    <Field label="Module Name" required>
-                        <input type="text" value={form.module_name} onChange={e => set("module_name", e.target.value)} placeholder="e.g., User Management"
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-500" />
-                    </Field>
-                    <Field label="Module Code" hint="Auto-generated · read-only">
-                        <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
-                            <i className="fa-solid fa-lock text-gray-300 text-xs" />
-                            <span className="text-sm text-gray-500 font-mono">{form.module_code}</span>
-                        </div>
-                    </Field>
-                    <Field label="Description">
-                        <textarea rows={3} value={form.description} onChange={e => set("description", e.target.value)} placeholder="Brief description of this module..."
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-500 resize-none" />
-                    </Field>
+                    <Field label="Module Name" required><input type="text" value={form.module_name} onChange={e => set("module_name", e.target.value)} placeholder="e.g., User Management" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-500" /></Field>
+                    <Field label="Module Code" hint="Auto-generated · read-only"><div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg"><i className="fa-solid fa-lock text-gray-300 text-xs" /><span className="text-sm text-gray-500 font-mono">{form.module_code}</span></div></Field>
+                    <Field label="Description"><textarea rows={3} value={form.description} onChange={e => set("description", e.target.value)} placeholder="Brief description..." className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-500 resize-none" /></Field>
                     <div className="grid grid-cols-2 gap-4">
-                        <Field label="Module Owner">
-                            <SimpleDropdown options={userOptions} value={form.module_owner} onChange={v => set("module_owner", v)} placeholder="Select Owner" />
-                        </Field>
-                        <Field label="Priority" required>
-                            <SimpleDropdown options={PRIORITY_OPTIONS} value={form.priority} onChange={v => set("priority", v)} placeholder="Select Priority" />
-                        </Field>
+                        <Field label="Module Owner"><SimpleDropdown options={userOptions} value={form.module_owner} onChange={v => set("module_owner", v)} placeholder="Select Owner" /></Field>
+                        <Field label="Priority" required><SimpleDropdown options={PRIORITY_OPTIONS} value={form.priority} onChange={v => set("priority", v)} placeholder="Select Priority" /></Field>
                     </div>
-                    <Field label="Status" required>
-                        <SimpleDropdown options={STATUS_OPTIONS} value={form.status} onChange={v => set("status", v)} placeholder="Select Status" />
-                    </Field>
-                    <Field label="Icon Color">
-                        <ColorPicker colors={COLORS} selected={selectedColor} onChange={setSelectedColor} />
-                    </Field>
+                    <Field label="Status" required><SimpleDropdown options={STATUS_OPTIONS} value={form.status} onChange={v => set("status", v)} placeholder="Select Status" /></Field>
+                    <Field label="Icon Color"><ColorPicker colors={COLORS} selected={selectedColor} onChange={setSelectedColor} /></Field>
                 </div>
                 <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-3">
                     <button onClick={onClose} disabled={loading} className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">Cancel</button>
-                    <button onClick={handleUpdate} disabled={loading} className="px-6 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2">
-                        {loading ? <><i className="fa-solid fa-spinner fa-spin" /> Updating…</> : <><i className="fa-solid fa-check" /> Update Module</>}
-                    </button>
+                    <button onClick={handleUpdate} disabled={loading} className="px-6 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2">{loading ? <><i className="fa-solid fa-spinner fa-spin" /> Updating…</> : <><i className="fa-solid fa-check" /> Update Module</>}</button>
                 </div>
             </div>
         </div>
@@ -826,10 +577,7 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
         if (!form.module_name) { alert("Module Name required"); return; }
         if (!form.priority) { alert("Priority required"); return; }
         setLoading(true);
-        const { error } = await supabase.from("modules").insert([{
-            module_code: autoCode, module_name: form.module_name, description: form.description || "",
-            module_owner: form.module_owner || null, priority: form.priority, status: form.status, color: selectedColor,
-        }]);
+        const { error } = await supabase.from("modules").insert([{ module_code: autoCode, module_name: form.module_name, description: form.description || "", module_owner: form.module_owner || null, priority: form.priority, status: form.status, color: selectedColor }]);
         setLoading(false);
         if (error) alert(`Error: ${error.message}`);
         else { onSuccess(); onClose(); }
@@ -839,54 +587,23 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={onClose}>
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="sticky top-0 bg-white z-10 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center">
-                            <i className="fa-solid fa-plus text-green-700" />
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-bold text-gray-900">Create New Module</h3>
-                            <p className="text-xs text-gray-400 mt-0.5">Add a new module to the library</p>
-                        </div>
-                    </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-                        <i className="fa-solid fa-times text-lg" />
-                    </button>
+                    <div className="flex items-center gap-3"><div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center"><i className="fa-solid fa-plus text-green-700" /></div><div><h3 className="text-lg font-bold text-gray-900">Create New Module</h3><p className="text-xs text-gray-400 mt-0.5">Add a new module to the library</p></div></div>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors"><i className="fa-solid fa-times text-lg" /></button>
                 </div>
                 <div className="p-6 space-y-5">
-                    <Field label="Module Name" required>
-                        <input type="text" value={form.module_name} onChange={e => set("module_name", e.target.value)} placeholder="e.g., User Management"
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-500" />
-                    </Field>
-                    <Field label="Module Code" hint="Auto-generated">
-                        <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-100 rounded-lg">
-                            <i className="fa-solid fa-lock text-green-400 text-xs" />
-                            <span className="text-sm text-green-700 font-mono font-medium">{autoCode}</span>
-                        </div>
-                    </Field>
-                    <Field label="Description" required>
-                        <textarea rows={3} value={form.description} onChange={e => set("description", e.target.value)} placeholder="Brief description of this module..."
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-500 resize-none" />
-                    </Field>
+                    <Field label="Module Name" required><input type="text" value={form.module_name} onChange={e => set("module_name", e.target.value)} placeholder="e.g., User Management" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-500" /></Field>
+                    <Field label="Module Code" hint="Auto-generated"><div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-100 rounded-lg"><i className="fa-solid fa-lock text-green-400 text-xs" /><span className="text-sm text-green-700 font-mono font-medium">{autoCode}</span></div></Field>
+                    <Field label="Description" required><textarea rows={3} value={form.description} onChange={e => set("description", e.target.value)} placeholder="Brief description..." className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-500 resize-none" /></Field>
                     <div className="grid grid-cols-2 gap-4">
-                        <Field label="Module Owner">
-                            <SimpleDropdown options={userOptions} value={form.module_owner} onChange={v => set("module_owner", v)} placeholder="Select Owner" />
-                        </Field>
-                        <Field label="Priority" required>
-                            <SimpleDropdown options={PRIORITY_OPTIONS} value={form.priority} onChange={v => set("priority", v)} placeholder="Select Priority" />
-                        </Field>
+                        <Field label="Module Owner"><SimpleDropdown options={userOptions} value={form.module_owner} onChange={v => set("module_owner", v)} placeholder="Select Owner" /></Field>
+                        <Field label="Priority" required><SimpleDropdown options={PRIORITY_OPTIONS} value={form.priority} onChange={v => set("priority", v)} placeholder="Select Priority" /></Field>
                     </div>
-                    <Field label="Status" required>
-                        <SimpleDropdown options={STATUS_OPTIONS} value={form.status} onChange={v => set("status", v)} placeholder="Select Status" />
-                    </Field>
-                    <Field label="Icon Color">
-                        <ColorPicker colors={COLORS} selected={selectedColor} onChange={setSelectedColor} />
-                    </Field>
+                    <Field label="Status" required><SimpleDropdown options={STATUS_OPTIONS} value={form.status} onChange={v => set("status", v)} placeholder="Select Status" /></Field>
+                    <Field label="Icon Color"><ColorPicker colors={COLORS} selected={selectedColor} onChange={setSelectedColor} /></Field>
                 </div>
                 <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-3">
                     <button onClick={onClose} disabled={loading} className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">Cancel</button>
-                    <button onClick={handleCreate} disabled={loading} className="px-6 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2">
-                        {loading ? <><i className="fa-solid fa-spinner fa-spin" /> Creating…</> : <><i className="fa-solid fa-plus" /> Create Module</>}
-                    </button>
+                    <button onClick={handleCreate} disabled={loading} className="px-6 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2">{loading ? <><i className="fa-solid fa-spinner fa-spin" /> Creating…</> : <><i className="fa-solid fa-plus" /> Create Module</>}</button>
                 </div>
             </div>
         </div>
@@ -905,101 +622,27 @@ function ViewDetailsModal({ module, onClose, onEdit, moduleFeatures, featuresLoa
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="sticky top-0 bg-white z-10 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: c.tint }}>
-                            <i className={`fa-solid ${icon} text-lg`} style={{ color: c.hex }} />
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-bold text-gray-900">{module.module_name}</h3>
-                            <p className="text-xs text-gray-400 mt-0.5 font-mono">Code: {module.module_code}</p>
-                        </div>
+                        <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: c.tint }}><i className={`fa-solid ${icon} text-lg`} style={{ color: c.hex }} /></div>
+                        <div><h3 className="text-lg font-bold text-gray-900">{module.module_name}</h3><p className="text-xs text-gray-400 mt-0.5 font-mono">Code: {module.module_code}</p></div>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-                        <i className="fa-solid fa-times text-lg" />
-                    </button>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors"><i className="fa-solid fa-times text-lg" /></button>
                 </div>
                 <div className="p-6 space-y-5">
                     <div className="grid grid-cols-3 gap-3">
-                        <div className={`p-3 rounded-xl ${sb.bg}`}>
-                            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Status</p>
-                            <p className={`text-sm font-bold ${sb.text}`}>{module.status}</p>
-                        </div>
-                        <div className={`p-3 rounded-xl ${pb.bg}`}>
-                            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Priority</p>
-                            <p className={`text-sm font-bold ${pb.text}`}>{module.priority}</p>
-                        </div>
-                        <div className="p-3 rounded-xl bg-blue-50">
-                            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Owner</p>
-                            <p className="text-sm font-bold text-blue-600 truncate">{module.module_owner || "—"}</p>
-                        </div>
+                        <div className={`p-3 rounded-xl ${sb.bg}`}><p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Status</p><p className={`text-sm font-bold ${sb.text}`}>{module.status}</p></div>
+                        <div className={`p-3 rounded-xl ${pb.bg}`}><p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Priority</p><p className={`text-sm font-bold ${pb.text}`}>{module.priority}</p></div>
+                        <div className="p-3 rounded-xl bg-blue-50"><p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Owner</p><p className="text-sm font-bold text-blue-600 truncate">{module.module_owner || "—"}</p></div>
                     </div>
-                    {module.description && (
-                        <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
-                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Description</p>
-                            <p className="text-sm text-gray-600 leading-relaxed">{module.description}</p>
-                        </div>
-                    )}
-                    {module.linkedVersions?.length > 0 && (
-                        <div>
-                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                                Linked Versions
-                                <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full text-xs font-bold">{module.linkedVersions.length}</span>
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                                {module.linkedVersions.map(v => (
-                                    <span key={v.id} className="px-3 py-1 bg-blue-50 border border-blue-100 text-blue-600 text-xs rounded-full font-medium">{v.version_number}</span>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+                    {module.description && (<div className="p-4 bg-gray-50 border border-gray-200 rounded-xl"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Description</p><p className="text-sm text-gray-600 leading-relaxed">{module.description}</p></div>)}
+                    {module.linkedVersions?.length > 0 && (<div><p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">Linked Versions<span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full text-xs font-bold">{module.linkedVersions.length}</span></p><div className="flex flex-wrap gap-2">{module.linkedVersions.map(v => (<span key={v.id} className="px-3 py-1 bg-blue-50 border border-blue-100 text-blue-600 text-xs rounded-full font-medium">{v.version_number}</span>))}</div></div>)}
                     <div className="border border-gray-200 rounded-xl overflow-hidden">
-                        <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-3">
-                            <div className="w-8 h-8 bg-purple-50 rounded-lg flex items-center justify-center">
-                                <i className="fa-solid fa-list-check text-purple-500 text-sm" />
-                            </div>
-                            <p className="text-sm font-semibold text-gray-800">Connected Features</p>
-                            {!featuresLoading && (
-                                <span className="px-2 py-0.5 bg-purple-50 text-purple-600 text-xs font-bold rounded-full">{moduleFeatures.length}</span>
-                            )}
-                        </div>
-                        {featuresLoading ? (
-                            <div className="flex items-center justify-center gap-2 py-10 text-gray-400 text-sm">
-                                <i className="fa-solid fa-spinner fa-spin" /> Loading features…
-                            </div>
-                        ) : moduleFeatures.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-10 gap-2">
-                                <i className="fa-solid fa-list-check text-gray-200 text-3xl" />
-                                <p className="text-sm text-gray-400">No features connected to this module</p>
-                            </div>
-                        ) : (
-                            <div className="divide-y divide-gray-50">
-                                {moduleFeatures.map(f => {
-                                    const fp = priorityBadge[f.priority] || priorityBadge.Low;
-                                    const fs = statusBadge[f.status] || statusBadge.Active;
-                                    return (
-                                        <div key={f.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
-                                            <div className="w-8 h-8 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                <i className="fa-solid fa-list-check text-purple-400 text-xs" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-semibold text-gray-900 truncate">{f.feature_name}</p>
-                                                <p className="text-xs text-gray-400">{f.feature_code} · {f.total_test_cases ?? 0} test cases</p>
-                                            </div>
-                                            <div className="flex gap-1.5 flex-shrink-0">
-                                                {f.priority && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${fp.bg} ${fp.text}`}>{f.priority}</span>}
-                                                {f.status && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${fs.bg} ${fs.text}`}>{f.status}</span>}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
+                        <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-3"><div className="w-8 h-8 bg-purple-50 rounded-lg flex items-center justify-center"><i className="fa-solid fa-list-check text-purple-500 text-sm" /></div><p className="text-sm font-semibold text-gray-800">Connected Features</p>{!featuresLoading && (<span className="px-2 py-0.5 bg-purple-50 text-purple-600 text-xs font-bold rounded-full">{moduleFeatures.length}</span>)}</div>
+                        {featuresLoading ? (<div className="flex items-center justify-center gap-2 py-10 text-gray-400 text-sm"><i className="fa-solid fa-spinner fa-spin" /> Loading features…</div>) : moduleFeatures.length === 0 ? (<div className="flex flex-col items-center justify-center py-10 gap-2"><i className="fa-solid fa-list-check text-gray-200 text-3xl" /><p className="text-sm text-gray-400">No features connected</p></div>) : (<div className="divide-y divide-gray-50">{moduleFeatures.map(f => { const fp = priorityBadge[f.priority] || priorityBadge.Low; const fs = statusBadge[f.status] || statusBadge.Active; return (<div key={f.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"><div className="w-8 h-8 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0"><i className="fa-solid fa-list-check text-purple-400 text-xs" /></div><div className="flex-1 min-w-0"><p className="text-sm font-semibold text-gray-900 truncate">{f.feature_name}</p><p className="text-xs text-gray-400">{f.feature_code} · {f.total_test_cases ?? 0} test cases</p></div><div className="flex gap-1.5 flex-shrink-0">{f.priority && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${fp.bg} ${fp.text}`}>{f.priority}</span>}{f.status && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${fs.bg} ${fs.text}`}>{f.status}</span>}</div></div>); })}</div>)}
                     </div>
                 </div>
                 <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-3">
                     <button onClick={onClose} className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">Close</button>
-                    <button onClick={() => { onClose(); onEdit(module); }} className="px-6 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity flex items-center gap-2">
-                        <i className="fa-solid fa-pen-to-square text-xs" /> Edit Module
-                    </button>
+                    <button onClick={() => { onClose(); onEdit(module); }} className="px-6 py-2.5 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity flex items-center gap-2"><i className="fa-solid fa-pen-to-square text-xs" /> Edit Module</button>
                 </div>
             </div>
         </div>
@@ -1019,31 +662,19 @@ function ModuleCard({ mod, onEdit, onDelete, onViewDetails }) {
             <div className="p-6">
                 <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: c.tint }}>
-                            <i className={`fa-solid ${icon} text-lg`} style={{ color: c.hex }} />
-                        </div>
+                        <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: c.tint }}><i className={`fa-solid ${icon} text-lg`} style={{ color: c.hex }} /></div>
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center flex-wrap gap-1.5 mb-0.5">
                                 <h3 className="text-sm font-bold text-gray-900 truncate">{mod.module_name}</h3>
-                                {(mod.linkedVersions || []).slice(0, 2).map(v => (
-                                    <span key={v.id} className="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 rounded-full font-medium">{v.version_number}</span>
-                                ))}
-                                {(mod.linkedVersions || []).length > 2 && (
-                                    <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">+{mod.linkedVersions.length - 2}</span>
-                                )}
+                                {(mod.linkedVersions || []).slice(0, 2).map(v => (<span key={v.id} className="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 rounded-full font-medium">{v.version_number}</span>))}
+                                {(mod.linkedVersions || []).length > 2 && (<span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">+{mod.linkedVersions.length - 2}</span>)}
                             </div>
                             <p className="text-xs text-gray-400 font-mono">{mod.module_code}</p>
                         </div>
                     </div>
                     <div className="flex gap-1.5 flex-shrink-0">
-                        <button onClick={() => onEdit(mod)} title="Edit"
-                            className="w-8 h-8 flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-500 rounded-lg transition-colors text-xs">
-                            <i className="fa-solid fa-pen-to-square" />
-                        </button>
-                        <button onClick={() => onDelete(mod)} title="Delete"
-                            className="w-8 h-8 flex items-center justify-center bg-red-50 hover:bg-red-100 text-red-500 rounded-lg transition-colors text-xs">
-                            <i className="fa-solid fa-trash" />
-                        </button>
+                        <button onClick={() => onEdit(mod)} title="Edit" className="w-8 h-8 flex items-center justify-center bg-blue-50 hover:bg-blue-100 text-blue-500 rounded-lg transition-colors text-xs"><i className="fa-solid fa-pen-to-square" /></button>
+                        <button onClick={() => onDelete(mod)} title="Delete" className="w-8 h-8 flex items-center justify-center bg-red-50 hover:bg-red-100 text-red-500 rounded-lg transition-colors text-xs"><i className="fa-solid fa-trash" /></button>
                     </div>
                 </div>
                 <p className="text-xs text-gray-500 mb-4 leading-relaxed line-clamp-2">{mod.description}</p>
@@ -1052,20 +683,12 @@ function ModuleCard({ mod, onEdit, onDelete, onViewDetails }) {
                     <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${pb.bg} ${pb.text}`}>{mod.priority} Priority</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 mb-4 pb-4 border-b border-gray-100">
-                    {[
-                        { label: "Status", value: mod.status },
-                        { label: "Priority", value: mod.priority },
-                        { label: "Owner", value: mod.module_owner || "—" },
-                    ].map(({ label, value }) => (
-                        <div key={label}>
-                            <p className="text-xs text-gray-400 mb-0.5">{label}</p>
-                            <p className="text-xs font-semibold text-gray-800 truncate">{value}</p>
-                        </div>
+                    {[{ label: "Status", value: mod.status }, { label: "Priority", value: mod.priority }, { label: "Owner", value: mod.module_owner || "—" }].map(({ label, value }) => (
+                        <div key={label}><p className="text-xs text-gray-400 mb-0.5">{label}</p><p className="text-xs font-semibold text-gray-800 truncate">{value}</p></div>
                     ))}
                 </div>
                 <p className="text-xs text-gray-300 mb-3">ID: {mod.id}</p>
-                <button onClick={onViewDetails}
-                    className={`w-full py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${isArchived ? "bg-white border border-gray-200 text-gray-500 hover:bg-gray-50" : "bg-green-700 text-white hover:opacity-90"}`}>
+                <button onClick={onViewDetails} className={`w-full py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${isArchived ? "bg-white border border-gray-200 text-gray-500 hover:bg-gray-50" : "bg-green-700 text-white hover:opacity-90"}`}>
                     <i className="fa-solid fa-eye text-xs" /> View Details
                 </button>
             </div>
@@ -1079,9 +702,7 @@ function StatCard({ label, value, icon, colorClass, bgClass }) {
         <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
             <div className="flex items-start justify-between mb-3">
                 <p className="text-sm text-gray-500">{label}</p>
-                <div className={`w-10 h-10 ${bgClass} rounded-xl flex items-center justify-center`}>
-                    <i className={`fa-solid ${icon} ${colorClass} text-base`} />
-                </div>
+                <div className={`w-10 h-10 ${bgClass} rounded-xl flex items-center justify-center`}><i className={`fa-solid ${icon} ${colorClass} text-base`} /></div>
             </div>
             <p className="text-3xl font-bold text-gray-900">{value}</p>
         </div>
@@ -1107,6 +728,13 @@ export default function ModulesLibrary() {
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleteLoading, setDeleteLoading] = useState(false);
 
+    // ── Pagination state ────────────────────────────────────────────────────
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(12);
+
+    // Reset to page 1 on any filter change
+    useEffect(() => { setCurrentPage(1); }, [searchTerm, filterStatus, filterOwner]);
+
     const fetchUsers = async () => {
         const { data } = await supabase.from("profiles").select("id, full_name").order("full_name", { ascending: true });
         setUsers((data || []).map(u => ({ id: u.id, name: u.full_name })));
@@ -1114,8 +742,7 @@ export default function ModulesLibrary() {
 
     const fetchModules = async () => {
         setLoading(true); setError(null);
-        const { data: moduleData, error: fetchError } = await supabase
-            .from("modules").select("*").order("module_code", { ascending: false });
+        const { data: moduleData, error: fetchError } = await supabase.from("modules").select("*").order("module_code", { ascending: false });
         if (fetchError) { setError(fetchError.message); setModules([]); setLoading(false); return; }
         const { data: vmData } = await supabase.from("version_modules").select("module_id, versions(id, version_number, status)");
         const versionsByModule = {};
@@ -1129,9 +756,7 @@ export default function ModulesLibrary() {
 
     const fetchModuleFeatures = async (moduleId) => {
         setFeaturesLoading(true);
-        const { data, error } = await supabase.from("features")
-            .select("id, feature_name, feature_code, status, priority, total_test_cases")
-            .eq("module_id", moduleId).order("feature_code", { ascending: true });
+        const { data, error } = await supabase.from("features").select("id, feature_name, feature_code, status, priority, total_test_cases").eq("module_id", moduleId).order("feature_code", { ascending: true });
         if (!error) setModuleFeatures(data || []);
         setFeaturesLoading(false);
     };
@@ -1157,6 +782,7 @@ export default function ModulesLibrary() {
         if (target) { setViewingModule(target); fetchModuleFeatures(target.id); }
     }, [location.state?.moduleId, modules]);
 
+    // ── Filtered list (all pages) ───────────────────────────────────────────
     const filteredModules = modules.filter(mod => {
         const matchesSearch = mod.module_name.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesStatus = filterStatus === "All Status" || mod.status === filterStatus;
@@ -1164,8 +790,15 @@ export default function ModulesLibrary() {
         return matchesSearch && matchesStatus && matchesOwner;
     });
 
+    // ── Paginated slice ─────────────────────────────────────────────────────
+    const totalPages = Math.max(1, Math.ceil(filteredModules.length / pageSize));
+    const safePage = Math.min(currentPage, totalPages);
+    const pageStart = (safePage - 1) * pageSize;
+    const pagedModules = filteredModules.slice(pageStart, pageStart + pageSize);
+
     const uniqueOwners = ["All Owners", ...new Set(modules.map(m => m.module_owner).filter(Boolean))];
     const existingModuleCodes = modules.map(m => m.module_code);
+    const anyFilter = searchTerm || filterStatus !== "All Status" || filterOwner !== "All Owners";
 
     const statsConfig = [
         { label: "Total Modules", value: modules.length, icon: "fa-puzzle-piece", colorClass: "text-blue-500", bgClass: "bg-blue-50" },
@@ -1185,18 +818,9 @@ export default function ModulesLibrary() {
                         <p className="text-sm text-gray-500 mt-0.5">Manage all modules for NexTech RMS</p>
                     </div>
                     <div className="flex items-center gap-3">
-                        <button onClick={() => exportToCSV(modules)}
-                            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-                            <i className="fa-solid fa-download" /> Export
-                        </button>
-                        <button onClick={() => setShowImportModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-                            <i className="fa-solid fa-upload" /> Import
-                        </button>
-                        <button onClick={() => setShowModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity">
-                            <i className="fa-solid fa-plus" /> Create Module
-                        </button>
+                        <button onClick={() => exportToCSV(modules)} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"><i className="fa-solid fa-download" /> Export</button>
+                        <button onClick={() => setShowImportModal(true)} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"><i className="fa-solid fa-upload" /> Import</button>
+                        <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"><i className="fa-solid fa-plus" /> Create Module</button>
                     </div>
                 </div>
             </header>
@@ -1211,8 +835,7 @@ export default function ModulesLibrary() {
 
                     {error && (
                         <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm flex items-center gap-3">
-                            <i className="fa-solid fa-circle-exclamation" />
-                            <span>Error: {error}</span>
+                            <i className="fa-solid fa-circle-exclamation" /><span>Error: {error}</span>
                             <button onClick={fetchModules} className="underline ml-auto">Retry</button>
                         </div>
                     )}
@@ -1222,22 +845,16 @@ export default function ModulesLibrary() {
                         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                             <div className="relative sm:col-span-2">
                                 <i className="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-sm" />
-                                <input type="text" placeholder="Search modules..." value={searchTerm}
-                                    onChange={e => setSearchTerm(e.target.value)}
+                                <input type="text" placeholder="Search modules..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
                                     className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300" />
                             </div>
-                            <SimpleDropdown
-                                options={[{ id: "All Status", name: "All Status" }, { id: "Active", name: "Active" }, { id: "Inactive", name: "Inactive" }, { id: "Archived", name: "Archived" }]}
-                                value={filterStatus} onChange={setFilterStatus} placeholder="All Status" />
-                            <SimpleDropdown
-                                options={uniqueOwners.map(o => ({ id: o, name: o }))}
-                                value={filterOwner} onChange={setFilterOwner} placeholder="All Owners" />
+                            <SimpleDropdown options={[{ id: "All Status", name: "All Status" }, { id: "Active", name: "Active" }, { id: "Inactive", name: "Inactive" }, { id: "Archived", name: "Archived" }]} value={filterStatus} onChange={setFilterStatus} placeholder="All Status" />
+                            <SimpleDropdown options={uniqueOwners.map(o => ({ id: o, name: o }))} value={filterOwner} onChange={setFilterOwner} placeholder="All Owners" />
                         </div>
-                        {(searchTerm || filterStatus !== "All Status" || filterOwner !== "All Owners") && (
+                        {anyFilter && (
                             <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
                                 <p className="text-sm text-gray-500">Showing {filteredModules.length} of {modules.length} modules</p>
-                                <button onClick={() => { setSearchTerm(""); setFilterStatus("All Status"); setFilterOwner("All Owners"); }}
-                                    className="text-sm text-green-700 font-medium hover:underline">Clear Filters</button>
+                                <button onClick={() => { setSearchTerm(""); setFilterStatus("All Status"); setFilterOwner("All Owners"); }} className="text-sm text-green-700 font-medium hover:underline">Clear Filters</button>
                             </div>
                         )}
                     </div>
@@ -1257,41 +874,38 @@ export default function ModulesLibrary() {
                     )}
 
                     {!loading && filteredModules.length > 0 && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                            {filteredModules.map(mod => (
-                                <ModuleCard key={mod.id} mod={mod}
-                                    onEdit={handleEditModule}
-                                    onDelete={setDeleteTarget}
-                                    onViewDetails={() => { setViewingModule(mod); fetchModuleFeatures(mod.id); }}
-                                />
-                            ))}
-                        </div>
-                    )}
+                        <>
+                            {/* Card grid — only current page */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                                {pagedModules.map(mod => (
+                                    <ModuleCard key={mod.id} mod={mod}
+                                        onEdit={handleEditModule}
+                                        onDelete={setDeleteTarget}
+                                        onViewDetails={() => { setViewingModule(mod); fetchModuleFeatures(mod.id); }}
+                                    />
+                                ))}
+                            </div>
 
-                    {!loading && filteredModules.length > 0 && (
-                        <div className="bg-white border border-gray-200 rounded-xl px-6 py-4">
-                            <p className="text-sm text-gray-400">Showing {filteredModules.length} of {modules.length} modules</p>
-                        </div>
+                            {/* Pagination bar */}
+                            <Pagination
+                                currentPage={safePage}
+                                totalPages={totalPages}
+                                totalItems={filteredModules.length}
+                                pageSize={pageSize}
+                                onPageChange={setCurrentPage}
+                                onPageSizeChange={setPageSize}
+                            />
+                        </>
                     )}
                 </div>
             </main>
 
             {/* ── Modals ── */}
-            {showModal && (
-                <CreateModuleModal onClose={() => setShowModal(false)} onSuccess={fetchModules} users={users} existingModuleCodes={existingModuleCodes} />
-            )}
-            {showEditModal && editingModule && (
-                <EditModuleModal module={editingModule} onClose={() => { setShowEditModal(false); setEditingModule(null); }} onSuccess={fetchModules} users={users} />
-            )}
-            {deleteTarget && (
-                <DeleteModuleModal module={deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDeleteConfirm} loading={deleteLoading} />
-            )}
-            {viewingModule && (
-                <ViewDetailsModal module={viewingModule} onClose={() => setViewingModule(null)} onEdit={handleEditModule} moduleFeatures={moduleFeatures} featuresLoading={featuresLoading} />
-            )}
-            {showImportModal && (
-                <ImportModulesModal onClose={() => setShowImportModal(false)} onSuccess={fetchModules} existingModuleCodes={existingModuleCodes} users={users} />
-            )}
+            {showModal && <CreateModuleModal onClose={() => setShowModal(false)} onSuccess={fetchModules} users={users} existingModuleCodes={existingModuleCodes} />}
+            {showEditModal && editingModule && <EditModuleModal module={editingModule} onClose={() => { setShowEditModal(false); setEditingModule(null); }} onSuccess={fetchModules} users={users} />}
+            {deleteTarget && <DeleteModuleModal module={deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDeleteConfirm} loading={deleteLoading} />}
+            {viewingModule && <ViewDetailsModal module={viewingModule} onClose={() => setViewingModule(null)} onEdit={handleEditModule} moduleFeatures={moduleFeatures} featuresLoading={featuresLoading} />}
+            {showImportModal && <ImportModulesModal onClose={() => setShowImportModal(false)} onSuccess={fetchModules} existingModuleCodes={existingModuleCodes} users={users} />}
         </div>
     );
 }

@@ -25,6 +25,22 @@ function savePendingUpdates(map) {
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(map)); } catch { }
 }
 
+// ── Fetch ALL rows from a Supabase query by batching in chunks of 1000 ───────
+async function fetchAll(queryBuilder) {
+    let allData = [];
+    let from = 0;
+    const BATCH = 1000;
+    while (true) {
+        const { data, error } = await queryBuilder.range(from, from + BATCH - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allData = [...allData, ...data];
+        if (data.length < BATCH) break;
+        from += BATCH;
+    }
+    return allData;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const formatTime = (s) => {
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
@@ -195,6 +211,102 @@ function SubmitModal({ show, onClose, onConfirm, submitting, currentTest, select
     );
 }
 
+// ── Pagination Controls ───────────────────────────────────────────────────────
+function Pagination({ currentPage, totalPages, totalItems, pageSize, onPageChange, onPageSizeChange }) {
+    const pages = [];
+    const delta = 2;
+    const left = currentPage - delta;
+    const right = currentPage + delta;
+
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= left && i <= right)) {
+            pages.push(i);
+        }
+    }
+
+    // Insert ellipsis markers
+    const withEllipsis = [];
+    let prev = null;
+    for (const page of pages) {
+        if (prev !== null && page - prev > 1) withEllipsis.push("...");
+        withEllipsis.push(page);
+        prev = page;
+    }
+
+    return (
+        <div className="flex items-center justify-between gap-4 px-5 py-3 border-t border-slate-100 bg-slate-50 rounded-b-xl flex-wrap">
+            <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500">Rows per page:</span>
+                <select
+                    value={pageSize}
+                    onChange={e => { onPageSizeChange(Number(e.target.value)); onPageChange(1); }}
+                    className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                    {[25, 50, 100, 200].map(n => (
+                        <option key={n} value={n}>{n}</option>
+                    ))}
+                </select>
+                <span className="text-xs text-slate-400">
+                    {totalItems === 0 ? "0" : `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, totalItems)}`} of {totalItems}
+                </span>
+            </div>
+
+            <div className="flex items-center gap-1">
+                <button
+                    onClick={() => onPageChange(1)}
+                    disabled={currentPage === 1}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs"
+                    title="First page"
+                >
+                    <i className="fa-solid fa-angles-left" />
+                </button>
+                <button
+                    onClick={() => onPageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs"
+                    title="Previous page"
+                >
+                    <i className="fa-solid fa-angle-left" />
+                </button>
+
+                {withEllipsis.map((item, idx) =>
+                    item === "..." ? (
+                        <span key={`ellipsis-${idx}`} className="w-7 h-7 flex items-center justify-center text-slate-400 text-xs">…</span>
+                    ) : (
+                        <button
+                            key={item}
+                            onClick={() => onPageChange(item)}
+                            className={`w-7 h-7 flex items-center justify-center rounded-lg border text-xs font-semibold transition-colors ${item === currentPage
+                                    ? "bg-emerald-600 border-emerald-600 text-white"
+                                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                                }`}
+                        >
+                            {item}
+                        </button>
+                    )
+                )}
+
+                <button
+                    onClick={() => onPageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs"
+                    title="Next page"
+                >
+                    <i className="fa-solid fa-angle-right" />
+                </button>
+                <button
+                    onClick={() => onPageChange(totalPages)}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs"
+                    title="Last page"
+                >
+                    <i className="fa-solid fa-angles-right" />
+                </button>
+            </div>
+        </div>
+    );
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // VIEW 1 — TEST CASE LIST
 // ═════════════════════════════════════════════════════════════════════════════
@@ -207,6 +319,10 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
     const [error, setError] = useState(null);
     const [metaReady, setMetaReady] = useState(false);
 
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(50);
+
     const mapsRef = useRef({ mod: {}, feat: {}, ver: {} });
 
     const [filterVersion, setFilterVersion] = useState("");
@@ -215,17 +331,18 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
     const [filterStatus, setFilterStatus] = useState("");
     const [search, setSearch] = useState("");
 
+    // Reset to page 1 whenever filters/search change
+    useEffect(() => { setCurrentPage(1); }, [filterVersion, filterModule, filterFeature, filterStatus, search]);
+
     useEffect(() => {
         (async () => {
             try {
-                const [vRes, mRes, fRes] = await Promise.all([
-                    supabase.from("versions").select("id,version_number,build_number,status").order("created_at", { ascending: false }),
-                    supabase.from("modules").select("id,module_name").order("module_name", { ascending: true }),
-                    supabase.from("features").select("id,feature_name,module_id").order("feature_name", { ascending: true }),
+                // Fetch all meta rows (versions/modules/features may exceed 1000 too)
+                const [versions, modules, features] = await Promise.all([
+                    fetchAll(supabase.from("versions").select("id,version_number,build_number,status").order("created_at", { ascending: false })),
+                    fetchAll(supabase.from("modules").select("id,module_name").order("module_name", { ascending: true })),
+                    fetchAll(supabase.from("features").select("id,feature_name,module_id").order("feature_name", { ascending: true })),
                 ]);
-                const versions = vRes.data || [];
-                const modules = mRes.data || [];
-                const features = fRes.data || [];
                 setAllVersions(versions);
                 setAllModules(modules);
                 setAllFeatures(features);
@@ -295,7 +412,9 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                     q = q.eq("status", filterStatus);
                 }
 
-                const { data, error: err } = await q;
+                // ── KEY CHANGE: fetch ALL rows using the batch helper ──────
+                const data = await fetchAll(q);
+
                 if (!cancelled) {
                     const latestPending = loadPendingUpdates();
                     const { mod, feat, ver } = mapsRef.current;
@@ -339,16 +458,24 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
             .map(f => ({ value: f.id, label: f.feature_name })),
     ];
 
-    const visible = testCases.filter(t => {
+    // ── Search filter (client-side across all fetched rows) ──────────────────
+    const filtered = testCases.filter(t => {
         if (!search) return true;
         const q = search.toLowerCase();
         return t.name?.toLowerCase().includes(q) || t.test_case_id?.toLowerCase().includes(q);
     });
 
-    const passCount = visible.filter(t => normaliseStatus(t.status) === "pass").length;
-    const failCount = visible.filter(t => normaliseStatus(t.status) === "fail").length;
-    const blockedCount = visible.filter(t => normaliseStatus(t.status) === "blocked").length;
-    const statusStats = { pass: passCount, fail: failCount, blocked: blockedCount, untested: visible.length - passCount - failCount - blockedCount };
+    // ── Stats from ALL filtered rows ─────────────────────────────────────────
+    const passCount = filtered.filter(t => normaliseStatus(t.status) === "pass").length;
+    const failCount = filtered.filter(t => normaliseStatus(t.status) === "fail").length;
+    const blockedCount = filtered.filter(t => normaliseStatus(t.status) === "blocked").length;
+    const statusStats = { pass: passCount, fail: failCount, blocked: blockedCount, untested: filtered.length - passCount - failCount - blockedCount };
+
+    // ── Paginate the filtered list ───────────────────────────────────────────
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    const safePage = Math.min(currentPage, totalPages);
+    const pageStart = (safePage - 1) * pageSize;
+    const visible = filtered.slice(pageStart, pageStart + pageSize);
 
     const anyFilter = filterVersion || filterModule || filterFeature || filterStatus || search;
     const clearAll = () => { setFilterVersion(""); setFilterModule(""); setFilterFeature(""); setFilterStatus(""); setSearch(""); };
@@ -364,13 +491,16 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                         <p className="text-sm text-slate-500 mt-0.5">Select a test case to begin execution</p>
                     </div>
                     <div className="flex items-center gap-3">
-                        <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-sm font-semibold">{visible.length} test cases</span>
+                        <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-sm font-semibold">
+                            {filtered.length} test cases
+                        </span>
                     </div>
                 </div>
             </header>
 
             <main className="flex-1 overflow-y-auto p-6 space-y-5">
 
+                {/* Filters */}
                 <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
@@ -435,10 +565,11 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                     </div>
                 </div>
 
-                {!loading && visible.length > 0 && (
+                {/* Stats */}
+                {!loading && filtered.length > 0 && (
                     <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                         {[
-                            { label: "Total", value: visible.length, color: "text-slate-700", bg: "bg-white", icon: "fa-list-check" },
+                            { label: "Total", value: filtered.length, color: "text-slate-700", bg: "bg-white", icon: "fa-list-check" },
                             { label: "Not Tested", value: statusStats.untested, color: "text-slate-500", bg: "bg-white", icon: "fa-circle" },
                             { label: "Pass", value: statusStats.pass, color: "text-emerald-600", bg: "bg-emerald-50", icon: "fa-check-circle" },
                             { label: "Fail", value: statusStats.fail, color: "text-red-600", bg: "bg-red-50", icon: "fa-times-circle" },
@@ -455,6 +586,7 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                     </div>
                 )}
 
+                {/* Table */}
                 {loading ? (
                     <div className="flex flex-col items-center justify-center py-20 gap-4">
                         <div className="w-10 h-10 border-4 border-slate-200 border-t-emerald-600 rounded-full animate-spin" />
@@ -465,7 +597,7 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                         <i className="fa-solid fa-circle-exclamation text-red-400 text-2xl mb-2 block" />
                         <p className="text-sm text-red-600 font-medium">{error}</p>
                     </div>
-                ) : visible.length === 0 ? (
+                ) : filtered.length === 0 ? (
                     <div className="bg-white border border-slate-200 rounded-xl p-12 text-center">
                         <i className="fa-solid fa-vial text-slate-300 text-4xl mb-3 block" />
                         <p className="text-slate-500 font-medium mb-1">No test cases found</p>
@@ -474,12 +606,17 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                     </div>
                 ) : (
                     <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                        {/* Table header */}
                         <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
                             <p className="text-sm font-semibold text-slate-700">
-                                {visible.length === testCases.length ? `${visible.length} test cases` : `${visible.length} of ${testCases.length} test cases`}
+                                {filtered.length === testCases.length
+                                    ? `${filtered.length} test cases`
+                                    : `${filtered.length} of ${testCases.length} test cases`}
                             </p>
                             <p className="text-xs text-slate-400">Click a row to start executing</p>
                         </div>
+
+                        {/* Rows — only current page */}
                         <div className="divide-y divide-slate-50">
                             {visible.map(t => {
                                 const normStatus = normaliseStatus(t.status);
@@ -497,7 +634,7 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                                                 "border-l-4 border-transparent";
 
                                 return (
-                                    <button key={t.id} onClick={() => onSelect(t, visible)}
+                                    <button key={t.id} onClick={() => onSelect(t, filtered)}
                                         className={`w-full text-left px-5 py-4 ${leftBorder} ${rowBg} transition-all group`}>
                                         <div className="flex items-center gap-4">
                                             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${sm.bgLight}`}>
@@ -546,6 +683,16 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                                 );
                             })}
                         </div>
+
+                        {/* Pagination controls */}
+                        <Pagination
+                            currentPage={safePage}
+                            totalPages={totalPages}
+                            totalItems={filtered.length}
+                            pageSize={pageSize}
+                            onPageChange={setCurrentPage}
+                            onPageSizeChange={setPageSize}
+                        />
                     </div>
                 )}
             </main>
@@ -554,7 +701,7 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// VIEW 2 — EXECUTE A TEST CASE
+// VIEW 2 — EXECUTE A TEST CASE  (unchanged from original)
 // ═════════════════════════════════════════════════════════════════════════════
 function ExecuteView({ testCase, onBack }) {
     const [module, setModule] = useState(null);
@@ -602,7 +749,7 @@ function ExecuteView({ testCase, onBack }) {
         (async () => {
             setVersionsLoading(true);
             try {
-                const { data } = await supabase.from("versions").select("id,version_number,build_number,status,version_type,release_date,created_at,total_tests,passed_tests,failed_tests,pending_tests,completion_percentage").order("created_at", { ascending: false });
+                const data = await fetchAll(supabase.from("versions").select("id,version_number,build_number,status,version_type,release_date,created_at,total_tests,passed_tests,failed_tests,pending_tests,completion_percentage").order("created_at", { ascending: false }));
                 setAllVersions(data || []);
             } catch (e) { console.warn(e); } finally { setVersionsLoading(false); }
         })();
@@ -935,8 +1082,6 @@ function ExecuteView({ testCase, onBack }) {
                                         {uploadedFiles.length > 0 && <div className="mt-2 space-y-1.5">{uploadedFiles.map(f => (<div key={f.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg"><div className="flex items-center gap-2"><div className="w-7 h-7 bg-blue-100 rounded flex items-center justify-center"><i className="fa-solid fa-image text-blue-500 text-xs" /></div><div><p className="text-xs font-medium">{f.name}</p><p className="text-[10px] text-slate-400">{f.size}</p></div></div><div className="flex items-center gap-2">{f.url && <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-600"><i className="fa-solid fa-external-link-alt text-xs" /></a>}<button onClick={() => setUploadedFiles(p => p.filter(x => x.id !== f.id))} className="text-red-400 hover:text-red-600"><i className="fa-solid fa-trash text-xs" /></button></div></div>))}</div>}
                                     </div>
                                     <div>
-
-
                                         {linkedIssue && (<div className="mt-2 flex items-center justify-between p-2.5 bg-amber-50 border border-amber-200 rounded-lg"><div className="flex items-center gap-2"><i className="fa-solid fa-bug text-amber-600 text-xs" /><div><p className="text-xs font-medium">{linkedIssue.bug_id}</p><p className="text-[10px] text-slate-500">Status: {linkedIssue.status} · Priority: {linkedIssue.priority}</p></div></div><button onClick={() => { setLinkedIssue(null); setLinkedBugId(""); }} className="text-red-400 hover:text-red-600"><i className="fa-solid fa-times text-xs" /></button></div>)}
                                     </div>
                                 </div>
@@ -979,7 +1124,6 @@ function ExecuteView({ testCase, onBack }) {
                             <i className="fa-solid fa-arrow-left text-xs" /> Back to List
                         </button>
                         <div className="flex items-center gap-2">
-
                             <button onClick={handleSubmitClick} className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 flex items-center gap-1.5">
                                 <i className="fa-solid fa-paper-plane text-xs" /> Submit Result
                             </button>
