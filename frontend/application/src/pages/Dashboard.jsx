@@ -107,62 +107,117 @@ function MyAssignments({ userId }) {
         setLoading(false);
     }
 
+    // ── Paginated fetch for test cases ───────────────────────────────────────
     async function fetchMyTestCases(userName) {
-        const [byId, byName] = await Promise.all([
-            supabase
-                .from("test_cases")
-                .select(`id, name, test_case_id, status, priority, modules ( module_name ), versions ( version_number )`)
-                .eq("assigned_to", userId)
-                .order("created_at", { ascending: false })
-                .limit(20),
-            supabase
-                .from("test_cases")
-                .select(`id, name, test_case_id, status, priority, modules ( module_name ), versions ( version_number )`)
-                .eq("assigned_to", userName)
-                .order("created_at", { ascending: false })
-                .limit(20),
-        ]);
+        const PAGE_SIZE = 1000;
+        let allById = [], allByName = [], from = 0;
 
-        const merged = [...(byId.data || []), ...(byName.data || [])];
+        while (true) {
+            const [byId, byName] = await Promise.all([
+                supabase
+                    .from("test_cases")
+                    .select(`id, name, test_case_id, status, priority, modules ( module_name ), versions ( version_number )`)
+                    .eq("assigned_to", userId)
+                    .order("created_at", { ascending: false })
+                    .range(from, from + PAGE_SIZE - 1),
+                supabase
+                    .from("test_cases")
+                    .select(`id, name, test_case_id, status, priority, modules ( module_name ), versions ( version_number )`)
+                    .eq("assigned_to", userName)
+                    .order("created_at", { ascending: false })
+                    .range(from, from + PAGE_SIZE - 1),
+            ]);
+
+            allById = [...allById, ...(byId.data || [])];
+            allByName = [...allByName, ...(byName.data || [])];
+
+            // Stop when both pages return fewer rows than PAGE_SIZE
+            if ((byId.data?.length || 0) < PAGE_SIZE && (byName.data?.length || 0) < PAGE_SIZE) break;
+            from += PAGE_SIZE;
+        }
+
+        const merged = [...allById, ...allByName];
         const unique = Array.from(new Map(merged.map(tc => [tc.id, tc])).values());
         setMyTestCases(unique);
     }
 
+    // ── Paginated fetch for modules ──────────────────────────────────────────
     async function fetchMyModules(userName) {
-        const [byId, byName] = await Promise.all([
-            supabase.from("test_cases").select("module_id").eq("assigned_to", userId),
-            supabase.from("test_cases").select("module_id").eq("assigned_to", userName),
-        ]);
+        const PAGE_SIZE = 1000;
+        let allTcs = [], from = 0;
 
-        const allTcs = [...(byId.data || []), ...(byName.data || [])];
+        while (true) {
+            const [byId, byName] = await Promise.all([
+                supabase
+                    .from("test_cases")
+                    .select("module_id")
+                    .eq("assigned_to", userId)
+                    .range(from, from + PAGE_SIZE - 1),
+                supabase
+                    .from("test_cases")
+                    .select("module_id")
+                    .eq("assigned_to", userName)
+                    .range(from, from + PAGE_SIZE - 1),
+            ]);
+
+            allTcs = [...allTcs, ...(byId.data || []), ...(byName.data || [])];
+
+            if ((byId.data?.length || 0) < PAGE_SIZE && (byName.data?.length || 0) < PAGE_SIZE) break;
+            from += PAGE_SIZE;
+        }
+
         const moduleIds = [...new Set(allTcs.map(tc => tc.module_id).filter(Boolean))];
         if (moduleIds.length === 0) { setMyModules([]); return; }
 
-        const { data, error } = await supabase
-            .from("modules")
-            .select("id, module_name, status, test_cases ( status )")
-            .in("id", moduleIds)
-            .order("module_name");
+        // Paginate module fetching in batches of 1000 ids
+        let allModules = [];
+        for (let i = 0; i < moduleIds.length; i += PAGE_SIZE) {
+            const batchIds = moduleIds.slice(i, i + PAGE_SIZE);
+            const { data, error } = await supabase
+                .from("modules")
+                .select("id, module_name, status, test_cases ( status )")
+                .in("id", batchIds)
+                .order("module_name");
 
-        if (error) console.error("fetchMyModules error:", error);
-        else setMyModules(data || []);
+            if (error) {
+                console.error("fetchMyModules error:", error);
+                break;
+            }
+            allModules = [...allModules, ...(data || [])];
+        }
+
+        setMyModules(allModules);
     }
 
+    // ── Paginated fetch for features ─────────────────────────────────────────
     async function fetchMyFeatures(userName) {
-        const [byId, byName] = await Promise.all([
-            supabase
-                .from("features")
-                .select("id, feature_name, status, priority, modules ( module_name )")
-                .eq("assign_to", userId.toString())
-                .order("feature_name"),
-            supabase
-                .from("features")
-                .select("id, feature_name, status, priority, modules ( module_name )")
-                .eq("assign_to", userName)
-                .order("feature_name"),
-        ]);
+        const PAGE_SIZE = 1000;
+        let allById = [], allByName = [], from = 0;
 
-        const allFeatures = [...(byId.data || []), ...(byName.data || [])];
+        while (true) {
+            const [byId, byName] = await Promise.all([
+                supabase
+                    .from("features")
+                    .select("id, feature_name, status, priority, modules ( module_name )")
+                    .eq("assign_to", userId.toString())
+                    .order("feature_name")
+                    .range(from, from + PAGE_SIZE - 1),
+                supabase
+                    .from("features")
+                    .select("id, feature_name, status, priority, modules ( module_name )")
+                    .eq("assign_to", userName)
+                    .order("feature_name")
+                    .range(from, from + PAGE_SIZE - 1),
+            ]);
+
+            allById = [...allById, ...(byId.data || [])];
+            allByName = [...allByName, ...(byName.data || [])];
+
+            if ((byId.data?.length || 0) < PAGE_SIZE && (byName.data?.length || 0) < PAGE_SIZE) break;
+            from += PAGE_SIZE;
+        }
+
+        const allFeatures = [...allById, ...allByName];
         const unique = Array.from(new Map(allFeatures.map(f => [f.id, f])).values());
         setMyFeatures(unique);
     }
