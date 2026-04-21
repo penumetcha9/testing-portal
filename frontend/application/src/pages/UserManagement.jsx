@@ -4,8 +4,8 @@ import { supabase } from "../services/supabaseClient";
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const ROLE_STYLES = {
     admin: { badge: "bg-purple-100 text-purple-700 border-purple-200", dot: "bg-purple-500" },
-    tester: { badge: "bg-emerald-100 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
-    developer: { badge: "bg-blue-100 text-blue-700 border-blue-200", dot: "bg-blue-500" },
+    tester: { badge: "bg-blue-100 text-blue-700 border-blue-200", dot: "bg-blue-500" },
+    developer: { badge: "bg-amber-100 text-amber-700 border-amber-200", dot: "bg-amber-500" },
 };
 const getRoleStyle = (r) => ROLE_STYLES[r] || { badge: "bg-slate-100 text-slate-600 border-slate-200", dot: "bg-slate-400" };
 
