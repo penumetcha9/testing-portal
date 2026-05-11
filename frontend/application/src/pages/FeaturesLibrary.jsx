@@ -104,6 +104,32 @@ const GLOBAL_STYLES = `
   input[type="number"]::-webkit-outer-spin-button,
   input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
   input[type="number"] { -moz-appearance: textfield; }
+
+  /* ── Rich textarea ── identical look to fl-input / native textarea ── */
+  .fl-rich-area {
+    width: 100%; padding: 9px 13px;
+    background: #FAFBF9; border: 1px solid #DDE3D8;
+    border-radius: 8px; font-size: 13px; color: #111827;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    outline: none; transition: border 0.15s, box-shadow 0.15s;
+    line-height: 1.6; overflow-y: auto;
+    word-break: break-word; cursor: text;
+    white-space: pre-wrap;
+  }
+  .fl-rich-area:focus {
+    border-color: #1D3D2F;
+    box-shadow: 0 0 0 3px rgba(29,61,47,0.08);
+    background: #fff;
+  }
+  .fl-rich-area:empty:before {
+    content: attr(data-placeholder);
+    color: #9CA3AF;
+    pointer-events: none;
+    white-space: pre;
+  }
+  .fl-rich-area ul { padding-left: 20px; margin: 0; }
+  .fl-rich-area ul li { margin: 0; }
+  .fl-rich-area b, .fl-rich-area strong { font-weight: 700; }
 `;
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
@@ -154,6 +180,119 @@ const Chip = ({ label, style: s, mono }) => (
         {label}
     </span>
 );
+
+// ─── Rich Textarea ─────────────────────────────────────────────────────────────
+// Looks identical to a native textarea / fl-input.
+// Enter        → inserts a bullet point (• ) on a new line
+// Shift+Enter  → plain newline, no bullet
+// Ctrl/Cmd+B   → wraps selected text in <b>
+const RichTextarea = memo(({ value = "", onChange, placeholder, minHeight = 68 }) => {
+    const ref = useRef(null);
+    const skipSync = useRef(false);
+
+    // Sync external value → DOM only when the parent resets it (modal open/close)
+    useEffect(() => {
+        const el = ref.current;
+        if (!el || skipSync.current) return;
+        if (el.innerHTML !== (value || "")) {
+            el.innerHTML = value || "";
+        }
+    }, [value]);
+
+    const emit = useCallback(() => {
+        skipSync.current = true;
+        onChange && onChange(ref.current?.innerHTML || "");
+        requestAnimationFrame(() => { skipSync.current = false; });
+    }, [onChange]);
+
+    const handleKeyDown = useCallback((e) => {
+        // ── Ctrl/Cmd + B → bold ──────────────────────────────────────────────
+        if ((e.ctrlKey || e.metaKey) && e.key === "b") {
+            e.preventDefault();
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0) return;
+            const range = sel.getRangeAt(0);
+            if (range.collapsed) return; // nothing selected → skip
+            const b = document.createElement("b");
+            try {
+                range.surroundContents(b);
+            } catch {
+                // surroundContents fails when selection crosses element boundaries;
+                // fall back to extracting and wrapping
+                b.appendChild(range.extractContents());
+                range.insertNode(b);
+            }
+            // Move caret after the bold node
+            range.setStartAfter(b);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            emit();
+            return;
+        }
+
+        // ── Enter → bullet point ─────────────────────────────────────────────
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0) return;
+            const range = sel.getRangeAt(0);
+            range.deleteContents();
+
+            // Insert newline + bullet character
+            const bullet = document.createTextNode("\n• ");
+            range.insertNode(bullet);
+
+            // Move caret to end of inserted text
+            range.setStartAfter(bullet);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            emit();
+            return;
+        }
+
+        // ── Shift+Enter → plain newline ──────────────────────────────────────
+        if (e.key === "Enter" && e.shiftKey) {
+            e.preventDefault();
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0) return;
+            const range = sel.getRangeAt(0);
+            range.deleteContents();
+            const br = document.createElement("br");
+            range.insertNode(br);
+            // Insert an extra zero-width space so caret lands after the <br>
+            const zws = document.createTextNode("\u200B");
+            range.setStartAfter(br);
+            range.insertNode(zws);
+            range.setStartAfter(zws);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            emit();
+        }
+    }, [emit]);
+
+    return (
+        <div
+            ref={ref}
+            className="fl-rich-area"
+            contentEditable
+            suppressContentEditableWarning
+            data-placeholder={placeholder}
+            style={{ minHeight }}
+            onKeyDown={handleKeyDown}
+            onInput={emit}
+        />
+    );
+});
+
+// Strip HTML tags → plain text (used before saving to Supabase)
+const stripHtml = (html = "") => {
+    const d = document.createElement("div");
+    d.innerHTML = html;
+    return d.textContent || d.innerText || "";
+};
 
 // ─── Dropdown ──────────────────────────────────────────────────────────────────
 const Dropdown = memo(({ options, selected, onChange, placeholder = "Select..." }) => {
@@ -1200,8 +1339,6 @@ export default function FeaturesLibrary() {
                 const mf = featsByModule[mod.id] || [];
                 const ef = mf.map(feat => ({
                     ...feat,
-                    // ── FIX: explicitly set name/code/moduleName/moduleCode so
-                    //    flatFeatures spread always carries these fields ──
                     name: feat.feature_name || feat.name,
                     code: feat.feature_code || feat.code,
                     moduleId: mod.id,
@@ -1261,9 +1398,6 @@ export default function FeaturesLibrary() {
         setFeatPage(0);
     }, [searchQuery, filterStatus]);
 
-    // ── FIX: flatFeatures resolves assignee names for both features AND test cases.
-    //    moduleName / moduleCode / name / code are explicitly spread from the
-    //    enriched object so search always finds them.
     const flatFeatures = useMemo(() => {
         const userMap = {};
         for (const u of users) { if (u.id) userMap[u.id] = u.name; }
@@ -1277,7 +1411,6 @@ export default function FeaturesLibrary() {
                 }));
                 return {
                     ...feat,
-                    // Guarantee these are always present after spread
                     name: feat.name || feat.feature_name || "",
                     code: feat.code || feat.feature_code || "",
                     moduleName: feat.moduleName || mod.module_name || mod.name || "",
@@ -1296,53 +1429,27 @@ export default function FeaturesLibrary() {
     const testerOptions = useMemo(() => [{ id: "", name: "Select Tester" }, ...users.map(u => ({ id: u.id, name: u.name }))], [users]);
     const moduleOptions = useMemo(() => [{ id: "", name: "Choose Module" }, ...modules.map(m => ({ id: m.id, name: m.name }))], [modules]);
 
-    // ── FIX: clean, reliable search + filter ─────────────────────────────────
     const filteredFeatures = useMemo(() => {
         let list = flatFeatures;
 
-        // Status filter — treat null/undefined as "Active" (matches DB default)
         if (filterStatus) {
             list = list.filter(f =>
                 (f.status || "Active").toLowerCase() === filterStatus.toLowerCase()
             );
         }
 
-        // Search filter — covers all meaningful text fields
         const q = searchQuery.trim().toLowerCase();
         if (q) {
             list = list.filter(f => {
-                // Feature fields
                 if ((f.name || "").toLowerCase().includes(q)) return true;
                 if ((f.feature_name || "").toLowerCase().includes(q)) return true;
                 if ((f.code || "").toLowerCase().includes(q)) return true;
                 if ((f.feature_code || "").toLowerCase().includes(q)) return true;
                 if ((f.description || "").toLowerCase().includes(q)) return true;
                 if ((f.user_story || "").toLowerCase().includes(q)) return true;
-                // Module fields — always populated via the double-guarantee in flatFeatures
                 if ((f.moduleName || "").toLowerCase().includes(q)) return true;
-                if (q) {
-                    list = list.filter(f => {
-                        const str = (v) => String(v ?? "").toLowerCase();
-                        if (str(f.name).includes(q)) return true;
-                        if (str(f.feature_name).includes(q)) return true;
-                        if (str(f.code).includes(q)) return true;
-                        if (str(f.feature_code).includes(q)) return true;
-                        if (str(f.description).includes(q)) return true;
-                        if (str(f.user_story).includes(q)) return true;
-                        if (str(f.moduleName).includes(q)) return true;
-                        if (str(f.moduleCode).includes(q)) return true;
-                        if (str(f.assign_to_name).includes(q)) return true;
-                        if (f.testCases.some(tc =>
-                            str(tc.tcId).includes(q) ||
-                            str(tc.name).includes(q) ||
-                            str(tc.assigneeName).includes(q)
-                        )) return true;
-                        return false;
-                    });
-                }
-                // Assignee
+                if ((f.moduleCode || "").toLowerCase().includes(q)) return true;
                 if ((f.assign_to_name || "").toLowerCase().includes(q)) return true;
-                // Test case fields
                 if (f.testCases.some(tc =>
                     (tc.tcId || "").toLowerCase().includes(q) ||
                     (tc.name || "").toLowerCase().includes(q) ||
@@ -1444,7 +1551,7 @@ export default function FeaturesLibrary() {
                 name: form.name,
                 test_scenario: form.testScenario || null,
                 preconditions: form.preconditions || null,
-                test_steps: form.steps ? form.steps.split("\n").map(s => s.trim()).filter(Boolean) : null,
+                test_steps: form.steps ? stripHtml(form.steps).split("\n").map(s => s.trim()).filter(Boolean) : null,
                 expected_result: form.expected || null,
                 feature_id: addModal.featureId || null,
                 module_id: addModal.moduleId || null,
@@ -1472,7 +1579,7 @@ export default function FeaturesLibrary() {
                 name: form.name,
                 test_scenario: form.testScenario || null,
                 preconditions: form.preconditions || null,
-                test_steps: form.steps ? form.steps.split("\n").map(s => s.trim()).filter(Boolean) : null,
+                test_steps: form.steps ? stripHtml(form.steps).split("\n").map(s => s.trim()).filter(Boolean) : null,
                 expected_result: form.expected || null,
                 priority: form.priority,
                 status: form.status,
@@ -1729,7 +1836,12 @@ export default function FeaturesLibrary() {
                                 </Field>
                             </div>
                             <Field label="Description">
-                                <textarea className="fl-input" rows="3" placeholder="Brief description…" value={featureForm.description} onChange={e => setFeatureForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "none" }} />
+                                <RichTextarea
+                                    value={featureForm.description}
+                                    onChange={v => setFeatureForm(f => ({ ...f, description: v }))}
+                                    placeholder="Brief description… (Enter = bullet  •  Ctrl+B = bold)"
+                                    minHeight={80}
+                                />
                             </Field>
                             <Field label="Assign To">
                                 <Dropdown options={userOptions} selected={featureForm.assign_to} onChange={v => setFeatureForm(f => ({ ...f, assign_to: v }))} placeholder="Select Assignee" />
@@ -1772,7 +1884,12 @@ export default function FeaturesLibrary() {
                                 </Field>
                             </div>
                             <Field label="Description">
-                                <textarea className="fl-input" rows="3" value={editFeatureForm.description} onChange={e => setEditFeatureForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "none" }} />
+                                <RichTextarea
+                                    value={editFeatureForm.description}
+                                    onChange={v => setEditFeatureForm(f => ({ ...f, description: v }))}
+                                    placeholder="Brief description… (Enter = bullet  •  Ctrl+B = bold)"
+                                    minHeight={80}
+                                />
                             </Field>
                             <Field label="Assign To">
                                 <Dropdown options={userOptions} selected={editFeatureForm.assign_to} onChange={v => setEditFeatureForm(f => ({ ...f, assign_to: v }))} placeholder="Select Assignee" />
@@ -1865,13 +1982,28 @@ export default function FeaturesLibrary() {
                                 <input className="fl-input" type="text" placeholder="e.g., Verify user can log in with valid credentials" value={form.testScenario} onChange={e => setForm(f => ({ ...f, testScenario: e.target.value }))} />
                             </Field>
                             <Field label="Pre-Requisites">
-                                <textarea className="fl-input" rows="2" placeholder="e.g., User must have a registered account" value={form.preconditions} onChange={e => setForm(f => ({ ...f, preconditions: e.target.value }))} style={{ resize: "none" }} />
+                                <RichTextarea
+                                    value={form.preconditions}
+                                    onChange={v => setForm(f => ({ ...f, preconditions: v }))}
+                                    placeholder={"e.g., User must have a registered account… (Enter = bullet  •  Ctrl+B = bold)"}
+                                    minHeight={56}
+                                />
                             </Field>
                             <Field label="Test Steps">
-                                <textarea className="fl-input" rows="4" placeholder={"1. Navigate to login page\n2. Enter valid credentials\n3. Click Login button"} value={form.steps} onChange={e => setForm(f => ({ ...f, steps: e.target.value }))} style={{ resize: "none" }} />
+                                <RichTextarea
+                                    value={form.steps}
+                                    onChange={v => setForm(f => ({ ...f, steps: v }))}
+                                    placeholder={"1. Navigate to login page\n2. Enter valid credentials\n(Enter = bullet  •  Ctrl+B = bold)"}
+                                    minHeight={100}
+                                />
                             </Field>
                             <Field label="Expected Result">
-                                <textarea className="fl-input" rows="2" placeholder="e.g., User is redirected to dashboard" value={form.expected} onChange={e => setForm(f => ({ ...f, expected: e.target.value }))} style={{ resize: "none" }} />
+                                <RichTextarea
+                                    value={form.expected}
+                                    onChange={v => setForm(f => ({ ...f, expected: v }))}
+                                    placeholder={"e.g., User is redirected to dashboard… (Enter = bullet  •  Ctrl+B = bold)"}
+                                    minHeight={56}
+                                />
                             </Field>
                         </div>
                         <div style={MODAL_FOOTER}>
@@ -1917,13 +2049,28 @@ export default function FeaturesLibrary() {
                                 <input className="fl-input" type="text" value={form.testScenario} onChange={e => setForm(f => ({ ...f, testScenario: e.target.value }))} />
                             </Field>
                             <Field label="Pre-Requisites">
-                                <textarea className="fl-input" rows="2" value={form.preconditions} onChange={e => setForm(f => ({ ...f, preconditions: e.target.value }))} style={{ resize: "none" }} />
+                                <RichTextarea
+                                    value={form.preconditions}
+                                    onChange={v => setForm(f => ({ ...f, preconditions: v }))}
+                                    placeholder="Pre-requisites… (Enter = bullet  •  Ctrl+B = bold)"
+                                    minHeight={56}
+                                />
                             </Field>
                             <Field label="Test Steps">
-                                <textarea className="fl-input" rows="4" value={form.steps} onChange={e => setForm(f => ({ ...f, steps: e.target.value }))} style={{ resize: "none" }} />
+                                <RichTextarea
+                                    value={form.steps}
+                                    onChange={v => setForm(f => ({ ...f, steps: v }))}
+                                    placeholder="Test steps… (Enter = bullet  •  Ctrl+B = bold)"
+                                    minHeight={100}
+                                />
                             </Field>
                             <Field label="Expected Result">
-                                <textarea className="fl-input" rows="2" value={form.expected} onChange={e => setForm(f => ({ ...f, expected: e.target.value }))} style={{ resize: "none" }} />
+                                <RichTextarea
+                                    value={form.expected}
+                                    onChange={v => setForm(f => ({ ...f, expected: v }))}
+                                    placeholder="Expected result… (Enter = bullet  •  Ctrl+B = bold)"
+                                    minHeight={56}
+                                />
                             </Field>
                         </div>
                         <div style={MODAL_FOOTER}>

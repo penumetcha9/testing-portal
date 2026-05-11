@@ -2,6 +2,197 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import supabase from "../services/supabaseClient";
 
+// ── RichTextarea — bullet-on-Enter + Ctrl+B bold ──────────────────────────────
+const RichTextarea = ({ value, onChange, rows = 3, placeholder, className, style, onKeyDown: externalKeyDown }) => {
+    const ref = useRef(null);
+
+    // Sync value → DOM when controlled value changes externally
+    useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        // Only update DOM if it differs (avoids cursor jump on every keystroke)
+        const rendered = toHtml(value || '');
+        if (el.innerHTML !== rendered) {
+            el.innerHTML = rendered;
+        }
+    }, [value]);
+
+    // Convert plain text (with **bold** markers) → HTML for display
+    function toHtml(text) {
+        return text
+            .split('\n')
+            .map(line => {
+                // escape HTML entities first
+                const escaped = line
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+                // render **bold**
+                return escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            })
+            .join('<br>');
+    }
+
+    // Convert DOM HTML → plain text (with **bold** markers)
+    function fromHtml(el) {
+        function nodeToText(node) {
+            if (node.nodeType === Node.TEXT_NODE) return node.textContent;
+            if (node.nodeName === 'BR') return '\n';
+            if (node.nodeName === 'STRONG' || node.nodeName === 'B') {
+                return `**${Array.from(node.childNodes).map(nodeToText).join('')}**`;
+            }
+            if (node.nodeName === 'DIV' || node.nodeName === 'P') {
+                const inner = Array.from(node.childNodes).map(nodeToText).join('');
+                return '\n' + inner;
+            }
+            return Array.from(node.childNodes).map(nodeToText).join('');
+        }
+        return Array.from(el.childNodes).map(nodeToText).join('').replace(/^\n/, '');
+    }
+
+    function getCaretOffset(el) {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return 0;
+        const range = sel.getRangeAt(0);
+        const pre = range.cloneRange();
+        pre.selectNodeContents(el);
+        pre.setEnd(range.endContainer, range.endOffset);
+        return pre.toString().length;
+    }
+
+    function setCaretOffset(el, offset) {
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        let remaining = offset;
+        let node;
+        while ((node = walker.nextNode())) {
+            if (remaining <= node.textContent.length) {
+                const range = document.createRange();
+                const sel = window.getSelection();
+                range.setStart(node, remaining);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
+                return;
+            }
+            remaining -= node.textContent.length;
+        }
+        // fallback: end of el
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(range);
+    }
+
+    const handleKeyDown = (e) => {
+        externalKeyDown && externalKeyDown(e);
+        const el = ref.current;
+
+        // ── Enter → insert bullet on new line ──
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0) return;
+            const range = sel.getRangeAt(0);
+            range.deleteContents();
+
+            // Insert newline + bullet
+            const br = document.createElement('br');
+            const bullet = document.createTextNode('• ');
+            range.insertNode(bullet);
+            range.insertNode(br);
+
+            // Move caret after bullet
+            const newRange = document.createRange();
+            newRange.setStartAfter(bullet);
+            newRange.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(newRange);
+
+            onChange(fromHtml(el));
+            return;
+        }
+
+        // ── Ctrl+B → toggle bold on selection ──
+        if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+            e.preventDefault();
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0) return;
+            const range = sel.getRangeAt(0);
+            const selectedText = range.toString();
+            if (!selectedText) return;
+
+            // Check if already inside a <strong>
+            let node = range.commonAncestorContainer;
+            if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+            const inBold = node.closest && node.closest('strong');
+
+            if (inBold) {
+                // Unwrap: replace <strong> with its text
+                const text = document.createTextNode(inBold.textContent);
+                inBold.replaceWith(text);
+            } else {
+                // Wrap selection in <strong>
+                const strong = document.createElement('strong');
+                range.surroundContents(strong);
+            }
+            onChange(fromHtml(el));
+            return;
+        }
+    };
+
+    const handleInput = () => {
+        const el = ref.current;
+        if (!el) return;
+        onChange(fromHtml(el));
+    };
+
+    const handlePaste = (e) => {
+        e.preventDefault();
+        const text = e.clipboardData.getData('text/plain');
+        document.execCommand('insertText', false, text);
+    };
+
+    // Compute min-height from rows
+    const lineHeight = 20;
+    const paddingV = 10;
+    const minHeight = rows * lineHeight + paddingV * 2;
+
+    return (
+        <div
+            ref={ref}
+            contentEditable
+            suppressContentEditableWarning
+            onKeyDown={handleKeyDown}
+            onInput={handleInput}
+            onPaste={handlePaste}
+            data-placeholder={placeholder}
+            className={className}
+            style={{
+                minHeight,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                overflowY: 'auto',
+                cursor: 'text',
+                ...style,
+            }}
+        />
+    );
+};
+
+// Inject placeholder CSS once
+const RichTextareaStyles = () => (
+    <style>{`
+        [contenteditable][data-placeholder]:empty:before {
+            content: attr(data-placeholder);
+            color: #94a3b8;
+            pointer-events: none;
+        }
+        [contenteditable] strong { font-weight: 700; }
+        [contenteditable]:focus { outline: none; }
+    `}</style>
+);
+
 const CustomSelect = ({ value, onChange, options, placeholder = 'Select…' }) => {
     const [open, setOpen] = useState(false);
     const [hovered, setHovered] = useState(null);
@@ -667,6 +858,7 @@ const generateNextStoryId = (existingIds = []) => {
     return `US-${String(max + 1).padStart(3, '0')}`;
 };
 
+// ── EMPTY_FORM — includes successMessage & errorMessage ───────────────────────
 const EMPTY_FORM = {
     storyId: '', storyType: '', storyTitle: '', storySummary: '',
     moduleId: '', parentStoryId: '', sequence: '', businessContext: '',
@@ -675,7 +867,12 @@ const EMPTY_FORM = {
     module: '', feature: '', userRole: '', screenPage: '', asA: '', iWant: '',
     soThat: '', preconditions: '', mainFlow: '', alternateFlow: '', exceptionFlow: '',
     postconditions: '', businessRules: '', validationRules: '', fieldBehavior: '',
-    calculationLogic: '', apiImpacted: '', dbTablesImpacted: '', integrationImpacted: '',
+    calculationLogic: '',
+    // ── NEW FIELDS ──────────────────────────────────────────
+    successMessage: '',
+    errorMessage: '',
+    // ────────────────────────────────────────────────────────
+    apiImpacted: '', dbTablesImpacted: '', integrationImpacted: '',
     reportsImpacted: '', configurationImpacted: '', securityRBACImpact: '',
     auditTrailRequired: '', performanceImpact: '', testScenarioCount: '',
     currentStatus: '', blocked: false, blockedReason: '',
@@ -807,6 +1004,7 @@ const UserStoryMapping = () => {
         fetchModules();
     }, []);
 
+    // ── Fetch existing story data (includes new fields) ────────────────────────
     useEffect(() => {
         if (!formData.storyId) return;
         const fetchStoryData = async () => {
@@ -824,6 +1022,10 @@ const UserStoryMapping = () => {
                     preconditions: data.preconditions ?? '', mainFlow: data.main_flow ?? '', alternateFlow: data.alternate_flow ?? '',
                     exceptionFlow: data.exception_flow ?? '', postconditions: data.postconditions ?? '', businessRules: data.business_rules ?? '',
                     validationRules: data.validation_rules ?? '', fieldBehavior: data.field_behavior ?? '', calculationLogic: data.calculation_logic ?? '',
+                    // ── NEW FIELDS ──────────────────────────────────────────────
+                    successMessage: data.success_message ?? '',
+                    errorMessage: data.error_message ?? '',
+                    // ────────────────────────────────────────────────────────────
                     apiImpacted: data.api_impacted ?? '', dbTablesImpacted: data.db_tables_impacted ?? '', integrationImpacted: data.integration_impacted ?? '',
                     reportsImpacted: data.reports_impacted ?? '', configurationImpacted: data.configuration_impacted ?? '',
                     securityRBACImpact: data.security_rbac_impact ?? '', auditTrailRequired: data.audit_trail_required ?? '',
@@ -889,6 +1091,7 @@ const UserStoryMapping = () => {
     const toggleDefinitionOfDone = useCallback((id) => { setDefinitionOfDone(prev => prev.map(item => item.id === id ? { ...item, checked: !item.checked } : item)); }, []);
     const addAcceptanceCriteria = useCallback(() => { setAcceptanceCriteria(prev => { const newId = Math.max(...prev.map(ac => ac.id), 0) + 1; return [...prev, { id: newId, text: 'New acceptance criteria', checked: false }]; }); }, []);
 
+    // ── buildPayload — includes new columns ───────────────────────────────────
     const buildPayload = (extraStatus) => {
         const now = new Date().toISOString();
         let approvedAt = null;
@@ -907,6 +1110,10 @@ const UserStoryMapping = () => {
             exception_flow: formData.exceptionFlow || null, postconditions: formData.postconditions || null,
             business_rules: formData.businessRules || null, validation_rules: formData.validationRules || null,
             field_behavior: formData.fieldBehavior || null, calculation_logic: formData.calculationLogic || null,
+            // ── NEW COLUMNS ──────────────────────────────────────────────────
+            success_message: formData.successMessage || null,
+            error_message: formData.errorMessage || null,
+            // ────────────────────────────────────────────────────────────────
             api_impacted: formData.apiImpacted || null, db_tables_impacted: formData.dbTablesImpacted || null,
             integration_impacted: formData.integrationImpacted || null, reports_impacted: formData.reportsImpacted || null,
             configuration_impacted: formData.configurationImpacted || null, security_rbac_impact: formData.securityRBACImpact || null,
@@ -984,12 +1191,10 @@ const UserStoryMapping = () => {
     const teamMemberOpts = profiles.filter(p => p.full_name && p.full_name.trim() !== '').map(p => ({ value: p.full_name, label: p.role ? `${p.full_name} (${p.role})` : p.full_name }));
     const featureOpts = features.filter(f => f.feature_name && f.feature_name.trim() !== '').map(f => ({ value: f.feature_name, label: f.feature_code ? `${f.feature_name} (${f.feature_code})` : f.feature_name }));
 
-    // Related stories options — exclude current story
     const relatedStoryOpts = allStories
         .filter(s => s.story_id !== formData.storyId)
         .map(s => ({ value: s.story_id, label: `${s.story_id}${s.story_title ? ` — ${s.story_title}` : ''}` }));
 
-    // Resolved related story objects for the table
     const relatedStoryObjects = formData.relatedStoryIds
         .map(id => allStories.find(s => s.story_id === id))
         .filter(Boolean);
@@ -1001,6 +1206,7 @@ const UserStoryMapping = () => {
         <>
             <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
             <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+            <RichTextareaStyles />
 
             {toast && (
                 <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, padding: '14px 20px', borderRadius: 12, background: toast.type === 'error' ? '#DC2626' : '#16a34a', color: '#fff', fontSize: 14, fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', display: 'flex', alignItems: 'center', gap: 10, animation: 'slideIn 0.25s ease' }}>
@@ -1023,7 +1229,6 @@ const UserStoryMapping = () => {
                     </div>
                 </div>
             )}
-
 
             <style>{`
                 ::-webkit-scrollbar { display: none; }
@@ -1110,7 +1315,7 @@ const UserStoryMapping = () => {
                                                 </div>
                                                 <div><label className={labelCls}>Story Type</label><CustomSelect value={formData.storyType} onChange={v => handleInputChange('storyType', v)} options={storyTypeOpts} /></div>
                                                 <div className="sm:col-span-2"><label className={labelCls}>Story Title <span className="text-destructive">*</span></label><input type="text" value={formData.storyTitle} onChange={e => handleInputChange('storyTitle', e.target.value)} placeholder="Enter story title..." className={inputCls} /></div>
-                                                <div className="sm:col-span-2"><label className={labelCls}>Story Summary</label><textarea rows="3" value={formData.storySummary} onChange={e => handleInputChange('storySummary', e.target.value)} className={inputCls} placeholder="Brief summary..." /></div>
+                                                <div className="sm:col-span-2"><label className={labelCls}>Story Summary</label><RichTextarea rows={3} value={formData.storySummary} onChange={v => handleInputChange('storySummary', v)} className={inputCls} placeholder="Brief summary..." /></div>
                                                 <div>
                                                     <label className={labelCls}>Module ID</label>
                                                     <CustomSelect value={formData.moduleId} onChange={v => handleInputChange('moduleId', v)} options={moduleIdOpts} placeholder={modulesLoading ? 'Loading modules…' : moduleIdOpts.length === 0 ? 'No modules found' : 'Select…'} />
@@ -1122,7 +1327,7 @@ const UserStoryMapping = () => {
 
                                         <Section id="business-context" title="Business Context" icon="fa-briefcase" iconColor="bg-blue-500" collapsedSections={collapsedSections} toggleSection={toggleSection}>
                                             <div className="space-y-6">
-                                                {[['businessContext', 'Business Context', 3, 'Describe the business context...'], ['problemStatement', 'Problem Statement', 3, 'What problem are we solving?'], ['expectedOutcome', 'Expected Outcome', 3, 'What is the expected outcome?']].map(([field, lbl, rows, ph]) => (<div key={field}><label className={labelCls}>{lbl}</label><textarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} className={inputCls} placeholder={ph} /></div>))}
+                                                {[['businessContext', 'Business Context', 3, 'Describe the business context...'], ['problemStatement', 'Problem Statement', 3, 'What problem are we solving?'], ['expectedOutcome', 'Expected Outcome', 3, 'What is the expected outcome?']].map(([field, lbl, rows, ph]) => (<div key={field}><label className={labelCls}>{lbl}</label><RichTextarea rows={rows} value={formData[field]} onChange={v => handleInputChange(field, v)} className={inputCls} placeholder={ph} /></div>))}
                                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                                     <div><label className={labelCls}>Business Domain</label><CustomSelect value={formData.businessDomain} onChange={v => handleInputChange('businessDomain', v)} options={businessDomainOpts} /></div>
                                                     <div><label className={labelCls}>Process Area</label><input type="text" value={formData.processArea} onChange={e => handleInputChange('processArea', e.target.value)} placeholder="e.g. Monitoring" className={inputCls} /></div>
@@ -1153,7 +1358,7 @@ const UserStoryMapping = () => {
                                                     {[['asA', 'As a', 'text', 1, 'e.g. QA Manager'], ['iWant', 'I want', 'textarea', 2, 'e.g. to see real-time updates...'], ['soThat', 'So that', 'textarea', 2, 'e.g. I can monitor progress...']].map(([field, lbl, type, rows, ph]) => (
                                                         <div key={field}>
                                                             <label className="text-xs font-semibold text-green-700 uppercase tracking-wider mb-2 block">{lbl}</label>
-                                                            {type === 'textarea' ? <textarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} placeholder={ph} className="w-full px-4 py-2.5 bg-white border border-green-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500" /> : <input type="text" value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} placeholder={ph} className="w-full px-4 py-2.5 bg-white border border-green-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />}
+                                                            {type === 'textarea' ? <RichTextarea rows={rows} value={formData[field]} onChange={v => handleInputChange(field, v)} placeholder={ph} className="w-full px-4 py-2.5 bg-white border border-green-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500" /> : <input type="text" value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} placeholder={ph} className="w-full px-4 py-2.5 bg-white border border-green-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />}
                                                         </div>
                                                     ))}
                                                 </div>
@@ -1163,16 +1368,65 @@ const UserStoryMapping = () => {
                                         <Section id="detailed-behavior" title="Detailed Behavior" icon="fa-diagram-project" iconColor="bg-orange-500" collapsedSections={collapsedSections} toggleSection={toggleSection}>
                                             <div className="space-y-6">
                                                 {[['preconditions', 'Preconditions', 3, 'Conditions that must be met...'], ['mainFlow', 'Main Flow', 5, 'Step-by-step main flow...'], ['alternateFlow', 'Alternate Flow', 4, 'Alternate paths...'], ['exceptionFlow', 'Exception Flow', 4, 'Error handling...'], ['postconditions', 'Postconditions', 3, 'State after completion...']].map(([field, lbl, rows, ph]) => (
-                                                    <div key={field}><label className={labelCls}>{lbl}</label><textarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} className={inputCls} placeholder={ph} /></div>
+                                                    <div key={field}><label className={labelCls}>{lbl}</label><RichTextarea rows={rows} value={formData[field]} onChange={v => handleInputChange(field, v)} className={inputCls} placeholder={ph} /></div>
                                                 ))}
                                             </div>
                                         </Section>
 
+                                        {/* ── Business Rules & Validation — includes Success/Error Message ── */}
                                         <Section id="business-rules" title="Business Rules & Validation" icon="fa-scale-balanced" iconColor="bg-red-500" collapsedSections={collapsedSections} toggleSection={toggleSection}>
                                             <div className="space-y-6">
-                                                {[['businessRules', 'Business Rules', 4, 'List business rules...'], ['validationRules', 'Validation Rules', 4, 'List validation rules...'], ['fieldBehavior', 'Field Behavior', 3, 'Describe field behaviors...'], ['calculationLogic', 'Calculation Logic', 3, 'Describe calculation logic...']].map(([field, lbl, rows, ph]) => (
-                                                    <div key={field}><label className={labelCls}>{lbl}</label><textarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} className={inputCls} placeholder={ph} /></div>
+                                                {[
+                                                    ['businessRules', 'Business Rules', 4, 'List business rules...'],
+                                                    ['validationRules', 'Validation Rules', 4, 'List validation rules...'],
+                                                    ['fieldBehavior', 'Field Behavior', 3, 'Describe field behaviors...'],
+                                                    ['calculationLogic', 'Calculation Logic', 3, 'Describe calculation logic...'],
+                                                ].map(([field, lbl, rows, ph]) => (
+                                                    <div key={field}>
+                                                        <label className={labelCls}>{lbl}</label>
+                                                        <RichTextarea rows={rows} value={formData[field]} onChange={v => handleInputChange(field, v)} className={inputCls} placeholder={ph} />
+                                                    </div>
                                                 ))}
+
+                                                {/* Success Message & Error Message side-by-side */}
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                                    <div>
+                                                        <label className={labelCls}>
+                                                            <i className="fa-solid fa-circle-check text-green-500 mr-1.5"></i>
+                                                            Success Message
+                                                        </label>
+                                                        <RichTextarea
+                                                            rows={3}
+                                                            value={formData.successMessage}
+                                                            onChange={v => handleInputChange('successMessage', v)}
+                                                            className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-sm focus:ring-2 focus:ring-green-400"
+                                                            placeholder="e.g. Record saved successfully. Your changes have been applied."
+                                                            style={{ borderColor: formData.successMessage ? '#86efac' : undefined, background: formData.successMessage ? '#f0fdf4' : undefined }}
+                                                        />
+                                                        <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                                                            <i className="fa-solid fa-circle-info text-green-400" style={{ fontSize: 10 }}></i>
+                                                            Message shown on successful operation
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <label className={labelCls}>
+                                                            <i className="fa-solid fa-circle-xmark text-red-500 mr-1.5"></i>
+                                                            Error Message
+                                                        </label>
+                                                        <RichTextarea
+                                                            rows={3}
+                                                            value={formData.errorMessage}
+                                                            onChange={v => handleInputChange('errorMessage', v)}
+                                                            className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-sm focus:ring-2 focus:ring-red-400"
+                                                            placeholder="e.g. Unable to save record. Please check the required fields and try again."
+                                                            style={{ borderColor: formData.errorMessage ? '#fca5a5' : undefined, background: formData.errorMessage ? '#fff1f2' : undefined }}
+                                                        />
+                                                        <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                                                            <i className="fa-solid fa-circle-info text-red-400" style={{ fontSize: 10 }}></i>
+                                                            Message shown when an error occurs
+                                                        </p>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </Section>
 
@@ -1200,7 +1454,7 @@ const UserStoryMapping = () => {
                                         <Section id="technical-references" title="Technical References" icon="fa-code" iconColor="bg-indigo-500" collapsedSections={collapsedSections} toggleSection={toggleSection}>
                                             <div className="space-y-6">
                                                 {[['apiImpacted', 'API Impacted', 3, 'List APIs impacted...'], ['dbTablesImpacted', 'DB Tables Impacted', 2, 'List DB tables...'], ['integrationImpacted', 'Integration Impacted', 2, 'List integrations...'], ['reportsImpacted', 'Reports Impacted', 2, 'List reports...'], ['configurationImpacted', 'Configuration Impacted', 2, 'List config settings...']].map(([field, lbl, rows, ph]) => (
-                                                    <div key={field}><label className={labelCls}>{lbl}</label><textarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} className={inputCls} placeholder={ph} /></div>
+                                                    <div key={field}><label className={labelCls}>{lbl}</label><RichTextarea rows={rows} value={formData[field]} onChange={v => handleInputChange(field, v)} className={inputCls} placeholder={ph} /></div>
                                                 ))}
                                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                                     <div><label className={labelCls}>Security/RBAC Impact</label><CustomSelect value={formData.securityRBACImpact} onChange={v => handleInputChange('securityRBACImpact', v)} options={yesNoOpts} /></div>
@@ -1273,12 +1527,11 @@ const UserStoryMapping = () => {
                                                 <div><p className="text-xs text-muted-foreground mb-2">Release Status</p><CustomSelect value={formData.releaseStatus} onChange={v => handleInputChange('releaseStatus', v)} options={releaseStatusOpts} /></div>
                                                 <div className="pt-4 border-t border-border">
                                                     <div className="flex items-center gap-2 mb-2"><input type="checkbox" checked={formData.blocked} onChange={e => handleInputChange('blocked', e.target.checked)} className="w-4 h-4 text-primary rounded" /><p className="text-xs font-semibold text-muted-foreground">Blocked</p></div>
-                                                    {formData.blocked && <textarea rows="2" value={formData.blockedReason} onChange={e => handleInputChange('blockedReason', e.target.value)} className="w-full px-3 py-2 bg-input border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Describe the blocker..." />}
+                                                    {formData.blocked && <RichTextarea rows={2} value={formData.blockedReason} onChange={v => handleInputChange('blockedReason', v)} className="w-full px-3 py-2 bg-input border border-border rounded-lg text-xs focus:ring-2 focus:ring-primary" placeholder="Describe the blocker..." />}
                                                 </div>
                                             </div>
                                         </div>
 
-                                        {/* Related Items — only Related Stories, Change Requests removed */}
                                         <div className="bg-card border border-border rounded-lg shadow-sm p-6">
                                             <h3 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2"><i className="fa-solid fa-link text-primary"></i> Related Items</h3>
                                             <div className="space-y-3">
@@ -1332,7 +1585,6 @@ const UserStoryMapping = () => {
                             onClick={() => setShowRelatedStories(false)}>
                             <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.18)', width: '100%', maxWidth: 680, maxHeight: '85vh', display: 'flex', flexDirection: 'column', fontFamily: "'Roboto', sans-serif" }}
                                 onClick={e => e.stopPropagation()}>
-                                {/* Modal header */}
                                 <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                                         <div style={{ width: 36, height: 36, background: '#eff6ff', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1347,8 +1599,6 @@ const UserStoryMapping = () => {
                                         <i className="fa-solid fa-times"></i>
                                     </button>
                                 </div>
-
-                                {/* Dropdown selector */}
                                 <div style={{ padding: '16px 24px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
                                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                         Add Related Story
@@ -1372,8 +1622,6 @@ const UserStoryMapping = () => {
                                         />
                                     )}
                                 </div>
-
-                                {/* Table of linked stories */}
                                 <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px 20px' }}>
                                     {relatedStoryObjects.length === 0 ? (
                                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 0', gap: 10 }}>
@@ -1429,8 +1677,6 @@ const UserStoryMapping = () => {
                                         </div>
                                     )}
                                 </div>
-
-                                {/* Footer */}
                                 <div style={{ padding: '14px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
                                     <span style={{ fontSize: 12, color: '#94a3b8' }}>{formData.relatedStoryIds.length} related {formData.relatedStoryIds.length === 1 ? 'story' : 'stories'} linked</span>
                                     <button onClick={() => setShowRelatedStories(false)} style={{ padding: '9px 22px', background: '#15803d', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Done</button>

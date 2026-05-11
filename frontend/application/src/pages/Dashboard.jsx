@@ -4,12 +4,10 @@ import { supabase } from "../services/supabaseClient";
 import Header from "../components/Header";
 import StatusChart from "../components/StatusChart";
 
-// ── Skeleton loader ──────────────────────────────────────────────────────────
 function Skeleton({ className = "" }) {
     return <div className={`animate-pulse bg-muted rounded ${className}`} />;
 }
 
-// ── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({ icon, iconBg, iconColor, label, value, sub, subColor, loading }) {
     return (
         <div className="bg-card border border-border rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
@@ -35,13 +33,11 @@ function StatCard({ icon, iconBg, iconColor, label, value, sub, subColor, loadin
     );
 }
 
-// ── Toast ────────────────────────────────────────────────────────────────────
 function Toast({ toasts }) {
     return (
         <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
             {toasts.map(t => (
-                <div key={t.id} className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg text-sm font-medium text-white pointer-events-auto
-                    ${t.type === "error" ? "bg-red-600" : "bg-green-600"}`}>
+                <div key={t.id} className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg text-sm font-medium text-white pointer-events-auto ${t.type === "error" ? "bg-red-600" : "bg-green-600"}`}>
                     <i className={`fa-solid ${t.type === "error" ? "fa-times-circle" : "fa-check-circle"}`} />
                     {t.message}
                 </div>
@@ -50,7 +46,6 @@ function Toast({ toasts }) {
     );
 }
 
-// ── Assignment Badge ─────────────────────────────────────────────────────────
 function AssignmentBadge({ status }) {
     const map = {
         Passed: "bg-green-500/10 text-green-600",
@@ -72,7 +67,6 @@ function AssignmentBadge({ status }) {
     );
 }
 
-// ── My Assignments Section ───────────────────────────────────────────────────
 function MyAssignments({ userId }) {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
@@ -83,143 +77,70 @@ function MyAssignments({ userId }) {
 
     useEffect(() => {
         if (!userId) return;
-        console.log("MyAssignments: fetching for userId =", userId);
         fetchMyAssignments();
     }, [userId]); // eslint-disable-line
 
     async function fetchMyAssignments() {
         setLoading(true);
-
-        // Resolve both UUID and name so we match regardless of what assigned_to stores
-        const { data: profileData } = await supabase
-            .from("profiles")
-            .select("id, full_name, email")
-            .eq("id", userId)
-            .single();
-
+        const { data: profileData } = await supabase.from("profiles").select("id, full_name, email").eq("id", userId).single();
         const userName = profileData?.full_name || profileData?.email || userId;
-
-        await Promise.all([
-            fetchMyTestCases(userName),
-            fetchMyModules(userName),
-            fetchMyFeatures(userName),
-        ]);
+        await Promise.all([fetchMyTestCases(userName), fetchMyModules(userName), fetchMyFeatures(userName)]);
         setLoading(false);
     }
 
-    // ── Paginated fetch for test cases ───────────────────────────────────────
     async function fetchMyTestCases(userName) {
         const PAGE_SIZE = 1000;
         let allById = [], allByName = [], from = 0;
-
         while (true) {
             const [byId, byName] = await Promise.all([
-                supabase
-                    .from("test_cases")
-                    .select(`id, name, test_case_id, status, priority, modules ( module_name ), versions ( version_number )`)
-                    .eq("assigned_to", userId)
-                    .order("created_at", { ascending: false })
-                    .range(from, from + PAGE_SIZE - 1),
-                supabase
-                    .from("test_cases")
-                    .select(`id, name, test_case_id, status, priority, modules ( module_name ), versions ( version_number )`)
-                    .eq("assigned_to", userName)
-                    .order("created_at", { ascending: false })
-                    .range(from, from + PAGE_SIZE - 1),
+                supabase.from("test_cases").select(`id, name, test_case_id, status, priority, modules ( module_name ), versions ( version_number )`).eq("assigned_to", userId).order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
+                supabase.from("test_cases").select(`id, name, test_case_id, status, priority, modules ( module_name ), versions ( version_number )`).eq("assigned_to", userName).order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
             ]);
-
             allById = [...allById, ...(byId.data || [])];
             allByName = [...allByName, ...(byName.data || [])];
-
-            // Stop when both pages return fewer rows than PAGE_SIZE
             if ((byId.data?.length || 0) < PAGE_SIZE && (byName.data?.length || 0) < PAGE_SIZE) break;
             from += PAGE_SIZE;
         }
-
-        const merged = [...allById, ...allByName];
-        const unique = Array.from(new Map(merged.map(tc => [tc.id, tc])).values());
-        setMyTestCases(unique);
+        setMyTestCases(Array.from(new Map([...allById, ...allByName].map(tc => [tc.id, tc])).values()));
     }
 
-    // ── Paginated fetch for modules ──────────────────────────────────────────
     async function fetchMyModules(userName) {
         const PAGE_SIZE = 1000;
         let allTcs = [], from = 0;
-
         while (true) {
             const [byId, byName] = await Promise.all([
-                supabase
-                    .from("test_cases")
-                    .select("module_id")
-                    .eq("assigned_to", userId)
-                    .range(from, from + PAGE_SIZE - 1),
-                supabase
-                    .from("test_cases")
-                    .select("module_id")
-                    .eq("assigned_to", userName)
-                    .range(from, from + PAGE_SIZE - 1),
+                supabase.from("test_cases").select("module_id").eq("assigned_to", userId).range(from, from + PAGE_SIZE - 1),
+                supabase.from("test_cases").select("module_id").eq("assigned_to", userName).range(from, from + PAGE_SIZE - 1),
             ]);
-
             allTcs = [...allTcs, ...(byId.data || []), ...(byName.data || [])];
-
             if ((byId.data?.length || 0) < PAGE_SIZE && (byName.data?.length || 0) < PAGE_SIZE) break;
             from += PAGE_SIZE;
         }
-
         const moduleIds = [...new Set(allTcs.map(tc => tc.module_id).filter(Boolean))];
         if (moduleIds.length === 0) { setMyModules([]); return; }
-
-        // Paginate module fetching in batches of 1000 ids
         let allModules = [];
-        for (let i = 0; i < moduleIds.length; i += PAGE_SIZE) {
-            const batchIds = moduleIds.slice(i, i + PAGE_SIZE);
-            const { data, error } = await supabase
-                .from("modules")
-                .select("id, module_name, status, test_cases ( status )")
-                .in("id", batchIds)
-                .order("module_name");
-
-            if (error) {
-                console.error("fetchMyModules error:", error);
-                break;
-            }
+        for (let i = 0; i < moduleIds.length; i += 1000) {
+            const { data, error } = await supabase.from("modules").select("id, module_name, status, test_cases ( status )").in("id", moduleIds.slice(i, i + 1000)).order("module_name");
+            if (error) break;
             allModules = [...allModules, ...(data || [])];
         }
-
         setMyModules(allModules);
     }
 
-    // ── Paginated fetch for features ─────────────────────────────────────────
     async function fetchMyFeatures(userName) {
         const PAGE_SIZE = 1000;
         let allById = [], allByName = [], from = 0;
-
         while (true) {
             const [byId, byName] = await Promise.all([
-                supabase
-                    .from("features")
-                    .select("id, feature_name, status, priority, modules ( module_name )")
-                    .eq("assign_to", userId.toString())
-                    .order("feature_name")
-                    .range(from, from + PAGE_SIZE - 1),
-                supabase
-                    .from("features")
-                    .select("id, feature_name, status, priority, modules ( module_name )")
-                    .eq("assign_to", userName)
-                    .order("feature_name")
-                    .range(from, from + PAGE_SIZE - 1),
+                supabase.from("features").select("id, feature_name, status, priority, modules ( module_name )").eq("assign_to", userId.toString()).order("feature_name").range(from, from + PAGE_SIZE - 1),
+                supabase.from("features").select("id, feature_name, status, priority, modules ( module_name )").eq("assign_to", userName).order("feature_name").range(from, from + PAGE_SIZE - 1),
             ]);
-
             allById = [...allById, ...(byId.data || [])];
             allByName = [...allByName, ...(byName.data || [])];
-
             if ((byId.data?.length || 0) < PAGE_SIZE && (byName.data?.length || 0) < PAGE_SIZE) break;
             from += PAGE_SIZE;
         }
-
-        const allFeatures = [...allById, ...allByName];
-        const unique = Array.from(new Map(allFeatures.map(f => [f.id, f])).values());
-        setMyFeatures(unique);
+        setMyFeatures(Array.from(new Map([...allById, ...allByName].map(f => [f.id, f])).values()));
     }
 
     const tabs = [
@@ -228,29 +149,20 @@ function MyAssignments({ userId }) {
         { key: "features", label: "Features", icon: "fa-list-check", count: myFeatures.length },
     ];
 
-    const isEmpty = {
-        testcases: myTestCases.length === 0,
-        modules: myModules.length === 0,
-        features: myFeatures.length === 0,
-    };
+    const isEmpty = { testcases: myTestCases.length === 0, modules: myModules.length === 0, features: myFeatures.length === 0 };
 
     return (
         <div className="bg-card border border-border rounded-lg shadow-sm">
             <div className="p-6 border-b border-border">
                 <h3 className="text-lg font-bold text-foreground mb-1 flex items-center gap-2">
-                    <i className="fa-solid fa-user-check text-primary" />
-                    My Assignments
+                    <i className="fa-solid fa-user-check text-primary" />My Assignments
                 </h3>
                 <p className="text-sm text-muted-foreground">Items assigned to you across the project</p>
             </div>
-
             <div className="grid grid-cols-3 border-b border-border divide-x divide-border">
                 {tabs.map(tab => (
-                    <button
-                        key={tab.key}
-                        onClick={() => setActiveTab(tab.key)}
-                        className={`p-4 text-center transition-colors hover:bg-muted/50 ${activeTab === tab.key ? "bg-primary/5 border-b-2 border-primary" : ""}`}
-                    >
+                    <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+                        className={`p-4 text-center transition-colors hover:bg-muted/50 ${activeTab === tab.key ? "bg-primary/5 border-b-2 border-primary" : ""}`}>
                         <div className={`text-2xl font-bold mb-1 ${activeTab === tab.key ? "text-primary" : "text-foreground"}`}>
                             {loading ? <Skeleton className="h-7 w-8 mx-auto" /> : tab.count}
                         </div>
@@ -261,24 +173,18 @@ function MyAssignments({ userId }) {
                     </button>
                 ))}
             </div>
-
             <div className="p-6">
                 {loading ? (
-                    <div className="space-y-3">
-                        {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}
-                    </div>
+                    <div className="space-y-3">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}</div>
                 ) : isEmpty[activeTab] ? (
                     <div className="text-center py-10">
                         <i className={`fa-solid ${tabs.find(t => t.key === activeTab)?.icon} text-3xl text-muted-foreground/30 mb-3 block`} />
-                        <p className="text-sm text-muted-foreground font-medium">
-                            No {tabs.find(t => t.key === activeTab)?.label.toLowerCase()} assigned to you
-                        </p>
+                        <p className="text-sm text-muted-foreground font-medium">No {tabs.find(t => t.key === activeTab)?.label.toLowerCase()} assigned to you</p>
                     </div>
                 ) : activeTab === "testcases" ? (
                     <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                         {myTestCases.map(tc => (
-                            <div key={tc.id}
-                                onClick={() => navigate("/test-execution", { state: { testCaseId: tc.id } })}
+                            <div key={tc.id} onClick={() => navigate("/test-execution", { state: { testCaseId: tc.id } })}
                                 className="p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
                                 <div className="flex items-center justify-between gap-3">
                                     <div className="flex items-center gap-3 min-w-0">
@@ -292,12 +198,7 @@ function MyAssignments({ userId }) {
                                     </div>
                                     <div className="flex items-center gap-2 flex-shrink-0">
                                         {tc.priority && (
-                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${tc.priority === "High" || tc.priority === "Critical"
-                                                ? "bg-red-100 text-red-600"
-                                                : tc.priority === "Medium"
-                                                    ? "bg-yellow-100 text-yellow-600"
-                                                    : "bg-gray-100 text-gray-500"
-                                                }`}>{tc.priority}</span>
+                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${tc.priority === "High" || tc.priority === "Critical" ? "bg-red-100 text-red-600" : tc.priority === "Medium" ? "bg-yellow-100 text-yellow-600" : "bg-gray-100 text-gray-500"}`}>{tc.priority}</span>
                                         )}
                                         <AssignmentBadge status={tc.status} />
                                     </div>
@@ -305,14 +206,12 @@ function MyAssignments({ userId }) {
                                 <div className="flex items-center gap-3 mt-2 ml-11 flex-wrap">
                                     {tc.modules?.module_name && (
                                         <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                            <i className="fa-solid fa-cube text-blue-400 text-[10px]" />
-                                            {tc.modules.module_name}
+                                            <i className="fa-solid fa-cube text-blue-400 text-[10px]" />{tc.modules.module_name}
                                         </span>
                                     )}
                                     {tc.versions?.version_number && (
                                         <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                            <i className="fa-solid fa-code-branch text-emerald-400 text-[10px]" />
-                                            {tc.versions.version_number}
+                                            <i className="fa-solid fa-code-branch text-emerald-400 text-[10px]" />{tc.versions.version_number}
                                         </span>
                                     )}
                                 </div>
@@ -329,8 +228,7 @@ function MyAssignments({ userId }) {
                             const pending = tcs.filter(t => t.status === "Pending").length;
                             const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
                             return (
-                                <div key={m.id}
-                                    onClick={() => navigate("/modules", { state: { moduleId: m.id } })}
+                                <div key={m.id} onClick={() => navigate("/modules", { state: { moduleId: m.id } })}
                                     className="p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
                                     <div className="flex items-center justify-between gap-3 mb-2">
                                         <div className="flex items-center gap-3 min-w-0">
@@ -347,7 +245,7 @@ function MyAssignments({ userId }) {
                                     {total > 0 && (
                                         <div className="ml-11">
                                             <div className="flex items-center gap-2 mb-1">
-                                                <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
+                                                <div className="flex-1 bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
                                                     <div className="bg-green-500 h-1.5 rounded-full transition-all" style={{ width: `${pct}%` }} />
                                                 </div>
                                                 <span className="text-xs text-muted-foreground w-8 text-right">{pct}%</span>
@@ -366,8 +264,7 @@ function MyAssignments({ userId }) {
                 ) : activeTab === "features" ? (
                     <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                         {myFeatures.map(f => (
-                            <div key={f.id}
-                                onClick={() => navigate("/features")}
+                            <div key={f.id} onClick={() => navigate("/features")}
                                 className="flex items-center justify-between p-3 border border-border rounded-lg hover:border-primary hover:bg-muted/30 cursor-pointer transition-all">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className="w-8 h-8 bg-purple-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -375,19 +272,12 @@ function MyAssignments({ userId }) {
                                     </div>
                                     <div className="min-w-0">
                                         <p className="text-sm font-medium text-foreground truncate">{f.feature_name}</p>
-                                        {f.modules?.module_name && (
-                                            <p className="text-xs text-muted-foreground">{f.modules.module_name}</p>
-                                        )}
+                                        {f.modules?.module_name && <p className="text-xs text-muted-foreground">{f.modules.module_name}</p>}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                                     {f.priority && (
-                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${f.priority === "High" || f.priority === "Critical"
-                                            ? "bg-red-100 text-red-600"
-                                            : f.priority === "Medium"
-                                                ? "bg-yellow-100 text-yellow-600"
-                                                : "bg-gray-100 text-gray-500"
-                                            }`}>{f.priority}</span>
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${f.priority === "High" || f.priority === "Critical" ? "bg-red-100 text-red-600" : f.priority === "Medium" ? "bg-yellow-100 text-yellow-600" : "bg-gray-100 text-gray-500"}`}>{f.priority}</span>
                                     )}
                                     {f.status && <AssignmentBadge status={f.status} />}
                                 </div>
@@ -400,22 +290,12 @@ function MyAssignments({ userId }) {
     );
 }
 
-// ── Main Dashboard ───────────────────────────────────────────────────────────
 export default function Dashboard() {
     const navigate = useNavigate();
-
     const [loading, setLoading] = useState(true);
     const [toasts, setToasts] = useState([]);
     const [currentUserId, setCurrentUserId] = useState(null);
-
-    const [stats, setStats] = useState({
-        total: 0,
-        passed: 0,
-        failed: 0,
-        passRate: 0,
-        executions: 0,
-    });
-
+    const [stats, setStats] = useState({ total: 0, passed: 0, failed: 0, passRate: 0, executions: 0 });
     const [versions, setVersions] = useState([]);
     const [modules, setModules] = useState([]);
     const [failedIssues, setFailedIssues] = useState([]);
@@ -430,181 +310,94 @@ export default function Dashboard() {
     }, []);
 
     useEffect(() => {
-        supabase.auth.getUser().then(({ data: { user } }) => {
-            if (user) setCurrentUserId(user.id);
-        });
+        supabase.auth.getUser().then(({ data: { user } }) => { if (user) setCurrentUserId(user.id); });
     }, []);
 
     const fetchAll = useCallback(async () => {
         setLoading(true);
         try {
-            await Promise.all([
-                fetchStats(),
-                fetchVersionStats(),
-                fetchModules(),
-                fetchFailedIssues(),
-                fetchTeamPerformance(),
-                fetchRecentExecutions(),
-            ]);
-        } catch (e) {
-            addToast("Error loading dashboard data", "error");
-        }
+            await Promise.all([fetchStats(), fetchVersionStats(), fetchModules(), fetchFailedIssues(), fetchTeamPerformance(), fetchRecentExecutions()]);
+        } catch (e) { addToast("Error loading dashboard data", "error"); }
         setLoading(false);
     }, []); // eslint-disable-line
 
     useEffect(() => { fetchAll(); }, [fetchAll]);
 
     async function fetchStats() {
-        const [
-            { count: total },
-            { count: passed },
-            { count: failed },
-            { count: executions },
-        ] = await Promise.all([
+        const [{ count: total }, { count: passed }, { count: failed }, { count: executions }] = await Promise.all([
             supabase.from("test_cases").select("*", { count: "exact", head: true }),
             supabase.from("test_executions").select("*", { count: "exact", head: true }).eq("execution_status", "pass"),
             supabase.from("test_executions").select("*", { count: "exact", head: true }).eq("execution_status", "fail"),
             supabase.from("test_executions").select("*", { count: "exact", head: true }),
         ]);
-
-        const t = total || 0;
-        const p = passed || 0;
-        const f = failed || 0;
-        const exec = executions || 0;
-        const passRate = exec > 0 ? Math.round((p / exec) * 100) : 0;
-
-        setStats({ total: t, passed: p, failed: f, passRate, executions: exec });
+        const t = total || 0, p = passed || 0, f = failed || 0, exec = executions || 0;
+        setStats({ total: t, passed: p, failed: f, passRate: exec > 0 ? Math.round((p / exec) * 100) : 0, executions: exec });
     }
 
     async function fetchVersionStats() {
-        const { data: versionsData, error: vErr } = await supabase
-            .from("versions")
-            .select(`id, version_number, status, test_cases ( status )`)
-            .order("created_date", { ascending: false })
-            .limit(3);
-
-        if (vErr || !versionsData) return;
-
+        const { data, error } = await supabase.from("versions").select(`id, version_number, status, test_cases ( status )`).order("created_date", { ascending: false }).limit(3);
+        if (error || !data) return;
         const colorOptions = [
             { text: "text-primary", iconBg: "bg-primary/10", bar: "bg-primary" },
             { text: "text-secondary", iconBg: "bg-secondary/10", bar: "bg-secondary" },
             { text: "text-accent", iconBg: "bg-accent/10", bar: "bg-accent" },
         ];
-
-        const shaped = versionsData.map((v, i) => {
+        setVersions(data.map((v, i) => {
             const tcs = v.test_cases || [];
             const total = tcs.length;
             const passed = tcs.filter(t => t.status === "Passed").length;
             const failed = tcs.filter(t => t.status === "Failed").length;
             const pending = tcs.filter(t => t.status === "Pending").length;
             const completion = total > 0 ? Math.round(((passed + failed) / total) * 100) : 0;
-            return {
-                version_id: v.id, label: v.version_number, status: v.status,
-                total, passed, failed, pending, completion,
-                colors: colorOptions[i] || colorOptions[0],
-            };
-        });
-
-        setVersions(shaped);
+            return { version_id: v.id, label: v.version_number, status: v.status, total, passed, failed, pending, completion, colors: colorOptions[i] || colorOptions[0] };
+        }));
     }
 
     async function fetchModules() {
-        const { data, error } = await supabase
-            .from("modules")
-            .select("id, module_name, test_cases(status)")
-            .order("module_name");
-
+        const { data, error } = await supabase.from("modules").select("id, module_name, test_cases(status)").order("module_name");
         if (error || !data) return;
-
-        const shaped = data.map(m => {
+        setModules(data.map(m => {
             const tcs = m.test_cases || [];
             const total = tcs.length;
             const passed = tcs.filter(t => t.status === "Passed").length;
             const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
-            return {
-                id: m.id, name: m.module_name, pct, total, passed,
-                color: pct >= 80 ? "bg-green-500" : pct >= 50 ? "bg-accent" : "bg-destructive",
-            };
-        }).sort((a, b) => b.pct - a.pct);
-
-        setModules(shaped);
+            return { id: m.id, name: m.module_name, pct, total, passed, color: pct >= 80 ? "bg-green-500" : pct >= 50 ? "bg-accent" : "bg-destructive" };
+        }).sort((a, b) => b.pct - a.pct));
     }
 
     async function fetchFailedIssues() {
-        const { data, error } = await supabase
-            .from("test_cases")
-            .select("*")
-            .in("status", ["fail", "Failed", "failed"])
-            .order("created_at", { ascending: false })
-            .limit(4);
-
-        if (error) {
-            console.error("fetchFailedIssues error:", error);
-            addToast("Failed to load recent issues", "error");
-            return;
-        }
-
+        const { data, error } = await supabase.from("test_cases").select("*").in("status", ["fail", "Failed", "failed"]).order("created_at", { ascending: false }).limit(4);
+        if (error) { addToast("Failed to load recent issues", "error"); return; }
         if (!data) return;
-
         const priorityMap = {
             Critical: { iconBg: "bg-destructive/10", iconColor: "text-destructive", icon: "fa-bug", severityBg: "bg-destructive/10", severityColor: "text-destructive" },
             High: { iconBg: "bg-accent/10", iconColor: "text-accent", icon: "fa-exclamation-triangle", severityBg: "bg-accent/10", severityColor: "text-accent" },
             Medium: { iconBg: "bg-accent/10", iconColor: "text-accent", icon: "fa-exclamation-triangle", severityBg: "bg-accent/10", severityColor: "text-accent" },
             Low: { iconBg: "bg-muted", iconColor: "text-muted-foreground", icon: "fa-circle-info", severityBg: "bg-muted", severityColor: "text-muted-foreground" },
         };
-
-        setFailedIssues(data.map(tc => ({
-            ...tc,
-            style: priorityMap[tc.priority] || priorityMap.Low,
-        })));
+        setFailedIssues(data.map(tc => ({ ...tc, style: priorityMap[tc.priority] || priorityMap.Low })));
     }
 
     async function fetchTeamPerformance() {
-        const { data: execData, error } = await supabase
-            .from("test_executions")
-            .select(`executed_by, execution_status, executor:profiles!executed_by ( id, full_name, avatar_url, email )`);
-
+        const { data: execData, error } = await supabase.from("test_executions").select(`executed_by, execution_status, executor:profiles!executed_by ( id, full_name, avatar_url, email )`);
         if (error || !execData) return;
-
         const memberMap = {};
         execData.forEach(e => {
             const profile = e.executor;
             if (!profile) return;
             const id = profile.id;
-            if (!memberMap[id]) {
-                memberMap[id] = {
-                    id,
-                    name: profile.full_name || profile.email || "Unknown",
-                    avatar: profile.avatar_url,
-                    assigned: 0,
-                    completed: 0,
-                };
-            }
+            if (!memberMap[id]) memberMap[id] = { id, name: profile.full_name || profile.email || "Unknown", avatar: profile.avatar_url, assigned: 0, completed: 0 };
             memberMap[id].assigned++;
             if (e.execution_status === "Passed") memberMap[id].completed++;
         });
-
-        const shaped = Object.values(memberMap)
-            .map(m => {
-                const passRate = m.assigned > 0 ? Math.round((m.completed / m.assigned) * 100) : 0;
-                return { ...m, passRate, barColor: passRate >= 80 ? "bg-green-500" : passRate >= 50 ? "bg-accent" : "bg-destructive" };
-            })
-            .sort((a, b) => b.assigned - a.assigned);
-
-        setTeamMembers(shaped);
+        setTeamMembers(Object.values(memberMap).map(m => {
+            const passRate = m.assigned > 0 ? Math.round((m.completed / m.assigned) * 100) : 0;
+            return { ...m, passRate, barColor: passRate >= 80 ? "bg-green-500" : passRate >= 50 ? "bg-accent" : "bg-destructive" };
+        }).sort((a, b) => b.assigned - a.assigned));
     }
 
     async function fetchRecentExecutions() {
-        const { data, error } = await supabase
-            .from("test_executions")
-            .select(`
-                id, execution_status, created_at, environment, browser,
-                executor:profiles!executed_by ( full_name, avatar_url ),
-                test_cases ( name, test_case_id )
-            `)
-            .order("created_at", { ascending: false })
-            .limit(8);
-
+        const { data, error } = await supabase.from("test_executions").select(`id, execution_status, created_at, environment, browser, executor:profiles!executed_by ( full_name, avatar_url ), test_cases ( name, test_case_id )`).order("created_at", { ascending: false }).limit(8);
         if (error || !data) return;
         setRecentExecutions(data);
     }
@@ -619,7 +412,6 @@ export default function Dashboard() {
         <div className="flex-1 flex flex-col">
             <Toast toasts={toasts} />
             <Header />
-
             <main className="flex-1 overflow-auto">
                 <div className="p-4 lg:p-8 space-y-6 lg:space-y-8">
 
@@ -632,7 +424,7 @@ export default function Dashboard() {
                         <StatCard loading={loading} icon="fa-play-circle" iconBg="bg-secondary/10" iconColor="text-secondary" label="Executions" value={stats.executions} sub="Total runs" subColor="text-muted-foreground" />
                     </div>
 
-                    {/* ── MY ASSIGNMENTS ── */}
+                    {/* ── My Assignments ── */}
                     {currentUserId && <MyAssignments userId={currentUserId} />}
 
                     {/* ── Active Versions + Status Chart ── */}
@@ -687,7 +479,7 @@ export default function Dashboard() {
                                         <div className="sm:text-right flex-shrink-0">
                                             <div className="text-2xl font-bold text-foreground mb-1">{v.completion}%</div>
                                             <p className="text-xs text-muted-foreground mb-2">Executed</p>
-                                            <div className="w-24 bg-muted rounded-full h-2 ml-auto">
+                                            <div className="w-24 bg-slate-200 dark:bg-slate-700 rounded-full h-2 ml-auto">
                                                 <div className={`${v.colors.bar} h-2 rounded-full`} style={{ width: `${v.completion}%` }} />
                                             </div>
                                         </div>
@@ -721,7 +513,7 @@ export default function Dashboard() {
                                                         <span className="font-medium text-foreground">{s.label}</span>
                                                         <span className={`font-semibold ${s.textColor}`}>{s.value} ({pct}%)</span>
                                                     </div>
-                                                    <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
+                                                    <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
                                                         <div className={`${s.color} h-3 rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
                                                     </div>
                                                 </div>
@@ -765,7 +557,7 @@ export default function Dashboard() {
                                             <span className="text-sm font-medium text-foreground truncate mr-4">{m.name}</span>
                                             <span className="text-sm font-semibold text-foreground flex-shrink-0">{m.pct}%</span>
                                         </div>
-                                        <div className="w-full bg-muted rounded-full h-2">
+                                        <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
                                             <div className={`${m.color} h-2 rounded-full transition-all duration-700`} style={{ width: `${m.pct}%` }} />
                                         </div>
                                         <p className="text-xs text-muted-foreground mt-1">{m.passed} / {m.total} passed</p>
@@ -800,9 +592,7 @@ export default function Dashboard() {
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2 mb-1">
                                                 <h4 className="text-sm font-semibold text-foreground truncate">{issue.test_case_id}</h4>
-                                                {issue.test_type && (
-                                                    <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">{issue.test_type}</span>
-                                                )}
+                                                {issue.test_type && <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">{issue.test_type}</span>}
                                             </div>
                                             <p className="text-xs text-muted-foreground mb-1 line-clamp-2">{issue.name}</p>
                                             <div className="flex flex-wrap items-center gap-2">
@@ -844,12 +634,13 @@ export default function Dashboard() {
                                 {loading ? (
                                     <div className="p-6 space-y-4">{[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
                                 ) : teamMembers.length > 0 ? (
-                                    <table className="w-full">
+                                    <table className="w-full table-fixed">
                                         <thead className="bg-muted border-b border-border">
                                             <tr>
-                                                {["Tester", "Executions", "Passed", "Pass Rate"].map(h => (
-                                                    <th key={h} className="px-6 py-3 text-left text-xs font-semibold text-foreground uppercase tracking-wider">{h}</th>
-                                                ))}
+                                                <th className="px-6 py-3 text-left text-xs font-semibold text-foreground uppercase tracking-wider w-[35%]">Tester</th>
+                                                <th className="px-6 py-3 text-left text-xs font-semibold text-foreground uppercase tracking-wider w-[18%]">Executions</th>
+                                                <th className="px-6 py-3 text-left text-xs font-semibold text-foreground uppercase tracking-wider w-[15%]">Passed</th>
+                                                <th className="px-6 py-3 text-left text-xs font-semibold text-foreground uppercase tracking-wider w-[32%]">Pass Rate</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-border">
@@ -858,23 +649,24 @@ export default function Dashboard() {
                                                     <td className="px-6 py-4">
                                                         <div className="flex items-center gap-3">
                                                             {m.avatar ? (
-                                                                <img src={m.avatar} alt={m.name} className="w-9 h-9 rounded-full object-cover" />
+                                                                <img src={m.avatar} alt={m.name} className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
                                                             ) : (
-                                                                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+                                                                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
                                                                     {m.name[0]?.toUpperCase()}
                                                                 </div>
                                                             )}
-                                                            <p className="text-sm font-medium text-foreground">{m.name}</p>
+                                                            <p className="text-sm font-medium text-foreground truncate">{m.name}</p>
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4 text-sm text-foreground">{m.assigned}</td>
                                                     <td className="px-6 py-4 text-sm text-foreground">{m.completed}</td>
+                                                    {/* ── Pass Rate: visible track bar + tabular % ── */}
                                                     <td className="px-6 py-4">
                                                         <div className="flex items-center gap-2">
-                                                            <div className="flex-1 bg-muted rounded-full h-2 max-w-[100px]">
-                                                                <div className={`${m.barColor} h-2 rounded-full`} style={{ width: `${m.passRate}%` }} />
+                                                            <div className="w-20 bg-slate-200 dark:bg-slate-700 rounded-full h-2 flex-shrink-0">
+                                                                <div className={`${m.barColor} h-2 rounded-full transition-all duration-500`} style={{ width: `${m.passRate}%` }} />
                                                             </div>
-                                                            <span className="text-sm font-medium text-foreground">{m.passRate}%</span>
+                                                            <span className="text-sm font-medium text-foreground tabular-nums w-9">{m.passRate}%</span>
                                                         </div>
                                                     </td>
                                                 </tr>
