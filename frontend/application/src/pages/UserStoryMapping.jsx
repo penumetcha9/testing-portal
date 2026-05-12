@@ -689,6 +689,7 @@ const EMPTY_FORM = {
     reportsImpacted: '', configurationImpacted: '', securityRBACImpact: '',
     auditTrailRequired: '', performanceImpact: '', testScenarioCount: '',
     currentStatus: '', blocked: false, blockedReason: '', acceptanceCriteriaText: '',
+    umlStyleFlowText: '', useCasesScenariosText: '',
     storyPoints: '', estimateHours: '', plannedSprint: '', plannedRelease: '', versionBuild: '',
     assignedBa: [], assignedFrontendDeveloper: [], assignedBackendDeveloper: [], assignedTester: [],
     linkedFeatures: [],
@@ -706,7 +707,6 @@ const UserStoryMapping = () => {
     const [collapsedSections, setCollapsedSections] = useState({});
     const [lastSaved, setLastSaved] = useState('never');
     const [showHistoryModal, setShowHistoryModal] = useState(false);
-    const [showRelatedStories, setShowRelatedStories] = useState(false);
     const [showRelatedBugs, setShowRelatedBugs] = useState(false);
     const [saveLoading, setSaveLoading] = useState(false);
     const [storyUUID, setStoryUUID] = useState(null);
@@ -868,6 +868,8 @@ const UserStoryMapping = () => {
                         : Array.isArray(data.acceptance_criteria)
                             ? data.acceptance_criteria.map(c => (typeof c === 'string' ? c : (c.text ?? ''))).filter(Boolean).join('\n')
                             : '',
+                    umlStyleFlowText: typeof data.uml_style_flow === 'string' ? data.uml_style_flow : '',
+                    useCasesScenariosText: typeof data.use_cases_scenarios === 'string' ? data.use_cases_scenarios : '',
                     storyPoints: data.story_points ?? '',
                     estimateHours: data.estimate_hours ?? '',
                     plannedSprint: data.planned_sprint ?? '',
@@ -1025,6 +1027,8 @@ const UserStoryMapping = () => {
             blocked: formData.blocked ?? false,
             blocked_reason: formData.blockedReason || null,
             acceptance_criteria: formData.acceptanceCriteriaText || null,
+            uml_style_flow: formData.umlStyleFlowText || null,
+            use_cases_scenarios: formData.useCasesScenariosText || null,
             definition_of_done: definitionOfDone,
             status: extraStatus,
             story_points: formData.storyPoints ? parseInt(formData.storyPoints) : null,
@@ -1428,6 +1432,36 @@ const UserStoryMapping = () => {
                                                     </p>
                                                 </div>
                                                 <div>
+                                                    <label className={labelCls}>UML Style Flow</label>
+                                                    <textarea
+                                                        rows="10"
+                                                        value={formData.umlStyleFlowText}
+                                                        onChange={e => handleInputChange('umlStyleFlowText', e.target.value)}
+                                                        placeholder={"Paste a UML-style flow / sequence here — tabs and line breaks are preserved.\n\nExample:\nActor\tAction\tSystem Response\nUser\tEnters credentials\tValidates input\nSystem\tChecks DB\tReturns auth token\nUser\tRedirected to dashboard\t—"}
+                                                        className={`${inputCls} font-mono whitespace-pre`}
+                                                        style={{ minHeight: 220, overflowX: 'auto', tabSize: 4 }}
+                                                    />
+                                                    <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                                                        <i className="fa-solid fa-circle-info text-indigo-400" style={{ fontSize: 10 }}></i>
+                                                        Tip: paste a flow table from your modeling tool / spreadsheet — column alignment is kept.
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <label className={labelCls}>Use Cases &amp; Scenarios</label>
+                                                    <textarea
+                                                        rows="10"
+                                                        value={formData.useCasesScenariosText}
+                                                        onChange={e => handleInputChange('useCasesScenariosText', e.target.value)}
+                                                        placeholder={"Paste use cases / scenarios here — tabular layout is preserved.\n\nExample:\nID\tScenario\tExpected Outcome\nUC-1\tValid login\tDashboard loads\nUC-2\tInvalid password\tError shown\nUC-3\tLocked account\tWarning shown"}
+                                                        className={`${inputCls} font-mono whitespace-pre`}
+                                                        style={{ minHeight: 220, overflowX: 'auto', tabSize: 4 }}
+                                                    />
+                                                    <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                                                        <i className="fa-solid fa-circle-info text-indigo-400" style={{ fontSize: 10 }}></i>
+                                                        Tip: paste from Excel/Sheets — column tabs and row breaks remain intact.
+                                                    </p>
+                                                </div>
+                                                <div>
                                                     <label className={labelCls}>Definition of Done</label>
                                                     <div className="space-y-2">{definitionOfDone.map(item => (<div key={item.id} className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg"><input type="checkbox" checked={item.checked} onChange={() => toggleDefinitionOfDone(item.id)} className="w-4 h-4 text-primary rounded" /><p className="text-sm text-foreground">{item.text}</p></div>))}</div>
                                                 </div>
@@ -1527,14 +1561,6 @@ const UserStoryMapping = () => {
                                         </div>
 
                                         <div className="bg-card border border-border rounded-lg shadow-sm p-6">
-                                            <h3 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2"><i className="fa-solid fa-link text-primary"></i> Related Items</h3>
-                                            <div className="space-y-3">
-                                                <button onClick={() => setShowRelatedStories(true)} className="w-full flex items-center justify-between px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"><span className="text-sm font-medium text-blue-700">Related User Stories</span><span className="px-2 py-1 bg-blue-200 text-blue-700 text-xs font-semibold rounded">0</span></button>
-                                                <button onClick={() => setActiveTab('linkedfeatures')} className="w-full flex items-center justify-between px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors"><span className="text-sm font-medium text-purple-700">Linked Features</span><span className="px-2 py-1 bg-purple-200 text-purple-700 text-xs font-semibold rounded">{tabCounts.linkedfeatures ?? 0}</span></button>
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-card border border-border rounded-lg shadow-sm p-6">
                                             <h3 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2"><i className="fa-solid fa-clock text-primary"></i> Audit Information</h3>
                                             <div className="space-y-3">
                                                 <div><label className="text-xs text-muted-foreground block mb-1">Created By</label><input type="text" value={formData.createdBy} onChange={e => handleInputChange('createdBy', e.target.value)} placeholder="Your name" className="w-full px-3 py-2 bg-input border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary" /></div>
@@ -1574,7 +1600,6 @@ const UserStoryMapping = () => {
                     </footer>
 
                     {showHistoryModal && <div className="modal-overlay" onClick={() => setShowHistoryModal(false)}><div className="modal-content" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold mb-4">Story History</h3><p className="text-sm text-gray-600 mb-4">Version history for this user story.</p><div className="border-l-4 border-blue-500 pl-4 py-2"><p className="text-sm font-medium">Draft Created</p><p className="text-xs text-gray-500">Just now by System</p></div><button onClick={() => setShowHistoryModal(false)} className="mt-6 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">Close</button></div></div>}
-                    {showRelatedStories && <div className="modal-overlay" onClick={() => setShowRelatedStories(false)}><div className="modal-content" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold mb-4">Related User Stories</h3><p className="text-sm text-gray-600">No related stories found for {formData.storyId}.</p><button onClick={() => setShowRelatedStories(false)} className="mt-6 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">Close</button></div></div>}
                 </div>
             </div>
         </>
