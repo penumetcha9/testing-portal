@@ -684,7 +684,8 @@ const EMPTY_FORM = {
     module: '', feature: '', userRole: '', screenPage: '', asA: '', iWant: '',
     soThat: '', preconditions: '', mainFlow: '', alternateFlow: '', exceptionFlow: '',
     postconditions: '', businessRules: '', validationRules: '', fieldBehavior: '',
-    calculationLogic: '', apiImpacted: '', dbTablesImpacted: '', integrationImpacted: '',
+    calculationLogic: '', errorMessage: '', successMessage: '',
+    apiImpacted: '', dbTablesImpacted: '', integrationImpacted: '',
     reportsImpacted: '', configurationImpacted: '', securityRBACImpact: '',
     auditTrailRequired: '', performanceImpact: '', testScenarioCount: '',
     currentStatus: '', blocked: false, blockedReason: '', acceptanceCriteriaText: '',
@@ -848,6 +849,8 @@ const UserStoryMapping = () => {
                     validationRules: data.validation_rules ?? '',
                     fieldBehavior: data.field_behavior ?? '',
                     calculationLogic: data.calculation_logic ?? '',
+                    errorMessage: data.error_message ?? '',
+                    successMessage: data.success_message ?? '',
                     apiImpacted: data.api_impacted ?? '',
                     dbTablesImpacted: data.db_tables_impacted ?? '',
                     integrationImpacted: data.integration_impacted ?? '',
@@ -1007,6 +1010,8 @@ const UserStoryMapping = () => {
             validation_rules: formData.validationRules || null,
             field_behavior: formData.fieldBehavior || null,
             calculation_logic: formData.calculationLogic || null,
+            error_message: formData.errorMessage || null,
+            success_message: formData.successMessage || null,
             api_impacted: formData.apiImpacted || null,
             db_tables_impacted: formData.dbTablesImpacted || null,
             integration_impacted: formData.integrationImpacted || null,
@@ -1378,6 +1383,30 @@ const UserStoryMapping = () => {
                                                 {[['businessRules', 'Business Rules', 4, 'List business rules...'], ['validationRules', 'Validation Rules', 4, 'List validation rules...'], ['fieldBehavior', 'Field Behavior', 3, 'Describe field behaviors...'], ['calculationLogic', 'Calculation Logic', 3, 'Describe calculation logic...']].map(([field, lbl, rows, ph]) => (
                                                     <div key={field}><label className={labelCls}>{lbl}</label><textarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} className={inputCls} placeholder={ph} /></div>
                                                 ))}
+                                                <div>
+                                                    <label className="text-xs font-semibold text-red-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                                        <i className="fa-solid fa-circle-exclamation text-red-500" style={{ fontSize: 11 }}></i>Error Message
+                                                    </label>
+                                                    <textarea
+                                                        rows="3"
+                                                        value={formData.errorMessage}
+                                                        onChange={e => handleInputChange('errorMessage', e.target.value)}
+                                                        placeholder='e.g. "Email address is invalid. Please enter a valid email."'
+                                                        className="w-full px-4 py-2.5 bg-red-50 border border-red-300 text-red-900 placeholder-red-400 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs font-semibold text-green-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                                        <i className="fa-solid fa-circle-check text-green-500" style={{ fontSize: 11 }}></i>Success Message
+                                                    </label>
+                                                    <textarea
+                                                        rows="3"
+                                                        value={formData.successMessage}
+                                                        onChange={e => handleInputChange('successMessage', e.target.value)}
+                                                        placeholder='e.g. "Your changes have been saved successfully."'
+                                                        className="w-full px-4 py-2.5 bg-green-50 border border-green-300 text-green-900 placeholder-green-400 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                                    />
+                                                </div>
                                             </div>
                                         </Section>
 
