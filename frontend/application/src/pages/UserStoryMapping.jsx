@@ -294,46 +294,84 @@ const TestCasesTab = ({ storyId, storyUUID }) => {
     );
 };
 
-const BugsTab = ({ storyId, storyUUID }) => {
-    const [bugs, setBugs] = useState([]);
+const LinkedFeaturesTab = ({ storyId, storyUUID }) => {
+    const [features, setFeatures] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [showForm, setShowForm] = useState(false);
-    const [saving, setSaving] = useState(false);
-    const [newBug, setNewBug] = useState({ title: '', description: '', severity: '', status: 'Open', reported_by: '' });
 
-    useEffect(() => { if (!storyUUID) { setLoading(false); return; } fetchBugs(); }, [storyUUID]);
+    useEffect(() => {
+        if (!storyUUID && !storyId) { setLoading(false); return; }
+        fetchFeatures();
+    }, [storyUUID, storyId]);
 
-    const fetchBugs = async () => { setLoading(true); try { const { data, error } = await supabase.from('bugs').select('*').eq('story_id', storyUUID).order('created_at', { ascending: false }); if (error) throw error; setBugs(data || []); } catch (err) { setError(err.message); } finally { setLoading(false); } };
-    const handleAddBug = async () => { if (!newBug.title.trim()) { alert('Bug title is required'); return; } setSaving(true); try { const bugCount = bugs.length + 1; const bugId = `BUG-${String(bugCount).padStart(3, '0')}`; const { error } = await supabase.from('bugs').insert([{ story_id: storyUUID, bug_id: bugId, ...newBug }]); if (error) throw error; setNewBug({ title: '', description: '', severity: '', status: 'Open', reported_by: '' }); setShowForm(false); await fetchBugs(); } catch (err) { alert(`Error: ${err.message}`); } finally { setSaving(false); } };
+    const fetchFeatures = async () => {
+        setLoading(true); setError(null);
+        try {
+            const cols = 'id, feature_code, feature_name, description, user_story, assign_to, module_id, created_at';
+            const seen = new Set();
+            const combined = [];
 
-    const severityColor = (s) => ({ 'Critical': 'bg-red-100 text-red-700 border-red-200', 'High': 'bg-orange-100 text-orange-700 border-orange-200', 'Medium': 'bg-yellow-100 text-yellow-700 border-yellow-200', 'Low': 'bg-green-100 text-green-700 border-green-200' }[s] || 'bg-gray-100 text-gray-600 border-gray-200');
-    const statusColor = (s) => ({ 'Open': 'bg-red-50 text-red-600', 'In Progress': 'bg-blue-50 text-blue-600', 'Fixed': 'bg-green-50 text-green-600', 'Closed': 'bg-gray-100 text-gray-500', 'Reopened': 'bg-orange-50 text-orange-600' }[s] || 'bg-gray-100 text-gray-600');
+            const addUnique = (rows) => {
+                (rows || []).forEach(f => {
+                    if (!seen.has(f.id)) { seen.add(f.id); combined.push(f); }
+                });
+            };
 
-    if (loading) return <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div></div>;
+            // 1. Fetch by features.user_story (story code, set from FeaturesLibrary)
+            if (storyId) {
+                const { data } = await supabase
+                    .from('features')
+                    .select(cols)
+                    .eq('user_story', storyId)
+                    .order('created_at', { ascending: false });
+                addUnique(data);
+            }
+
+            // 2. Fetch via user_story_features join table (set from UserStoryMapping)
+            if (storyUUID) {
+                const { data: links } = await supabase
+                    .from('user_story_features')
+                    .select('feature_id, feature_name')
+                    .eq('story_uuid', storyUUID);
+                const ids = (links || []).map(l => l.feature_id).filter(Boolean);
+                if (ids.length > 0) {
+                    const { data } = await supabase
+                        .from('features')
+                        .select(cols)
+                        .in('id', ids)
+                        .order('created_at', { ascending: false });
+                    addUnique(data);
+                }
+                // Fallback: feature_name only (feature_id was null at link time)
+                const namesOnly = (links || []).filter(l => !l.feature_id && l.feature_name).map(l => l.feature_name);
+                if (namesOnly.length > 0) {
+                    const { data } = await supabase
+                        .from('features')
+                        .select(cols)
+                        .in('feature_name', namesOnly)
+                        .order('created_at', { ascending: false });
+                    addUnique(data);
+                }
+            }
+
+            setFeatures(combined);
+        } catch (err) { setError(err.message); } finally { setLoading(false); }
+    };
+
+    if (loading) return <div className="flex items-center justify-center py-16"><div className="flex flex-col items-center gap-3"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div><p className="text-sm text-muted-foreground">Loading features…</p></div></div>;
     if (error) return <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"><i className="fa-solid fa-circle-exclamation"></i>{error}</div>;
-
-    const inputCls = "w-full px-3 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary";
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between"><span className="text-sm font-semibold text-foreground">{bugs.length} bug{bugs.length !== 1 ? 's' : ''} linked</span><button onClick={() => setShowForm(p => !p)} className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 transition-colors"><i className={`fa-solid ${showForm ? 'fa-times' : 'fa-plus'}`}></i>{showForm ? 'Cancel' : 'Link Bug'}</button></div>
-            {showForm && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-5 space-y-4">
-                    <h4 className="text-sm font-semibold text-red-700">Link New Bug</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="sm:col-span-2"><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Title *</label><input type="text" value={newBug.title} onChange={e => setNewBug(p => ({ ...p, title: e.target.value }))} placeholder="Bug title..." className={inputCls} /></div>
-                        <div className="sm:col-span-2"><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Description</label><textarea rows="2" value={newBug.description} onChange={e => setNewBug(p => ({ ...p, description: e.target.value }))} placeholder="Describe the bug..." className={inputCls} /></div>
-                        <div><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Severity</label><CustomSelect value={newBug.severity} onChange={v => setNewBug(p => ({ ...p, severity: v }))} options={['Critical', 'High', 'Medium', 'Low']} placeholder="Select severity" /></div>
-                        <div><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Reported By</label><input type="text" value={newBug.reported_by} onChange={e => setNewBug(p => ({ ...p, reported_by: e.target.value }))} placeholder="Your name" className={inputCls} /></div>
-                    </div>
-                    <button onClick={handleAddBug} disabled={saving} className="px-5 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 disabled:opacity-50 transition-colors">{saving ? 'Saving…' : 'Save Bug'}</button>
-                </div>
-            )}
-            {bugs.length === 0 && !showForm ? (
-                <div className="flex flex-col items-center justify-center py-16 gap-3"><div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center"><i className="fa-solid fa-bug text-2xl text-muted-foreground"></i></div><p className="text-sm font-medium text-muted-foreground">No bugs linked to {storyId}</p></div>
+            <div className="flex items-center justify-between"><div className="flex items-center gap-2"><span className="text-sm font-semibold text-foreground">{features.length} feature{features.length !== 1 ? 's' : ''} linked</span><span className="px-2 py-0.5 bg-primary bg-opacity-10 text-primary text-xs font-semibold rounded-full">{storyId}</span></div></div>
+            {features.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3"><div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center"><i className="fa-solid fa-puzzle-piece text-2xl text-muted-foreground"></i></div><p className="text-sm font-medium text-muted-foreground">No features linked to {storyId}</p></div>
             ) : (
-                <div className="space-y-3">{bugs.map(bug => (<div key={bug.id} className="flex items-start gap-4 p-4 bg-card border border-border rounded-lg hover:border-red-200 transition-colors"><div className="flex-1 min-w-0"><div className="flex items-center gap-2 mb-1 flex-wrap"><span className="font-mono text-xs text-red-600 font-semibold">{bug.bug_id}</span>{bug.severity && <span className={`inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium ${severityColor(bug.severity)}`}>{bug.severity}</span>}<span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusColor(bug.status)}`}>{bug.status}</span></div><p className="text-sm font-medium text-foreground">{bug.title}</p>{bug.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{bug.description}</p>}{bug.reported_by && <p className="text-xs text-muted-foreground mt-1"><i className="fa-solid fa-user mr-1"></i>Reported by {bug.reported_by}</p>}</div><span className="text-xs text-muted-foreground whitespace-nowrap">{new Date(bug.created_at).toLocaleDateString()}</span></div>))}</div>
+                <div className="overflow-x-auto rounded-lg border border-border">
+                    <table className="w-full text-sm"><thead><tr className="bg-muted border-b border-border">{['Feature Code', 'Name', 'Description', 'Assigned To'].map(h => (<th key={h} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>))}</tr></thead>
+                        <tbody className="divide-y divide-border">{features.map(f => (<tr key={f.id} className="hover:bg-muted transition-colors"><td className="px-4 py-3 font-mono text-xs text-primary font-semibold">{f.feature_code || '—'}</td><td className="px-4 py-3 font-medium text-foreground max-w-xs"><div className="truncate" title={f.feature_name}>{f.feature_name || '—'}</div></td><td className="px-4 py-3 text-muted-foreground max-w-md"><div className="truncate" title={f.description}>{f.description || '—'}</div></td><td className="px-4 py-3 text-muted-foreground text-xs">{f.assign_to || 'Unassigned'}</td></tr>))}</tbody>
+                    </table>
+                </div>
             )}
         </div>
     );
@@ -649,7 +687,7 @@ const EMPTY_FORM = {
     calculationLogic: '', apiImpacted: '', dbTablesImpacted: '', integrationImpacted: '',
     reportsImpacted: '', configurationImpacted: '', securityRBACImpact: '',
     auditTrailRequired: '', performanceImpact: '', testScenarioCount: '',
-    currentStatus: '', blocked: false, blockedReason: '',
+    currentStatus: '', blocked: false, blockedReason: '', acceptanceCriteriaText: '',
     storyPoints: '', estimateHours: '', plannedSprint: '', plannedRelease: '', versionBuild: '',
     assignedBa: [], assignedFrontendDeveloper: [], assignedBackendDeveloper: [], assignedTester: [],
     linkedFeatures: [],
@@ -669,10 +707,9 @@ const UserStoryMapping = () => {
     const [showHistoryModal, setShowHistoryModal] = useState(false);
     const [showRelatedStories, setShowRelatedStories] = useState(false);
     const [showRelatedBugs, setShowRelatedBugs] = useState(false);
-    const [showChangeRequests, setShowChangeRequests] = useState(false);
     const [saveLoading, setSaveLoading] = useState(false);
     const [storyUUID, setStoryUUID] = useState(null);
-    const [tabCounts, setTabCounts] = useState({ testcases: null, bugs: null, comments: null, attachments: null });
+    const [tabCounts, setTabCounts] = useState({ testcases: null, linkedfeatures: null, comments: null, attachments: null });
 
     // ── Saved state & toast ──────────────────────────────────────────────────
     const [isSaved, setIsSaved] = useState(!isNew); // existing stories start as "saved"
@@ -704,7 +741,7 @@ const UserStoryMapping = () => {
             setActiveTab('details');
             setCollapsedSections({});
             setLastSaved('never');
-            setTabCounts({ testcases: null, bugs: null, comments: null, attachments: null });
+            setTabCounts({ testcases: null, linkedfeatures: null, comments: null, attachments: null });
         }
     }, [urlStoryId]);
 
@@ -717,7 +754,6 @@ const UserStoryMapping = () => {
         })();
     }, [isNew]);
 
-    const [acceptanceCriteria, setAcceptanceCriteria] = useState([]);
     const [definitionOfDone, setDefinitionOfDone] = useState([
         { id: 1, text: 'Code reviewed and approved', checked: false },
         { id: 2, text: 'Unit tests written and passing', checked: false },
@@ -748,9 +784,22 @@ const UserStoryMapping = () => {
         const fetchFeatures = async () => {
             setFeaturesLoading(true);
             try {
-                const { data, error } = await supabase.from('features').select('id, feature_name, feature_code, module_id').order('feature_name', { ascending: true });
-                if (error) { console.error('Features fetch error:', error); return; }
-                if (data) setFeatures(data);
+                const PAGE = 1000;
+                let all = [];
+                let from = 0;
+                while (true) {
+                    const { data, error } = await supabase
+                        .from('features')
+                        .select('id, feature_name, feature_code, module_id')
+                        .order('feature_code', { ascending: true })
+                        .range(from, from + PAGE - 1);
+                    if (error) { console.error('Features fetch error:', error); break; }
+                    if (!data || data.length === 0) break;
+                    all = all.concat(data);
+                    if (data.length < PAGE) break;
+                    from += PAGE;
+                }
+                setFeatures(all);
             } catch (err) { console.error('Features unexpected error:', err); }
             finally { setFeaturesLoading(false); }
         };
@@ -811,6 +860,11 @@ const UserStoryMapping = () => {
                     currentStatus: data.current_status ?? '',
                     blocked: data.blocked ?? false,
                     blockedReason: data.blocked_reason ?? '',
+                    acceptanceCriteriaText: typeof data.acceptance_criteria === 'string'
+                        ? data.acceptance_criteria
+                        : Array.isArray(data.acceptance_criteria)
+                            ? data.acceptance_criteria.map(c => (typeof c === 'string' ? c : (c.text ?? ''))).filter(Boolean).join('\n')
+                            : '',
                     storyPoints: data.story_points ?? '',
                     estimateHours: data.estimate_hours ?? '',
                     plannedSprint: data.planned_sprint ?? '',
@@ -839,21 +893,28 @@ const UserStoryMapping = () => {
     useEffect(() => {
         if (!storyUUID) return;
         const fetchCounts = async () => {
-            const [tc1, tc2, bg, cm, at] = await Promise.all([
+            const [, , cm, at] = await Promise.all([
                 supabase.from('test_cases').select('id', { count: 'exact', head: true }).eq('user_story_id', storyUUID),
                 supabase.from('test_cases').select('id', { count: 'exact', head: true }).contains('user_story_ids', [storyUUID]),
-                supabase.from('bugs').select('id', { count: 'exact', head: true }).eq('story_id', storyUUID),
                 supabase.from('comments').select('id', { count: 'exact', head: true }).eq('story_id', storyUUID),
                 supabase.from('attachments').select('id', { count: 'exact', head: true }).eq('story_id', storyUUID),
             ]);
-            // Deduplicate count by fetching actual IDs
+            // Deduplicate test-case count by fetching actual IDs
             const { data: ids1 } = await supabase.from('test_cases').select('id').eq('user_story_id', storyUUID);
             const { data: ids2 } = await supabase.from('test_cases').select('id').contains('user_story_ids', [storyUUID]);
             const uniqueTcCount = new Set([...(ids1 || []).map(r => r.id), ...(ids2 || []).map(r => r.id)]).size;
-            setTabCounts({ testcases: uniqueTcCount, bugs: bg.count, comments: cm.count, attachments: at.count });
+            // Deduplicate linked-feature count from both sources
+            const [{ data: feat1 }, { data: feat2 }] = await Promise.all([
+                formData.storyId ? supabase.from('features').select('id').eq('user_story', formData.storyId) : Promise.resolve({ data: [] }),
+                supabase.from('user_story_features').select('feature_id, feature_name').eq('story_uuid', storyUUID),
+            ]);
+            const linkedKeys = new Set();
+            (feat1 || []).forEach(r => r.id && linkedKeys.add(`id:${r.id}`));
+            (feat2 || []).forEach(r => { if (r.feature_id) linkedKeys.add(`id:${r.feature_id}`); else if (r.feature_name) linkedKeys.add(`name:${r.feature_name}`); });
+            setTabCounts({ testcases: uniqueTcCount, linkedfeatures: linkedKeys.size, comments: cm.count, attachments: at.count });
         };
         fetchCounts();
-    }, [storyUUID, activeTab]);
+    }, [storyUUID, activeTab, formData.storyId]);
 
     const handleStoryIdEditStart = () => {
         setStoryIdDraft(formData.storyId);
@@ -891,7 +952,7 @@ const UserStoryMapping = () => {
     const tabs = [
         { id: 'details', label: 'Story Details', icon: 'fa-info-circle' },
         { id: 'testcases', label: 'Linked Test Cases', icon: 'fa-list-check', countKey: 'testcases' },
-        { id: 'bugs', label: 'Related Bugs', icon: 'fa-bug', countKey: 'bugs' },
+        { id: 'linkedfeatures', label: 'Linked Features', icon: 'fa-puzzle-piece', countKey: 'linkedfeatures' },
         { id: 'comments', label: 'Comments', icon: 'fa-comment-dots', countKey: 'comments' },
         { id: 'attachments', label: 'Attachments', icon: 'fa-paperclip', countKey: 'attachments' },
     ];
@@ -901,9 +962,7 @@ const UserStoryMapping = () => {
         setFormData(prev => ({ ...prev, [field]: value }));
         setIsSaved(false); // mark dirty on any change
     }, []);
-    const toggleAcceptanceCriteria = useCallback((id) => { setAcceptanceCriteria(prev => prev.map(item => item.id === id ? { ...item, checked: !item.checked } : item)); }, []);
     const toggleDefinitionOfDone = useCallback((id) => { setDefinitionOfDone(prev => prev.map(item => item.id === id ? { ...item, checked: !item.checked } : item)); }, []);
-    const addAcceptanceCriteria = useCallback(() => { setAcceptanceCriteria(prev => { const newId = Math.max(...prev.map(ac => ac.id), 0) + 1; return [...prev, { id: newId, text: 'New acceptance criteria', checked: false }]; }); }, []);
 
     // ── buildPayload — matched exactly to user_stories schema ─────────────────
     const buildPayload = (extraStatus) => {
@@ -960,7 +1019,7 @@ const UserStoryMapping = () => {
             current_status: formData.currentStatus || extraStatus,
             blocked: formData.blocked ?? false,
             blocked_reason: formData.blockedReason || null,
-            acceptance_criteria: acceptanceCriteria,
+            acceptance_criteria: formData.acceptanceCriteriaText || null,
             definition_of_done: definitionOfDone,
             status: extraStatus,
             story_points: formData.storyPoints ? parseInt(formData.storyPoints) : null,
@@ -1058,7 +1117,7 @@ const UserStoryMapping = () => {
     // that aren't in the DB list (e.g. renamed or deleted) so they still show as selected
     const featureOptsFromDB = features
         .filter(f => f.feature_name && f.feature_name.trim() !== '')
-        .map(f => ({ value: f.feature_name, label: f.feature_code ? `${f.feature_name} (${f.feature_code})` : f.feature_name }));
+        .map(f => ({ value: f.feature_name, label: f.feature_code ? `${f.feature_code} — ${f.feature_name}` : f.feature_name }));
     const featureOptsValues = new Set(featureOptsFromDB.map(o => o.value));
     const missingLinked = (formData.linkedFeatures || [])
         .filter(name => name && !featureOptsValues.has(name))
@@ -1326,11 +1385,18 @@ const UserStoryMapping = () => {
                                             <div className="space-y-6">
                                                 <div>
                                                     <label className={labelCls}>Acceptance Criteria</label>
-                                                    <div className="space-y-3">
-                                                        {acceptanceCriteria.length === 0 && <p className="text-sm text-muted-foreground italic">No acceptance criteria added yet.</p>}
-                                                        {acceptanceCriteria.map(criteria => (<div key={criteria.id} className="flex items-start gap-3 p-3 bg-green-50 border border-green-200 rounded-lg"><input type="checkbox" checked={criteria.checked} onChange={() => toggleAcceptanceCriteria(criteria.id)} className="mt-1 w-4 h-4 text-primary rounded" /><p className="text-sm text-foreground">{criteria.text}</p></div>))}
-                                                        <button onClick={addAcceptanceCriteria} className="flex items-center gap-2 px-4 py-2 text-primary hover:bg-primary hover:bg-opacity-10 rounded-lg text-sm font-medium transition-colors"><i className="fa-solid fa-plus"></i> Add Acceptance Criteria</button>
-                                                    </div>
+                                                    <textarea
+                                                        rows="10"
+                                                        value={formData.acceptanceCriteriaText}
+                                                        onChange={e => handleInputChange('acceptanceCriteriaText', e.target.value)}
+                                                        placeholder={"Paste a table from Excel, Sheets, or Word here — column tabs and row breaks are preserved.\n\nExample:\nID\tCriterion\tStatus\nAC-1\tUser can log in with valid credentials\tDraft\nAC-2\tInvalid login shows error message\tDraft"}
+                                                        className={`${inputCls} font-mono whitespace-pre`}
+                                                        style={{ minHeight: 220, overflowX: 'auto', tabSize: 4 }}
+                                                    />
+                                                    <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                                                        <i className="fa-solid fa-circle-info text-indigo-400" style={{ fontSize: 10 }}></i>
+                                                        Tip: copy a range of cells from Excel/Google Sheets and paste here — the tab-separated layout is kept intact.
+                                                    </p>
                                                 </div>
                                                 <div>
                                                     <label className={labelCls}>Definition of Done</label>
@@ -1435,8 +1501,7 @@ const UserStoryMapping = () => {
                                             <h3 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2"><i className="fa-solid fa-link text-primary"></i> Related Items</h3>
                                             <div className="space-y-3">
                                                 <button onClick={() => setShowRelatedStories(true)} className="w-full flex items-center justify-between px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"><span className="text-sm font-medium text-blue-700">Related User Stories</span><span className="px-2 py-1 bg-blue-200 text-blue-700 text-xs font-semibold rounded">0</span></button>
-                                                <button onClick={() => setActiveTab('bugs')} className="w-full flex items-center justify-between px-3 py-2 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"><span className="text-sm font-medium text-red-700">Related Bugs</span><span className="px-2 py-1 bg-red-200 text-red-700 text-xs font-semibold rounded">{tabCounts.bugs ?? 0}</span></button>
-                                                <button onClick={() => setShowChangeRequests(true)} className="w-full flex items-center justify-between px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors"><span className="text-sm font-medium text-purple-700">Change Requests</span><span className="px-2 py-1 bg-purple-200 text-purple-700 text-xs font-semibold rounded">0</span></button>
+                                                <button onClick={() => setActiveTab('linkedfeatures')} className="w-full flex items-center justify-between px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors"><span className="text-sm font-medium text-purple-700">Linked Features</span><span className="px-2 py-1 bg-purple-200 text-purple-700 text-xs font-semibold rounded">{tabCounts.linkedfeatures ?? 0}</span></button>
                                             </div>
                                         </div>
 
@@ -1457,7 +1522,7 @@ const UserStoryMapping = () => {
                             )}
 
                             {activeTab === 'testcases' && <div className="bg-card border border-border rounded-lg shadow-sm p-6"><TestCasesTab storyId={formData.storyId} storyUUID={storyUUID} /></div>}
-                            {activeTab === 'bugs' && <div className="bg-card border border-border rounded-lg shadow-sm p-6"><BugsTab storyId={formData.storyId} storyUUID={storyUUID} /></div>}
+                            {activeTab === 'linkedfeatures' && <div className="bg-card border border-border rounded-lg shadow-sm p-6"><LinkedFeaturesTab storyId={formData.storyId} storyUUID={storyUUID} /></div>}
                             {activeTab === 'comments' && <div className="bg-card border border-border rounded-lg shadow-sm p-6"><CommentsTab storyId={formData.storyId} storyUUID={storyUUID} /></div>}
                             {activeTab === 'attachments' && <div className="bg-card border border-border rounded-lg shadow-sm p-6"><AttachmentsTab storyId={formData.storyId} storyUUID={storyUUID} /></div>}
                         </div>
@@ -1481,7 +1546,6 @@ const UserStoryMapping = () => {
 
                     {showHistoryModal && <div className="modal-overlay" onClick={() => setShowHistoryModal(false)}><div className="modal-content" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold mb-4">Story History</h3><p className="text-sm text-gray-600 mb-4">Version history for this user story.</p><div className="border-l-4 border-blue-500 pl-4 py-2"><p className="text-sm font-medium">Draft Created</p><p className="text-xs text-gray-500">Just now by System</p></div><button onClick={() => setShowHistoryModal(false)} className="mt-6 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">Close</button></div></div>}
                     {showRelatedStories && <div className="modal-overlay" onClick={() => setShowRelatedStories(false)}><div className="modal-content" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold mb-4">Related User Stories</h3><p className="text-sm text-gray-600">No related stories found for {formData.storyId}.</p><button onClick={() => setShowRelatedStories(false)} className="mt-6 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">Close</button></div></div>}
-                    {showChangeRequests && <div className="modal-overlay" onClick={() => setShowChangeRequests(false)}><div className="modal-content" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold mb-4">Change Requests</h3><p className="text-sm text-gray-600">No change requests found for {formData.storyId}.</p><button onClick={() => setShowChangeRequests(false)} className="mt-6 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">Close</button></div></div>}
                 </div>
             </div>
         </>

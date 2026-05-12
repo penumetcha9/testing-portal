@@ -355,6 +355,108 @@ const Dropdown = memo(({ options, selected, onChange, placeholder = "Select..." 
     );
 });
 
+const MultiDropdown = memo(({ options, selected, onChange, placeholder = "Select..." }) => {
+    const [open, setOpen] = useState(false);
+    const [hov, setHov] = useState(null);
+    const ref = useRef(null);
+
+    useEffect(() => {
+        const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        document.addEventListener("mousedown", h);
+        return () => document.removeEventListener("mousedown", h);
+    }, []);
+
+    const selectedSet = useMemo(() => new Set(selected || []), [selected]);
+    const label = useMemo(() => {
+        if (!selected || selected.length === 0) return null;
+        const names = options.filter(o => selectedSet.has(o.id)).map(o => o.name);
+        if (names.length <= 2) return names.join(", ");
+        return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
+    }, [options, selected, selectedSet]);
+
+    const toggle = (id) => {
+        const next = selectedSet.has(id) ? (selected || []).filter(x => x !== id) : [...(selected || []), id];
+        onChange(next);
+    };
+
+    return (
+        <div ref={ref} style={{ position: "relative", userSelect: "none" }}>
+            <button
+                type="button"
+                onClick={() => setOpen(p => !p)}
+                style={{
+                    width: "100%", display: "flex", alignItems: "center",
+                    justifyContent: "space-between", padding: "9px 13px",
+                    background: open ? T.surface : "#FAFBF9",
+                    border: `1px solid ${open ? T.green : T.border}`,
+                    borderRadius: 8, fontSize: 13, color: label ? T.text : T.textFaint,
+                    fontWeight: label ? 500 : 400, cursor: "pointer",
+                    boxShadow: open ? `0 0 0 3px rgba(29,61,47,0.08)` : "none",
+                    outline: "none", transition: "all 0.15s",
+                    fontFamily: T.sans,
+                }}
+            >
+                <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {label || placeholder}
+                </span>
+                <span style={{ marginLeft: 8, display: "flex", alignItems: "center", transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "rotate(0deg)", color: open ? T.green : T.textFaint, flexShrink: 0 }}>
+                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                        <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                </span>
+            </button>
+
+            {open && (
+                <div style={{
+                    position: "absolute", top: "calc(100% + 5px)", left: 0, right: 0,
+                    zIndex: 9999, background: T.surface, border: `1px solid ${T.border}`,
+                    borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
+                    animation: "ddIn 0.16s cubic-bezier(.4,0,.2,1)", overflow: "hidden",
+                }}>
+                    <div style={{ padding: 4, maxHeight: 240, overflowY: "auto" }}>
+                        {options.length === 0 && (
+                            <div style={{ padding: "10px 11px", fontSize: 12, color: T.textFaint, fontFamily: T.sans }}>No options available</div>
+                        )}
+                        {options.map((opt, i) => {
+                            const sel = selectedSet.has(opt.id);
+                            return (
+                                <div
+                                    key={opt.id}
+                                    onMouseEnter={() => setHov(i)}
+                                    onMouseLeave={() => setHov(null)}
+                                    onClick={() => toggle(opt.id)}
+                                    style={{
+                                        padding: "8px 11px", borderRadius: 7, cursor: "pointer",
+                                        fontSize: 13, fontWeight: sel ? 600 : 400,
+                                        color: sel ? T.green : hov === i ? T.text : T.textMid,
+                                        background: sel ? T.greenLight : hov === i ? T.surfaceAlt : "transparent",
+                                        display: "flex", alignItems: "center", gap: 8,
+                                        transition: "all 0.1s", fontFamily: T.sans,
+                                    }}
+                                >
+                                    <span style={{
+                                        width: 14, height: 14, borderRadius: 4, flexShrink: 0,
+                                        border: `1.5px solid ${sel ? T.green : T.border}`,
+                                        background: sel ? T.green : "transparent",
+                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                    }}>
+                                        {sel && (
+                                            <svg width="9" height="9" viewBox="0 0 14 14" fill="none">
+                                                <path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                        )}
+                                    </span>
+                                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{opt.name}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+});
+
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const TEST_TYPE_OPTIONS = [
     { id: "Functional", name: "Functional" }, { id: "Regression", name: "Regression" },
@@ -1291,6 +1393,8 @@ export default function FeaturesLibrary() {
     const userOptions = useMemo(() => [{ id: "", name: "Select Assignee" }, ...users.map(u => ({ id: u.id, name: u.name }))], [users]);
     const testerOptions = useMemo(() => [{ id: "", name: "Select Tester" }, ...users.map(u => ({ id: u.id, name: u.name }))], [users]);
     const moduleOptions = useMemo(() => [{ id: "", name: "Choose Module" }, ...modules.map(m => ({ id: m.id, name: m.name }))], [modules]);
+    const userStoryOptions = useMemo(() => [{ id: "", name: "Select User Story" }, ...userStories.map(s => ({ id: s.code, name: s.code === s.name ? s.code : `${s.code} — ${s.name}` }))], [userStories]);
+    const userStoryMultiOptions = useMemo(() => userStories.map(s => ({ id: s.id, name: s.code === s.name ? s.code : `${s.code} — ${s.name}` })), [userStories]);
 
     const filteredFeatures = useMemo(() => {
         let list = flatFeatures;
@@ -1764,7 +1868,7 @@ export default function FeaturesLibrary() {
                                     </div>
                                 </Field>
                                 <Field label="User Story">
-                                    <input className="fl-input" type="text" placeholder="e.g., US-015" value={featureForm.user_story} onChange={e => setFeatureForm(f => ({ ...f, user_story: e.target.value }))} />
+                                    <Dropdown options={userStoryOptions} selected={featureForm.user_story} onChange={v => setFeatureForm(f => ({ ...f, user_story: v }))} placeholder="Select User Story" />
                                 </Field>
                             </div>
                             <Field label="Description">
@@ -1812,7 +1916,7 @@ export default function FeaturesLibrary() {
                                     <input className="fl-input" type="text" value={editFeatureForm.code} onChange={e => setEditFeatureForm(f => ({ ...f, code: e.target.value }))} />
                                 </Field>
                                 <Field label="User Story">
-                                    <input className="fl-input" type="text" value={editFeatureForm.user_story} onChange={e => setEditFeatureForm(f => ({ ...f, user_story: e.target.value }))} />
+                                    <Dropdown options={userStoryOptions} selected={editFeatureForm.user_story} onChange={v => setEditFeatureForm(f => ({ ...f, user_story: v }))} placeholder="Select User Story" />
                                 </Field>
                             </div>
                             <Field label="Description">
@@ -1910,6 +2014,9 @@ export default function FeaturesLibrary() {
                             <Field label="Status" required>
                                 <Dropdown options={STATUS_OPTIONS} selected={form.status} onChange={v => setForm(f => ({ ...f, status: v }))} placeholder="Select Status" />
                             </Field>
+                            <Field label="User Stories">
+                                <MultiDropdown options={userStoryMultiOptions} selected={form.userStoryIds} onChange={v => setForm(f => ({ ...f, userStoryIds: v }))} placeholder="Select User Stories" />
+                            </Field>
                             <Field label="Test Scenario">
                                 <input className="fl-input" type="text" placeholder="e.g., Verify user can log in with valid credentials" value={form.testScenario} onChange={e => setForm(f => ({ ...f, testScenario: e.target.value }))} />
                             </Field>
@@ -1976,6 +2083,9 @@ export default function FeaturesLibrary() {
                             </div>
                             <Field label="Assigned To">
                                 <Dropdown options={testerOptions} selected={form.assignee} onChange={v => setForm(f => ({ ...f, assignee: v }))} placeholder="Select Tester" />
+                            </Field>
+                            <Field label="User Stories">
+                                <MultiDropdown options={userStoryMultiOptions} selected={form.userStoryIds} onChange={v => setForm(f => ({ ...f, userStoryIds: v }))} placeholder="Select User Stories" />
                             </Field>
                             <Field label="Test Scenario">
                                 <input className="fl-input" type="text" value={form.testScenario} onChange={e => setForm(f => ({ ...f, testScenario: e.target.value }))} />
