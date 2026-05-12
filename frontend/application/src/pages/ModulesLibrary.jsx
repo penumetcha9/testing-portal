@@ -60,11 +60,11 @@ const VALID_COLORS = ["blue", "green", "purple", "red", "indigo", "pink", "teal"
 
 const COLUMN_REFERENCE = [
     { label: "Module Name", required: true, hint: "Any text. Must be unique." },
-    { label: "Description", required: true, hint: "Any descriptive text." },
-    { label: "Module Owner", required: true, hint: "Full name — must match an existing user." },
+    { label: "Description", required: false, hint: "Optional — any descriptive text." },
+    { label: "Module Owner", required: false, hint: "Optional — full name; if provided must match an existing user." },
     { label: "Priority", required: true, hint: "High  |  Medium  |  Low" },
     { label: "Status", required: true, hint: "Active  |  Inactive  |  Archived" },
-    { label: "Icon Color", required: false, hint: "blue | green | purple | red | teal | orange | gray | indigo | pink" },
+    { label: "Icon Color", required: false, hint: "Optional — blue | green | purple | red | teal | orange | gray | indigo | pink" },
 ];
 
 const downloadImportTemplate = () => {
@@ -132,8 +132,6 @@ const parseCSV = (text) => {
 
     const LABELS = {
         module_name: 'Module Name',
-        description: 'Description',
-        module_owner: 'Module Owner',
         priority: 'Priority',
         status: 'Status',
     };
@@ -162,8 +160,6 @@ const parseCSV = (text) => {
     const validRows = [], errors = [];
     for (const row of allRows) {
         const rowErrs = [];
-        if (!row.description) rowErrs.push("Description is empty");
-        if (!row.module_owner) rowErrs.push("Module Owner is empty");
         if (!row.priority) { rowErrs.push("Priority is empty"); }
         else if (!VALID_PRIORITIES.includes(row.priority)) { rowErrs.push(`Priority must be High, Medium or Low (got "${row.priority}")`); }
         if (!row.status) { rowErrs.push("Status is empty"); }
@@ -391,12 +387,14 @@ function ImportModulesModal({ onClose, onSuccess, existingModuleCodes = [], user
         const success = [], failed = [];
         for (const row of parsed.validRows) {
             if (existingNames.has(row.module_name.trim().toLowerCase())) { failed.push({ name: row.module_name, reason: "Module name already exists" }); continue; }
-            const resolvedOwner = userMap[row.module_owner.trim().toLowerCase()] || null;
+            const ownerKey = (row.module_owner || '').trim().toLowerCase();
+            const resolvedOwner = ownerKey ? (userMap[ownerKey] || null) : null;
             const colorVal = (row.color || "blue").toLowerCase();
             const finalColor = VALID_COLORS.includes(colorVal) ? colorVal : "blue";
             const code = generateModuleCode(codes);
             codes.push(code);
-            const { error } = await supabase.from("modules").insert([{ module_code: code, module_name: row.module_name.trim(), description: row.description.trim(), module_owner: resolvedOwner, priority: row.priority.trim(), status: row.status.trim(), color: finalColor }]);
+            const trimmedDescription = (row.description || '').trim();
+            const { error } = await supabase.from("modules").insert([{ module_code: code, module_name: row.module_name.trim(), description: trimmedDescription || null, module_owner: resolvedOwner, priority: row.priority.trim(), status: row.status.trim(), color: finalColor }]);
             if (error) failed.push({ name: row.module_name, reason: error.message });
             else success.push(row.module_name);
         }

@@ -520,9 +520,9 @@ const FEATURE_COLUMNS = [
     { label: "Module Name", required: true, hint: "Any text. Must match an existing module name." },
     { label: "Feature Name", required: true, hint: "Name of the feature." },
     { label: "Feature Code", required: true, hint: "e.g. FEAT-001 — must be unique." },
-    { label: "User Story", required: true, hint: "e.g. US-015." },
-    { label: "Description", required: true, hint: "Brief description of the feature." },
-    { label: "Assign To", required: true, hint: "Full name — must match an existing user." },
+    { label: "User Story", required: false, hint: "Optional — e.g. US-015." },
+    { label: "Description", required: false, hint: "Optional — brief description of the feature." },
+    { label: "Assign To", required: false, hint: "Optional — full name; if provided must match an existing user." },
 ];
 
 const TC_COLUMNS = [
@@ -723,7 +723,7 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
         };
         const idxMap = {};
         rawHeaders.forEach((h, i) => { const k = keyMap[h]; if (k) idxMap[k] = i; });
-        const required = ["module_name", "feature_name", "feature_code", "user_story", "description", "assign_to"];
+        const required = ["module_name", "feature_name", "feature_code"];
         const missing = required.filter(k => idxMap[k] === undefined).map(k => FEATURE_COLUMNS.find(c => keyMap[normaliseHeader(c.label)] === k)?.label || k);
         if (missing.length) return { rows: [], rowErrors: [], fatalError: `Missing required column${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}. Please use the provided template.` };
 
@@ -739,9 +739,6 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
             if (!module_name) errs.push("Module Name is required");
             if (!feature_name) errs.push("Feature Name is required");
             if (!feature_code) errs.push("Feature Code is required");
-            if (!user_story) errs.push("User Story is required");
-            if (!description) errs.push("Description is required");
-            if (!assign_to) errs.push("Assign To is required");
             if (errs.length) rowErrors.push({ row: rowNum, name: feature_name || `Row ${rowNum}`, messages: errs });
             else rows.push({ module_name, feature_name, feature_code, user_story, description, assign_to });
         });
@@ -772,7 +769,7 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
             const assignId = row.assign_to ? (userMap[row.assign_to.toLowerCase().trim()] || null) : null;
             const { error } = await supabase.from("features").insert([{
                 module_id: moduleId, feature_name: row.feature_name, feature_code: row.feature_code,
-                user_story: row.user_story || null, description: row.description,
+                user_story: row.user_story || null, description: row.description || null,
                 assign_to: assignId, created_at: new Date().toISOString(),
             }]);
             if (error) failed.push({ name: row.feature_name, reason: error.message });
