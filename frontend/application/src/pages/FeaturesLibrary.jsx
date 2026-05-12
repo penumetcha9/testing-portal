@@ -1292,7 +1292,6 @@ export default function FeaturesLibrary() {
     const testerOptions = useMemo(() => [{ id: "", name: "Select Tester" }, ...users.map(u => ({ id: u.id, name: u.name }))], [users]);
     const moduleOptions = useMemo(() => [{ id: "", name: "Choose Module" }, ...modules.map(m => ({ id: m.id, name: m.name }))], [modules]);
 
-    // ─── FIXED: filteredFeatures with auto-expand ──────────────────────────────
     const filteredFeatures = useMemo(() => {
         let list = flatFeatures;
 
@@ -1303,34 +1302,36 @@ export default function FeaturesLibrary() {
 
         const q = searchQuery.trim().toLowerCase();
         if (q) {
+            const matches = (v) => String(v ?? "").toLowerCase().includes(q);
             list = list.filter(f => {
-                if ((f.name || "").toLowerCase().includes(q)) return true;
-                if ((f.feature_name || "").toLowerCase().includes(q)) return true;
-                if ((f.code || "").toLowerCase().includes(q)) return true;
-                if ((f.feature_code || "").toLowerCase().includes(q)) return true;
-                if ((f.description || "").toLowerCase().includes(q)) return true;
-                if ((f.user_story || "").toLowerCase().includes(q)) return true;
-                if ((f.moduleName || "").toLowerCase().includes(q)) return true;
-                if ((f.moduleCode || "").toLowerCase().includes(q)) return true;
-                if ((f.assign_to_name || "").toLowerCase().includes(q)) return true;
-                if (f.testCases.some(tc =>
-                    (tc.tcId || "").toLowerCase().includes(q) ||
-                    (tc.name || "").toLowerCase().includes(q) ||
-                    (tc.assigneeName || "").toLowerCase().includes(q)
+                if (matches(f.name)) return true;
+                if (matches(f.feature_name)) return true;
+                if (matches(f.code)) return true;
+                if (matches(f.feature_code)) return true;
+                if (matches(f.description)) return true;
+                if (matches(f.user_story)) return true;
+                if (matches(f.moduleName)) return true;
+                if (matches(f.moduleCode)) return true;
+                if (matches(f.assign_to_name)) return true;
+                if ((f.testCases || []).some(tc =>
+                    matches(tc.tcId) || matches(tc.name) || matches(tc.assigneeName)
                 )) return true;
                 return false;
-            });
-
-            // Auto-expand all matched features so test cases are visible
-            setOpenFeatures(prev => {
-                const next = { ...prev };
-                list.forEach(f => { next[f.id] = true; });
-                return next;
             });
         }
 
         return list;
     }, [flatFeatures, searchQuery, filterStatus]);
+
+    // Auto-expand matched features so their test cases are visible when searching
+    useEffect(() => {
+        if (!searchQuery.trim() || filteredFeatures.length === 0) return;
+        setOpenFeatures(prev => {
+            const next = { ...prev };
+            filteredFeatures.forEach(f => { next[f.id] = true; });
+            return next;
+        });
+    }, [searchQuery, filteredFeatures]);
 
     const totalFeatPages = Math.max(1, Math.ceil(filteredFeatures.length / FEAT_PAGE_SIZE));
     const safeFeatPage = Math.min(featPage, totalFeatPages - 1);
