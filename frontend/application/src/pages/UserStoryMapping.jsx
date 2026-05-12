@@ -210,18 +210,111 @@ const MultiSelect = ({ values = [], onChange, options, placeholder = 'Select…'
     );
 };
 
-const CollapsibleTextarea = ({ value, onChange, placeholder, rows = 3, expandedRows, className = '', style, ...rest }) => {
+const CollapsibleTextarea = ({ value, onChange, placeholder, rows = 3, className = '', style, ...rest }) => {
     const [expanded, setExpanded] = useState(false);
-    const effectiveRows = expanded ? (expandedRows ?? Math.max(rows * 3, 14)) : rows;
+    const editorRef = useRef(null);
+    const skipSync = useRef(false);
+
+    // Sync external value → DOM, but skip the next sync that follows our own
+    // emit (otherwise we'd blow away the user's cursor on every keystroke).
+    useEffect(() => {
+        const el = editorRef.current;
+        if (!el) return;
+        if (skipSync.current) { skipSync.current = false; return; }
+        if (el.innerHTML !== (value || '')) {
+            el.innerHTML = value || '';
+        }
+    }, [value]);
+
+    const emit = useCallback(() => {
+        skipSync.current = true;
+        onChange({ target: { value: editorRef.current?.innerHTML || '' } });
+    }, [onChange]);
+
+    const handleKeyDown = (e) => {
+        // Ctrl/Cmd + B → wrap current selection in a real <b> tag so it
+        // actually renders bold inside the editor.
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+            e.preventDefault();
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0) return;
+            const range = sel.getRangeAt(0);
+            if (range.collapsed) return; // nothing selected → do nothing
+            const b = document.createElement('b');
+            try {
+                range.surroundContents(b);
+            } catch {
+                // surroundContents fails across element boundaries; fall back.
+                b.appendChild(range.extractContents());
+                range.insertNode(b);
+            }
+            range.setStartAfter(b);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            emit();
+            return;
+        }
+
+        // Enter (without Shift) → insert a bullet on a new line at the cursor.
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0) return;
+            const range = sel.getRangeAt(0);
+            range.deleteContents();
+            const bullet = document.createTextNode('\n• ');
+            range.insertNode(bullet);
+            range.setStartAfter(bullet);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            emit();
+        }
+    };
+
+    // Force plain-text paste so Excel/Sheets table layouts (TSV) survive.
+    const handlePaste = (e) => {
+        e.preventDefault();
+        const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return;
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        const node = document.createTextNode(text);
+        range.insertNode(node);
+        range.setStartAfter(node);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        emit();
+    };
+
+    // Paste-friendly callers (Acceptance Criteria, UML, Use Cases) pass
+    // `whitespace-pre` to keep tabular content un-wrapped. Honor that.
+    const isPreField = (className || '').includes('whitespace-pre');
+    const heightRule = `${rows * 1.5}em`;
+
     return (
         <div style={{ position: 'relative' }}>
-            <textarea
-                rows={effectiveRows}
-                value={value}
-                onChange={onChange}
-                placeholder={placeholder}
-                className={className}
-                style={{ paddingRight: 38, ...(style || {}) }}
+            <div
+                ref={editorRef}
+                contentEditable
+                suppressContentEditableWarning
+                data-placeholder={placeholder}
+                onInput={emit}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                className={`usm-editor ${className}`}
+                style={{
+                    paddingRight: 38,
+                    minHeight: heightRule,
+                    ...(expanded
+                        ? { overflowY: 'visible' }
+                        : { maxHeight: heightRule, overflowY: 'auto' }),
+                    ...(isPreField ? { whiteSpace: 'pre' } : { whiteSpace: 'pre-wrap', wordBreak: 'break-word' }),
+                    ...(style || {}),
+                }}
                 {...rest}
             />
             <button
@@ -1223,6 +1316,14 @@ const UserStoryMapping = () => {
                 ::-webkit-scrollbar { display: none; }
                 body { font-family: 'Roboto', sans-serif; }
                 @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+                .usm-editor[contenteditable="true"] { cursor: text; outline: none; }
+                .usm-editor[contenteditable="true"]:empty::before {
+                    content: attr(data-placeholder);
+                    color: #9CA3AF;
+                    pointer-events: none;
+                }
+                .usm-editor[contenteditable="true"] b,
+                .usm-editor[contenteditable="true"] strong { font-weight: 700; }
                 .section-header { cursor: pointer; transition: all 0.2s; }
                 .section-header:hover { background-color: #F8FAFC; }
                 .status-badge { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 500; }
@@ -1455,7 +1556,6 @@ const UserStoryMapping = () => {
                                                     <label className={labelCls}>Acceptance Criteria</label>
                                                     <CollapsibleTextarea
                                                         rows={10}
-                                                        expandedRows={24}
                                                         value={formData.acceptanceCriteriaText}
                                                         onChange={e => handleInputChange('acceptanceCriteriaText', e.target.value)}
                                                         placeholder={"Paste a table from Excel, Sheets, or Word here — column tabs and row breaks are preserved.\n\nExample:\nID\tCriterion\tStatus\nAC-1\tUser can log in with valid credentials\tDraft\nAC-2\tInvalid login shows error message\tDraft"}
@@ -1471,7 +1571,6 @@ const UserStoryMapping = () => {
                                                     <label className={labelCls}>UML Style Flow</label>
                                                     <CollapsibleTextarea
                                                         rows={10}
-                                                        expandedRows={24}
                                                         value={formData.umlStyleFlowText}
                                                         onChange={e => handleInputChange('umlStyleFlowText', e.target.value)}
                                                         placeholder={"Paste a UML-style flow / sequence here — tabs and line breaks are preserved.\n\nExample:\nActor\tAction\tSystem Response\nUser\tEnters credentials\tValidates input\nSystem\tChecks DB\tReturns auth token\nUser\tRedirected to dashboard\t—"}
@@ -1487,7 +1586,6 @@ const UserStoryMapping = () => {
                                                     <label className={labelCls}>Use Cases &amp; Scenarios</label>
                                                     <CollapsibleTextarea
                                                         rows={10}
-                                                        expandedRows={24}
                                                         value={formData.useCasesScenariosText}
                                                         onChange={e => handleInputChange('useCasesScenariosText', e.target.value)}
                                                         placeholder={"Paste use cases / scenarios here — tabular layout is preserved.\n\nExample:\nID\tScenario\tExpected Outcome\nUC-1\tValid login\tDashboard loads\nUC-2\tInvalid password\tError shown\nUC-3\tLocked account\tWarning shown"}
