@@ -2,197 +2,6 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import supabase from "../services/supabaseClient";
 
-// ── RichTextarea — bullet-on-Enter + Ctrl+B bold ──────────────────────────────
-const RichTextarea = ({ value, onChange, rows = 3, placeholder, className, style, onKeyDown: externalKeyDown }) => {
-    const ref = useRef(null);
-
-    // Sync value → DOM when controlled value changes externally
-    useEffect(() => {
-        const el = ref.current;
-        if (!el) return;
-        // Only update DOM if it differs (avoids cursor jump on every keystroke)
-        const rendered = toHtml(value || '');
-        if (el.innerHTML !== rendered) {
-            el.innerHTML = rendered;
-        }
-    }, [value]);
-
-    // Convert plain text (with **bold** markers) → HTML for display
-    function toHtml(text) {
-        return text
-            .split('\n')
-            .map(line => {
-                // escape HTML entities first
-                const escaped = line
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;');
-                // render **bold**
-                return escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-            })
-            .join('<br>');
-    }
-
-    // Convert DOM HTML → plain text (with **bold** markers)
-    function fromHtml(el) {
-        function nodeToText(node) {
-            if (node.nodeType === Node.TEXT_NODE) return node.textContent;
-            if (node.nodeName === 'BR') return '\n';
-            if (node.nodeName === 'STRONG' || node.nodeName === 'B') {
-                return `**${Array.from(node.childNodes).map(nodeToText).join('')}**`;
-            }
-            if (node.nodeName === 'DIV' || node.nodeName === 'P') {
-                const inner = Array.from(node.childNodes).map(nodeToText).join('');
-                return '\n' + inner;
-            }
-            return Array.from(node.childNodes).map(nodeToText).join('');
-        }
-        return Array.from(el.childNodes).map(nodeToText).join('').replace(/^\n/, '');
-    }
-
-    function getCaretOffset(el) {
-        const sel = window.getSelection();
-        if (!sel || sel.rangeCount === 0) return 0;
-        const range = sel.getRangeAt(0);
-        const pre = range.cloneRange();
-        pre.selectNodeContents(el);
-        pre.setEnd(range.endContainer, range.endOffset);
-        return pre.toString().length;
-    }
-
-    function setCaretOffset(el, offset) {
-        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-        let remaining = offset;
-        let node;
-        while ((node = walker.nextNode())) {
-            if (remaining <= node.textContent.length) {
-                const range = document.createRange();
-                const sel = window.getSelection();
-                range.setStart(node, remaining);
-                range.collapse(true);
-                sel.removeAllRanges();
-                sel.addRange(range);
-                return;
-            }
-            remaining -= node.textContent.length;
-        }
-        // fallback: end of el
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        range.collapse(false);
-        window.getSelection().removeAllRanges();
-        window.getSelection().addRange(range);
-    }
-
-    const handleKeyDown = (e) => {
-        externalKeyDown && externalKeyDown(e);
-        const el = ref.current;
-
-        // ── Enter → insert bullet on new line ──
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            const sel = window.getSelection();
-            if (!sel || sel.rangeCount === 0) return;
-            const range = sel.getRangeAt(0);
-            range.deleteContents();
-
-            // Insert newline + bullet
-            const br = document.createElement('br');
-            const bullet = document.createTextNode('• ');
-            range.insertNode(bullet);
-            range.insertNode(br);
-
-            // Move caret after bullet
-            const newRange = document.createRange();
-            newRange.setStartAfter(bullet);
-            newRange.collapse(true);
-            sel.removeAllRanges();
-            sel.addRange(newRange);
-
-            onChange(fromHtml(el));
-            return;
-        }
-
-        // ── Ctrl+B → toggle bold on selection ──
-        if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
-            e.preventDefault();
-            const sel = window.getSelection();
-            if (!sel || sel.rangeCount === 0) return;
-            const range = sel.getRangeAt(0);
-            const selectedText = range.toString();
-            if (!selectedText) return;
-
-            // Check if already inside a <strong>
-            let node = range.commonAncestorContainer;
-            if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
-            const inBold = node.closest && node.closest('strong');
-
-            if (inBold) {
-                // Unwrap: replace <strong> with its text
-                const text = document.createTextNode(inBold.textContent);
-                inBold.replaceWith(text);
-            } else {
-                // Wrap selection in <strong>
-                const strong = document.createElement('strong');
-                range.surroundContents(strong);
-            }
-            onChange(fromHtml(el));
-            return;
-        }
-    };
-
-    const handleInput = () => {
-        const el = ref.current;
-        if (!el) return;
-        onChange(fromHtml(el));
-    };
-
-    const handlePaste = (e) => {
-        e.preventDefault();
-        const text = e.clipboardData.getData('text/plain');
-        document.execCommand('insertText', false, text);
-    };
-
-    // Compute min-height from rows
-    const lineHeight = 20;
-    const paddingV = 10;
-    const minHeight = rows * lineHeight + paddingV * 2;
-
-    return (
-        <div
-            ref={ref}
-            contentEditable
-            suppressContentEditableWarning
-            onKeyDown={handleKeyDown}
-            onInput={handleInput}
-            onPaste={handlePaste}
-            data-placeholder={placeholder}
-            className={className}
-            style={{
-                minHeight,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                overflowY: 'auto',
-                cursor: 'text',
-                ...style,
-            }}
-        />
-    );
-};
-
-// Inject placeholder CSS once
-const RichTextareaStyles = () => (
-    <style>{`
-        [contenteditable][data-placeholder]:empty:before {
-            content: attr(data-placeholder);
-            color: #94a3b8;
-            pointer-events: none;
-        }
-        [contenteditable] strong { font-weight: 700; }
-        [contenteditable]:focus { outline: none; }
-    `}</style>
-);
-
 const CustomSelect = ({ value, onChange, options, placeholder = 'Select…' }) => {
     const [open, setOpen] = useState(false);
     const [hovered, setHovered] = useState(null);
@@ -214,7 +23,9 @@ const CustomSelect = ({ value, onChange, options, placeholder = 'Select…' }) =
                 if (/auto|scroll/.test(overflow + overflowY)) break;
                 scrollParent = scrollParent.parentElement;
             }
-            const containerBottom = scrollParent ? scrollParent.getBoundingClientRect().bottom : window.innerHeight;
+            const containerBottom = scrollParent
+                ? scrollParent.getBoundingClientRect().bottom
+                : window.innerHeight;
             const spaceBelow = containerBottom - rect.bottom;
             const dropdownHeight = Math.min(options.length * 42 + 16, 280);
             setFlipUp(spaceBelow < dropdownHeight + 8);
@@ -292,7 +103,9 @@ const MultiSelect = ({ values = [], onChange, options, placeholder = 'Select…'
                 if (/auto|scroll/.test(overflow + overflowY)) break;
                 scrollParent = scrollParent.parentElement;
             }
-            const containerBottom = scrollParent ? scrollParent.getBoundingClientRect().bottom : window.innerHeight;
+            const containerBottom = scrollParent
+                ? scrollParent.getBoundingClientRect().bottom
+                : window.innerHeight;
             const spaceBelow = containerBottom - rect.bottom;
             setFlipUp(spaceBelow < 260);
         }
@@ -324,8 +137,11 @@ const MultiSelect = ({ values = [], onChange, options, placeholder = 'Select…'
                                 {v.charAt(0).toUpperCase()}
                             </span>
                             {v}
-                            <button type="button" onClick={e => { e.stopPropagation(); toggle(v); }} className="ml-0.5 text-green-700 hover:text-red-500 transition-colors leading-none">
-                                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                            <button type="button" onClick={e => { e.stopPropagation(); toggle(v); }}
+                                className="ml-0.5 text-green-700 hover:text-red-500 transition-colors leading-none">
+                                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                                    <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                </svg>
                             </button>
                         </span>
                     ))}
@@ -355,7 +171,9 @@ const MultiSelect = ({ values = [], onChange, options, placeholder = 'Select…'
                             style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #dcfce7', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} />
                     </div>
                     <div style={{ maxHeight: '200px', overflowY: 'auto', padding: '4px 6px 6px' }}>
-                        {filtered.length === 0 && <p style={{ padding: '10px 12px', fontSize: '13px', color: '#94a3b8', textAlign: 'center' }}>No items found</p>}
+                        {filtered.length === 0 && (
+                            <p style={{ padding: '10px 12px', fontSize: '13px', color: '#94a3b8', textAlign: 'center' }}>No items found</p>
+                        )}
                         {filtered.map((opt) => {
                             const val = typeof opt === 'string' ? opt : opt.value;
                             const lbl = typeof opt === 'string' ? opt : opt.label;
@@ -407,10 +225,8 @@ const Section = ({ id, title, icon, iconColor, collapsedSections, toggleSection,
     </div>
 );
 
-// ── Test Cases Tab ─────────────────────────────────────────────────────────────
 const TestCasesTab = ({ storyId, storyUUID }) => {
     const [testCases, setTestCases] = useState([]);
-    const [profiles, setProfiles] = useState({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -425,31 +241,34 @@ const TestCasesTab = ({ storyId, storyUUID }) => {
             const cols = 'id, test_case_id, name, description, priority, status, test_type, assigned_to, created_at, user_story_id, user_story_ids';
             const seen = new Set();
             const combined = [];
-            const addUnique = (rows) => { (rows || []).forEach(tc => { if (!seen.has(tc.id)) { seen.add(tc.id); combined.push(tc); } }); };
-            if (storyUUID) {
-                const { data } = await supabase.from('test_cases').select(cols).eq('user_story_id', storyUUID).order('created_at', { ascending: false });
-                addUnique(data);
-            }
-            if (storyUUID) {
-                const { data } = await supabase.from('test_cases').select(cols).contains('user_story_ids', [storyUUID]).order('created_at', { ascending: false });
-                addUnique(data);
-            }
-            setTestCases(combined);
 
-            const assignedValues = [...new Set(combined.map(tc => tc.assigned_to).filter(Boolean))];
-            if (assignedValues.length > 0) {
-                const [byId, byEmail, byName] = await Promise.all([
-                    supabase.from('profiles').select('id, full_name, email').in('id', assignedValues),
-                    supabase.from('profiles').select('id, full_name, email').in('email', assignedValues),
-                    supabase.from('profiles').select('id, full_name, email').in('full_name', assignedValues),
-                ]);
-                const map = {};
-                const applyProfile = (p, key) => { map[key] = p.full_name || p.email || key; };
-                (byId.data || []).forEach(p => applyProfile(p, p.id));
-                (byEmail.data || []).forEach(p => applyProfile(p, p.email));
-                (byName.data || []).forEach(p => applyProfile(p, p.full_name));
-                setProfiles(map);
+            const addUnique = (rows) => {
+                (rows || []).forEach(tc => {
+                    if (!seen.has(tc.id)) { seen.add(tc.id); combined.push(tc); }
+                });
+            };
+
+            // 1. Fetch by user_story_id (single UUID — set from UserStoryMapping page)
+            if (storyUUID) {
+                const { data } = await supabase
+                    .from('test_cases')
+                    .select(cols)
+                    .eq('user_story_id', storyUUID)
+                    .order('created_at', { ascending: false });
+                addUnique(data);
             }
+
+            // 2. Fetch by user_story_ids (array — set from FeaturesLibrary)
+            if (storyUUID) {
+                const { data } = await supabase
+                    .from('test_cases')
+                    .select(cols)
+                    .contains('user_story_ids', [storyUUID])
+                    .order('created_at', { ascending: false });
+                addUnique(data);
+            }
+
+            setTestCases(combined);
         } catch (err) { setError(err.message); } finally { setLoading(false); }
     };
 
@@ -461,42 +280,13 @@ const TestCasesTab = ({ storyId, storyUUID }) => {
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-foreground">{testCases.length} test case{testCases.length !== 1 ? 's' : ''} linked</span>
-                    <span className="px-2 py-0.5 bg-primary bg-opacity-10 text-primary text-xs font-semibold rounded-full">{storyId}</span>
-                </div>
-            </div>
+            <div className="flex items-center justify-between"><div className="flex items-center gap-2"><span className="text-sm font-semibold text-foreground">{testCases.length} test case{testCases.length !== 1 ? 's' : ''} linked</span><span className="px-2 py-0.5 bg-primary bg-opacity-10 text-primary text-xs font-semibold rounded-full">{storyId}</span></div></div>
             {testCases.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 gap-3">
-                    <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center"><i className="fa-solid fa-list-check text-2xl text-muted-foreground"></i></div>
-                    <p className="text-sm font-medium text-muted-foreground">No test cases linked to {storyId}</p>
-                </div>
+                <div className="flex flex-col items-center justify-center py-16 gap-3"><div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center"><i className="fa-solid fa-list-check text-2xl text-muted-foreground"></i></div><p className="text-sm font-medium text-muted-foreground">No test cases linked to {storyId}</p></div>
             ) : (
                 <div className="overflow-x-auto rounded-lg border border-border">
-                    <table className="w-full text-sm">
-                        <thead>
-                            <tr className="bg-muted border-b border-border">
-                                {['Test Case ID', 'Name', 'Type', 'Priority', 'Status', 'Assigned To'].map(h => (
-                                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                            {testCases.map(tc => (
-                                <tr key={tc.id} className="hover:bg-muted transition-colors">
-                                    <td className="px-4 py-3 font-mono text-xs text-primary font-semibold">{tc.test_case_id || '—'}</td>
-                                    <td className="px-4 py-3 font-medium text-foreground max-w-xs">
-                                        <div className="truncate" title={tc.name}>{tc.name || '—'}</div>
-                                        {tc.description && <div className="text-xs text-muted-foreground truncate mt-0.5" title={tc.description}>{tc.description}</div>}
-                                    </td>
-                                    <td className="px-4 py-3 text-muted-foreground">{tc.test_type || '—'}</td>
-                                    <td className="px-4 py-3"><span className={`font-semibold text-xs ${priorityColor(tc.priority)}`}>{tc.priority || '—'}</span></td>
-                                    <td className="px-4 py-3"><span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${statusColor(tc.status)}`}>{tc.status || '—'}</span></td>
-                                    <td className="px-4 py-3 text-muted-foreground text-xs">{tc.assigned_to ? (profiles[tc.assigned_to] || tc.assigned_to) : 'Unassigned'}</td>
-                                </tr>
-                            ))}
-                        </tbody>
+                    <table className="w-full text-sm"><thead><tr className="bg-muted border-b border-border">{['Test Case ID', 'Name', 'Type', 'Priority', 'Status', 'Assigned To'].map(h => (<th key={h} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>))}</tr></thead>
+                        <tbody className="divide-y divide-border">{testCases.map(tc => (<tr key={tc.id} className="hover:bg-muted transition-colors"><td className="px-4 py-3 font-mono text-xs text-primary font-semibold">{tc.test_case_id || '—'}</td><td className="px-4 py-3 font-medium text-foreground max-w-xs"><div className="truncate" title={tc.name}>{tc.name || '—'}</div>{tc.description && <div className="text-xs text-muted-foreground truncate mt-0.5" title={tc.description}>{tc.description}</div>}</td><td className="px-4 py-3 text-muted-foreground">{tc.test_type || '—'}</td><td className="px-4 py-3"><span className={`font-semibold text-xs ${priorityColor(tc.priority)}`}>{tc.priority || '—'}</span></td><td className="px-4 py-3"><span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${statusColor(tc.status)}`}>{tc.status || '—'}</span></td><td className="px-4 py-3 text-muted-foreground text-xs">{tc.assigned_to || 'Unassigned'}</td></tr>))}</tbody>
                     </table>
                 </div>
             )}
@@ -504,7 +294,51 @@ const TestCasesTab = ({ storyId, storyUUID }) => {
     );
 };
 
-// ── Comments Tab ───────────────────────────────────────────────────────────────
+const BugsTab = ({ storyId, storyUUID }) => {
+    const [bugs, setBugs] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [showForm, setShowForm] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [newBug, setNewBug] = useState({ title: '', description: '', severity: '', status: 'Open', reported_by: '' });
+
+    useEffect(() => { if (!storyUUID) { setLoading(false); return; } fetchBugs(); }, [storyUUID]);
+
+    const fetchBugs = async () => { setLoading(true); try { const { data, error } = await supabase.from('bugs').select('*').eq('story_id', storyUUID).order('created_at', { ascending: false }); if (error) throw error; setBugs(data || []); } catch (err) { setError(err.message); } finally { setLoading(false); } };
+    const handleAddBug = async () => { if (!newBug.title.trim()) { alert('Bug title is required'); return; } setSaving(true); try { const bugCount = bugs.length + 1; const bugId = `BUG-${String(bugCount).padStart(3, '0')}`; const { error } = await supabase.from('bugs').insert([{ story_id: storyUUID, bug_id: bugId, ...newBug }]); if (error) throw error; setNewBug({ title: '', description: '', severity: '', status: 'Open', reported_by: '' }); setShowForm(false); await fetchBugs(); } catch (err) { alert(`Error: ${err.message}`); } finally { setSaving(false); } };
+
+    const severityColor = (s) => ({ 'Critical': 'bg-red-100 text-red-700 border-red-200', 'High': 'bg-orange-100 text-orange-700 border-orange-200', 'Medium': 'bg-yellow-100 text-yellow-700 border-yellow-200', 'Low': 'bg-green-100 text-green-700 border-green-200' }[s] || 'bg-gray-100 text-gray-600 border-gray-200');
+    const statusColor = (s) => ({ 'Open': 'bg-red-50 text-red-600', 'In Progress': 'bg-blue-50 text-blue-600', 'Fixed': 'bg-green-50 text-green-600', 'Closed': 'bg-gray-100 text-gray-500', 'Reopened': 'bg-orange-50 text-orange-600' }[s] || 'bg-gray-100 text-gray-600');
+
+    if (loading) return <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div></div>;
+    if (error) return <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"><i className="fa-solid fa-circle-exclamation"></i>{error}</div>;
+
+    const inputCls = "w-full px-3 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary";
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center justify-between"><span className="text-sm font-semibold text-foreground">{bugs.length} bug{bugs.length !== 1 ? 's' : ''} linked</span><button onClick={() => setShowForm(p => !p)} className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 transition-colors"><i className={`fa-solid ${showForm ? 'fa-times' : 'fa-plus'}`}></i>{showForm ? 'Cancel' : 'Link Bug'}</button></div>
+            {showForm && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-5 space-y-4">
+                    <h4 className="text-sm font-semibold text-red-700">Link New Bug</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="sm:col-span-2"><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Title *</label><input type="text" value={newBug.title} onChange={e => setNewBug(p => ({ ...p, title: e.target.value }))} placeholder="Bug title..." className={inputCls} /></div>
+                        <div className="sm:col-span-2"><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Description</label><textarea rows="2" value={newBug.description} onChange={e => setNewBug(p => ({ ...p, description: e.target.value }))} placeholder="Describe the bug..." className={inputCls} /></div>
+                        <div><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Severity</label><CustomSelect value={newBug.severity} onChange={v => setNewBug(p => ({ ...p, severity: v }))} options={['Critical', 'High', 'Medium', 'Low']} placeholder="Select severity" /></div>
+                        <div><label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Reported By</label><input type="text" value={newBug.reported_by} onChange={e => setNewBug(p => ({ ...p, reported_by: e.target.value }))} placeholder="Your name" className={inputCls} /></div>
+                    </div>
+                    <button onClick={handleAddBug} disabled={saving} className="px-5 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 disabled:opacity-50 transition-colors">{saving ? 'Saving…' : 'Save Bug'}</button>
+                </div>
+            )}
+            {bugs.length === 0 && !showForm ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3"><div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center"><i className="fa-solid fa-bug text-2xl text-muted-foreground"></i></div><p className="text-sm font-medium text-muted-foreground">No bugs linked to {storyId}</p></div>
+            ) : (
+                <div className="space-y-3">{bugs.map(bug => (<div key={bug.id} className="flex items-start gap-4 p-4 bg-card border border-border rounded-lg hover:border-red-200 transition-colors"><div className="flex-1 min-w-0"><div className="flex items-center gap-2 mb-1 flex-wrap"><span className="font-mono text-xs text-red-600 font-semibold">{bug.bug_id}</span>{bug.severity && <span className={`inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium ${severityColor(bug.severity)}`}>{bug.severity}</span>}<span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusColor(bug.status)}`}>{bug.status}</span></div><p className="text-sm font-medium text-foreground">{bug.title}</p>{bug.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{bug.description}</p>}{bug.reported_by && <p className="text-xs text-muted-foreground mt-1"><i className="fa-solid fa-user mr-1"></i>Reported by {bug.reported_by}</p>}</div><span className="text-xs text-muted-foreground whitespace-nowrap">{new Date(bug.created_at).toLocaleDateString()}</span></div>))}</div>
+            )}
+        </div>
+    );
+};
+
 const CommentsTab = ({ storyId, storyUUID }) => {
     const [comments, setComments] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -513,120 +347,44 @@ const CommentsTab = ({ storyId, storyUUID }) => {
     const [authorName, setAuthorName] = useState('');
     const [posting, setPosting] = useState(false);
 
-    useEffect(() => {
-        if (!storyUUID) { setLoading(false); return; }
-        fetchComments();
-    }, [storyUUID]);
+    useEffect(() => { if (!storyUUID) { setLoading(false); return; } fetchComments(); }, [storyUUID]);
 
-    const fetchComments = async () => {
-        if (!storyUUID) return;
-        setLoading(true); setError(null);
-        try {
-            const { data, error } = await supabase.from('comments').select('*, profiles(full_name, email)').eq('story_id', storyUUID).order('created_at', { ascending: true });
-            if (error) {
-                const { data: plain, error: e2 } = await supabase.from('comments').select('*').eq('story_id', storyUUID).order('created_at', { ascending: true });
-                if (e2) throw e2;
-                setComments(plain || []);
-            } else { setComments(data || []); }
-        } catch (err) { setError(err.message); } finally { setLoading(false); }
-    };
+    const fetchComments = async () => { setLoading(true); try { const { data, error } = await supabase.from('comments').select('*').eq('story_id', storyUUID).order('created_at', { ascending: true }); if (error) throw error; setComments(data || []); } catch (err) { setError(err.message); } finally { setLoading(false); } };
+    const handlePostComment = async () => { if (!newComment.trim()) { alert('Please enter a comment'); return; } setPosting(true); try { const { error } = await supabase.from('comments').insert([{ story_id: storyUUID, comment_text: newComment.trim(), user_id: authorName.trim() || 'Anonymous' }]); if (error) throw error; setNewComment(''); await fetchComments(); } catch (err) { alert(`Error: ${err.message}`); } finally { setPosting(false); } };
 
-    const handlePostComment = async () => {
-        if (!storyUUID) { alert('Save the story first before adding comments.'); return; }
-        if (!newComment.trim()) { alert('Please enter a comment'); return; }
-        setPosting(true);
-        try {
-            const { data: authData } = await supabase.auth.getUser();
-            const userId = authData?.user?.id || null;
-            const { data, error } = await supabase.from('comments').insert([{ story_id: storyUUID, comment_text: newComment.trim(), user_id: userId }]).select('*, profiles(full_name, email)');
-            if (error) throw error;
-            if (data && data.length > 0) {
-                setComments(prev => [...prev, { ...data[0], _displayName: authorName.trim() || data[0].profiles?.full_name || data[0].profiles?.email || 'Anonymous' }]);
-            }
-            setNewComment(''); setAuthorName('');
-        } catch (err) { alert(`Error: ${err.message}`); } finally { setPosting(false); }
-    };
-
-    const handleDelete = async (id) => {
-        if (!window.confirm('Delete this comment?')) return;
-        const { error } = await supabase.from('comments').delete().eq('id', id);
-        if (error) { alert(error.message); return; }
-        setComments(prev => prev.filter(c => c.id !== id));
-    };
-
+    const timeAgo = (dateStr) => { const diff = Date.now() - new Date(dateStr).getTime(); const mins = Math.floor(diff / 60000); if (mins < 1) return 'just now'; if (mins < 60) return `${mins}m ago`; const hrs = Math.floor(mins / 60); if (hrs < 24) return `${hrs}h ago`; return `${Math.floor(hrs / 24)}d ago`; };
     const getInitials = (name) => name ? name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : 'AN';
     const avatarColor = (name) => { const colors = ['bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500', 'bg-pink-500', 'bg-teal-500']; return colors[name ? name.charCodeAt(0) % colors.length : 0]; };
 
-    if (!storyUUID) return (<div className="flex flex-col items-center justify-center py-16 gap-3"><div className="w-14 h-14 bg-yellow-50 rounded-full flex items-center justify-center"><i className="fa-solid fa-triangle-exclamation text-2xl text-yellow-400"></i></div><p className="text-sm font-medium text-muted-foreground">Save the story first to enable comments</p></div>);
-    if (loading) return (<div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div></div>);
-    if (error) return (<div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"><i className="fa-solid fa-circle-exclamation"></i>{error}</div>);
+    if (loading) return <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div></div>;
+    if (error) return <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"><i className="fa-solid fa-circle-exclamation"></i>{error}</div>;
 
     return (
         <div className="space-y-6">
             {comments.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-3"><div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center"><i className="fa-solid fa-comment-dots text-2xl text-muted-foreground"></i></div><p className="text-sm font-medium text-muted-foreground">No comments yet — be the first!</p></div>
             ) : (
-                <div className="space-y-4">
-                    {comments.map(c => {
-                        const displayName = c._displayName || c.profiles?.full_name || c.profiles?.email || 'Anonymous';
-                        return (
-                            <div key={c.id} className="flex gap-3 group">
-                                <div className={`w-9 h-9 ${avatarColor(displayName)} rounded-full flex items-center justify-center flex-shrink-0`}><span className="text-white text-xs font-bold">{getInitials(displayName)}</span></div>
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className="text-sm font-semibold text-foreground">{displayName}</span>
-                                        <button onClick={() => handleDelete(c.id)} className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-500 text-xs" title="Delete comment"><i className="fa-solid fa-trash"></i></button>
-                                    </div>
-                                    <div className="bg-muted rounded-lg px-4 py-3 text-sm text-foreground leading-relaxed">{c.comment_text}</div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
+                <div className="space-y-4">{comments.map(c => (<div key={c.id} className="flex gap-3"><div className={`w-9 h-9 ${avatarColor(c.user_id)} rounded-full flex items-center justify-center flex-shrink-0`}><span className="text-white text-xs font-bold">{getInitials(c.user_id)}</span></div><div className="flex-1"><div className="flex items-center gap-2 mb-1"><span className="text-sm font-semibold text-foreground">{c.user_id || 'Anonymous'}</span><span className="text-xs text-muted-foreground">{timeAgo(c.created_at)}</span></div><div className="bg-muted rounded-lg px-4 py-3 text-sm text-foreground leading-relaxed">{c.comment_text}</div></div></div>))}</div>
             )}
             <div className="border-t border-border pt-5 space-y-3">
                 <h4 className="text-sm font-semibold text-foreground">Add a comment</h4>
                 <input type="text" value={authorName} onChange={e => setAuthorName(e.target.value)} placeholder="Your name (optional)" className="w-full px-3 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
                 <textarea rows="3" value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handlePostComment(); }} placeholder="Write a comment… (Ctrl+Enter to post)" className="w-full px-3 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
-                <div className="flex justify-end">
-                    <button onClick={handlePostComment} disabled={posting || !newComment.trim()} className="flex items-center gap-2 px-5 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity">
-                        <i className="fa-solid fa-paper-plane"></i>{posting ? 'Posting…' : 'Post Comment'}
-                    </button>
-                </div>
+                <div className="flex justify-end"><button onClick={handlePostComment} disabled={posting || !newComment.trim()} className="flex items-center gap-2 px-5 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"><i className="fa-solid fa-paper-plane"></i>{posting ? 'Posting…' : 'Post Comment'}</button></div>
             </div>
         </div>
     );
 };
 
-// ── Attachments Tab ────────────────────────────────────────────────────────────
 const T = {
     body: { fontSize: 13, fontWeight: 400, lineHeight: 1.5 },
     bodyMed: { fontSize: 13, fontWeight: 500, lineHeight: 1.5 },
     label: { fontSize: 12, fontWeight: 400, lineHeight: 1.5 },
     micro: { fontSize: 11, fontWeight: 500, letterSpacing: '0.06em', lineHeight: 1.5 },
     subhead: { fontSize: 15, fontWeight: 500, lineHeight: 1.2 },
+    section: { fontSize: 18, fontWeight: 600, lineHeight: 1.2 },
 };
 const font = 'Inter, system-ui, -apple-system, sans-serif';
-
-const AttachmentRow = ({ att, fileIcon, formatSize, onDelete }) => {
-    const [hov, setHov] = useState(false);
-    return (
-        <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: hov ? '#F9FAFB' : '#FFFFFF', border: `1px solid ${hov ? '#6EE7B7' : '#E5E7EB'}`, borderRadius: 10, transition: 'all 0.15s' }}>
-            <div style={{ width: 36, height: 36, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <i className={`fa-solid ${fileIcon(att.file_type)}`} style={{ fontSize: 16, color: '#9CA3AF' }}></i>
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontFamily: font, ...T.bodyMed, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>{att.file_name}</p>
-                <span style={{ fontFamily: font, ...T.label, color: '#9CA3AF' }}>{formatSize(att.file_size)} · Uploaded by {att.uploaded_by || '—'} · {new Date(att.uploaded_at).toLocaleDateString()}</span>
-            </div>
-            <div style={{ display: 'flex', gap: 4, opacity: hov ? 1 : 0, transition: 'opacity 0.15s' }}>
-                <a href={att.file_url} target="_blank" rel="noopener noreferrer" style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: '#9CA3AF', textDecoration: 'none' }} title="Download"><i className="fa-solid fa-download" style={{ fontSize: 11 }}></i></a>
-                <button onClick={() => onDelete(att)} style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: '#9CA3AF', background: 'none', border: 'none', cursor: 'pointer' }} title="Delete"><i className="fa-solid fa-trash" style={{ fontSize: 11 }}></i></button>
-            </div>
-        </div>
-    );
-};
 
 const AttachmentsTab = ({ storyId, storyUUID }) => {
     const [attachments, setAttachments] = useState([]);
@@ -638,10 +396,12 @@ const AttachmentsTab = ({ storyId, storyUUID }) => {
     const [uploading, setUploading] = useState(false);
     const [uploadedBy, setUploadedBy] = useState('');
     const fileInputRef = useRef(null);
+
     const [showFigmaForm, setShowFigmaForm] = useState(false);
     const [figmaSaving, setFigmaSaving] = useState(false);
     const [newFigma, setNewFigma] = useState({ url: '', title: '', added_by: '' });
     const [figmaError, setFigmaError] = useState('');
+
     const [showWebForm, setShowWebForm] = useState(false);
     const [webSaving, setWebSaving] = useState(false);
     const [newWeb, setNewWeb] = useState({ url: '', title: '', added_by: '' });
@@ -649,7 +409,8 @@ const AttachmentsTab = ({ storyId, storyUUID }) => {
 
     useEffect(() => {
         if (!storyUUID) { setLoading(false); setLinksLoading(false); return; }
-        fetchAttachments(); fetchLinks();
+        fetchAttachments();
+        fetchLinks();
     }, [storyUUID]);
 
     const fetchAttachments = async () => {
@@ -676,7 +437,6 @@ const AttachmentsTab = ({ storyId, storyUUID }) => {
     const isValidWebLink = (url) => { try { const u = new URL(url.trim()); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; } };
 
     const handleSaveFigma = async () => {
-        if (!storyUUID) { alert('Please save the story first.'); return; }
         if (!newFigma.url.trim()) { setFigmaError('Figma URL is required'); return; }
         if (!isValidFigmaLink(newFigma.url)) { setFigmaError('Please enter a valid Figma URL (figma.com/...)'); return; }
         setFigmaSaving(true);
@@ -688,7 +448,6 @@ const AttachmentsTab = ({ storyId, storyUUID }) => {
     };
 
     const handleSaveWeb = async () => {
-        if (!storyUUID) { alert('Please save the story first.'); return; }
         if (!newWeb.url.trim()) { setWebError('Web URL is required'); return; }
         if (!isValidWebLink(newWeb.url)) { setWebError('Please enter a valid URL (https://...)'); return; }
         setWebSaving(true);
@@ -701,22 +460,16 @@ const AttachmentsTab = ({ storyId, storyUUID }) => {
 
     const handleDeleteLink = async (link) => {
         if (!window.confirm('Delete this link?')) return;
-        try {
-            const { error } = await supabase.from('story_links').delete().eq('id', link.id);
-            if (error) throw error;
-            await fetchLinks();
-        } catch (err) { alert(`Delete error: ${err.message}`); }
+        try { const { error } = await supabase.from('story_links').delete().eq('id', link.id); if (error) throw error; await fetchLinks(); } catch (err) { alert(`Delete error: ${err.message}`); }
     };
 
     const handleFileUpload = async (e) => {
-        if (!storyUUID) { alert('Please save the story first before uploading files.'); return; }
         const files = Array.from(e.target.files);
         if (!files.length) return;
         setUploading(true);
         try {
             for (const file of files) {
-                const sanitizedName = file.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '');
-                const filePath = `${storyUUID}/${Date.now()}_${sanitizedName}`;
+                const filePath = `${storyUUID}/${Date.now()}_${file.name}`;
                 const { error: uploadError } = await supabase.storage.from('story-attachments').upload(filePath, file);
                 if (uploadError) throw uploadError;
                 const { data: { publicUrl } } = supabase.storage.from('story-attachments').getPublicUrl(filePath);
@@ -730,18 +483,17 @@ const AttachmentsTab = ({ storyId, storyUUID }) => {
 
     const handleDeleteFile = async (attachment) => {
         if (!window.confirm(`Delete "${attachment.file_name}"?`)) return;
-        try {
-            const { error } = await supabase.from('attachments').delete().eq('id', attachment.id);
-            if (error) throw error;
-            setAttachments(p => p.filter(a => a.id !== attachment.id));
-        } catch (err) { alert(`Delete error: ${err.message}`); }
+        try { const { error } = await supabase.from('attachments').delete().eq('id', attachment.id); if (error) throw error; setAttachments(p => p.filter(a => a.id !== attachment.id)); } catch (err) { alert(`Delete error: ${err.message}`); }
     };
 
     const formatSize = (bytes) => { if (!bytes) return '—'; if (bytes < 1024) return `${bytes} B`; if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`; return `${(bytes / 1048576).toFixed(1)} MB`; };
     const fileIcon = (type) => { if (!type) return 'fa-file'; if (type.startsWith('image/')) return 'fa-file-image'; if (type === 'application/pdf') return 'fa-file-pdf'; if (type.includes('word')) return 'fa-file-word'; if (type.includes('sheet') || type.includes('excel')) return 'fa-file-excel'; if (type.includes('zip') || type.includes('rar')) return 'fa-file-zipper'; return 'fa-file'; };
 
-    if (!storyUUID) return (<div className="flex flex-col items-center justify-center py-16 gap-3"><div className="w-14 h-14 bg-yellow-50 rounded-full flex items-center justify-center"><i className="fa-solid fa-triangle-exclamation text-2xl text-yellow-400"></i></div><p className="text-sm font-medium text-muted-foreground">Save the story first to enable attachments</p></div>);
-    if (error) return (<div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, color: '#DC2626', fontFamily: font, ...T.body }}><i className="fa-solid fa-circle-exclamation"></i><span>{error}</span></div>);
+    if (error) return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, color: '#DC2626', fontFamily: font, ...T.body }}>
+            <i className="fa-solid fa-circle-exclamation"></i><span>{error}</span>
+        </div>
+    );
 
     const inp = (extra = {}) => ({ width: '100%', padding: '10px 14px', background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 8, fontFamily: font, ...T.body, color: '#111827', outline: 'none', boxSizing: 'border-box', lineHeight: 1.5, ...extra });
     const inpFocus = (ref) => { if (ref) { ref.style.borderColor = '#6366F1'; ref.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.12)'; } };
@@ -781,13 +533,24 @@ const AttachmentsTab = ({ storyId, storyUUID }) => {
         <div style={{ background: bg, border: `1px solid ${borderColor}`, borderRadius: 12, padding: '20px 20px 16px', marginBottom: 16 }}>
             <div style={{ marginBottom: 14 }}>
                 <MicroLabel color={accentColor}>{urlLabel} <span style={{ color: '#EF4444' }}>*</span></MicroLabel>
-                <div style={{ position: 'relative' }}><i className={urlIcon} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: accentColor, fontSize: 13, opacity: 0.7 }}></i><input type="url" value={urlValue} onChange={onUrlChange} placeholder={urlPlaceholder} style={{ ...inp({ paddingLeft: 36, borderColor: urlError ? '#EF4444' : '#E5E7EB' }) }} onFocus={e => inpFocus(e.target)} onBlur={e => inpBlur(e.target)} /></div>
+                <div style={{ position: 'relative' }}>
+                    <i className={urlIcon} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: accentColor, fontSize: 13, opacity: 0.7 }}></i>
+                    <input type="url" value={urlValue} onChange={onUrlChange} placeholder={urlPlaceholder} style={{ ...inp({ paddingLeft: 36, borderColor: urlError ? '#EF4444' : '#E5E7EB' }) }} onFocus={e => inpFocus(e.target)} onBlur={e => inpBlur(e.target)} />
+                </div>
                 {urlError && <span style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 5, fontFamily: font, ...T.label, color: '#EF4444' }}><i className="fa-solid fa-circle-exclamation" style={{ fontSize: 11 }}></i>{urlError}</span>}
             </div>
-            <div style={{ marginBottom: 14 }}><MicroLabel color={accentColor}>Link title</MicroLabel><input type="text" value={titleValue} onChange={onTitleChange} placeholder="e.g. Homepage wireframe, Jira ticket…" style={inp()} onFocus={e => inpFocus(e.target)} onBlur={e => inpBlur(e.target)} /></div>
-            <div style={{ marginBottom: 18 }}><MicroLabel color={accentColor}>Added by</MicroLabel><input type="text" value={nameValue} onChange={onNameChange} placeholder="Your name (optional)" style={inp()} onFocus={e => inpFocus(e.target)} onBlur={e => inpBlur(e.target)} /></div>
+            <div style={{ marginBottom: 14 }}>
+                <MicroLabel color={accentColor}>Link title</MicroLabel>
+                <input type="text" value={titleValue} onChange={onTitleChange} placeholder="e.g. Homepage wireframe, Jira ticket…" style={inp()} onFocus={e => inpFocus(e.target)} onBlur={e => inpBlur(e.target)} />
+            </div>
+            <div style={{ marginBottom: 18 }}>
+                <MicroLabel color={accentColor}>Added by</MicroLabel>
+                <input type="text" value={nameValue} onChange={onNameChange} placeholder="Your name (optional)" style={inp()} onFocus={e => inpFocus(e.target)} onBlur={e => inpBlur(e.target)} />
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={onSave} disabled={saving} style={{ padding: '9px 20px', background: accentColor, color: '#FFFFFF', border: 'none', borderRadius: 8, fontFamily: font, ...T.bodyMed, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>{saving ? <><i className="fa-solid fa-spinner fa-spin" style={{ fontSize: 12 }}></i> Saving…</> : <><i className="fa-solid fa-floppy-disk" style={{ fontSize: 12 }}></i> {saveLabel}</>}</button>
+                <button onClick={onSave} disabled={saving} style={{ padding: '9px 20px', background: accentColor, color: '#FFFFFF', border: 'none', borderRadius: 8, fontFamily: font, ...T.bodyMed, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {saving ? <><i className="fa-solid fa-spinner fa-spin" style={{ fontSize: 12 }}></i> Saving…</> : <><i className="fa-solid fa-floppy-disk" style={{ fontSize: 12 }}></i> {saveLabel}</>}
+                </button>
                 <button onClick={onCancel} style={{ padding: '9px 18px', background: '#FFFFFF', color: '#374151', border: '1px solid #E5E7EB', borderRadius: 8, fontFamily: font, ...T.bodyMed, cursor: 'pointer' }}>Cancel</button>
             </div>
         </div>
@@ -808,7 +571,7 @@ const AttachmentsTab = ({ storyId, storyUUID }) => {
                 {showFigmaForm && <AddLinkForm bg="rgba(139,92,246,0.04)" borderColor="rgba(139,92,246,0.20)" accentColor="#7C3AED" urlLabel="Figma URL" urlPlaceholder="https://www.figma.com/file/..." urlIcon="fa-brands fa-figma" urlValue={newFigma.url} onUrlChange={e => { setNewFigma(p => ({ ...p, url: e.target.value })); setFigmaError(''); }} urlError={figmaError} titleValue={newFigma.title} onTitleChange={e => setNewFigma(p => ({ ...p, title: e.target.value }))} nameValue={newFigma.added_by} onNameChange={e => setNewFigma(p => ({ ...p, added_by: e.target.value }))} onSave={handleSaveFigma} onCancel={() => { setShowFigmaForm(false); setFigmaError(''); setNewFigma({ url: '', title: '', added_by: '' }); }} saving={figmaSaving} saveLabel="Save Figma Link" />}
                 {linksLoading ? <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}><div style={{ width: 20, height: 20, border: '2px solid #7C3AED', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }}></div></div>
                     : figmaLinks.length === 0 && !showFigmaForm ? <EmptyState icon="fa-brands fa-figma" message="No Figma design links added yet" />
-                        : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{figmaLinks.map(link => (<LinkRow key={link.id} href={link.figma_link} url={link.figma_link} icon="fa-brands fa-figma" iconBg="rgba(139,92,246,0.10)" iconColor="#7C3AED" urlColor="#6D28D9" hoverBorder="#C4B5FD" title={link.title || ''} meta={`Added by ${link.added_by || 'Anonymous'} · ${new Date(link.created_at).toLocaleDateString()}`} metaColor="#9CA3AF" onDelete={() => handleDeleteLink(link)} />))}</div>}
+                        : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{figmaLinks.map(link => <LinkRow key={link.id} href={link.figma_link} url={link.figma_link} icon="fa-brands fa-figma" iconBg="rgba(139,92,246,0.10)" iconColor="#7C3AED" urlColor="#6D28D9" hoverBorder="#C4B5FD" title={link.title || ''} meta={`Added by ${link.added_by || 'Anonymous'} · ${new Date(link.created_at).toLocaleDateString()}`} metaColor="#9CA3AF" onDelete={() => handleDeleteLink(link)} />)}</div>}
             </div>
             <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 14, padding: '20px 20px 16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showWebForm ? 16 : webLinks.length > 0 ? 16 : 12 }}>
@@ -818,7 +581,7 @@ const AttachmentsTab = ({ storyId, storyUUID }) => {
                 {showWebForm && <AddLinkForm bg="rgba(59,130,246,0.04)" borderColor="rgba(59,130,246,0.20)" accentColor="#2563EB" urlLabel="Web URL" urlPlaceholder="https://example.com/..." urlIcon="fa-solid fa-globe" urlValue={newWeb.url} onUrlChange={e => { setNewWeb(p => ({ ...p, url: e.target.value })); setWebError(''); }} urlError={webError} titleValue={newWeb.title} onTitleChange={e => setNewWeb(p => ({ ...p, title: e.target.value }))} nameValue={newWeb.added_by} onNameChange={e => setNewWeb(p => ({ ...p, added_by: e.target.value }))} onSave={handleSaveWeb} onCancel={() => { setShowWebForm(false); setWebError(''); setNewWeb({ url: '', title: '', added_by: '' }); }} saving={webSaving} saveLabel="Save Web Link" />}
                 {linksLoading ? <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}><div style={{ width: 20, height: 20, border: '2px solid #2563EB', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }}></div></div>
                     : webLinks.length === 0 && !showWebForm ? <EmptyState icon="fa-solid fa-globe" message="No web links added yet" />
-                        : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{webLinks.map(link => (<LinkRow key={link.id} href={link.web_link} url={link.web_link} icon="fa-solid fa-globe" iconBg="rgba(59,130,246,0.10)" iconColor="#2563EB" urlColor="#1D4ED8" hoverBorder="#93C5FD" title={link.title || ''} meta={`Added by ${link.added_by || 'Anonymous'} · ${new Date(link.created_at).toLocaleDateString()}`} metaColor="#9CA3AF" onDelete={() => handleDeleteLink(link)} />))}</div>}
+                        : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{webLinks.map(link => <LinkRow key={link.id} href={link.web_link} url={link.web_link} icon="fa-solid fa-globe" iconBg="rgba(59,130,246,0.10)" iconColor="#2563EB" urlColor="#1D4ED8" hoverBorder="#93C5FD" title={link.title || ''} meta={`Added by ${link.added_by || 'Anonymous'} · ${new Date(link.created_at).toLocaleDateString()}`} metaColor="#9CA3AF" onDelete={() => handleDeleteLink(link)} />)}</div>}
             </div>
             <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 14, padding: '20px 20px 16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
@@ -842,7 +605,22 @@ const AttachmentsTab = ({ storyId, storyUUID }) => {
                     : attachments.length === 0 ? <EmptyState icon="fa-solid fa-file" message={`No file attachments yet for ${storyId}`} />
                         : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                             <span style={{ fontFamily: font, ...T.micro, textTransform: 'uppercase', color: '#6B7280', letterSpacing: '0.06em', marginBottom: 4 }}>{attachments.length} file{attachments.length !== 1 ? 's' : ''}</span>
-                            {attachments.map(att => (<AttachmentRow key={att.id} att={att} fileIcon={fileIcon} formatSize={formatSize} onDelete={handleDeleteFile} />))}
+                            {attachments.map(att => {
+                                const [hov, setHov] = useState(false);
+                                return (
+                                    <div key={att.id} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: hov ? '#F9FAFB' : '#FFFFFF', border: `1px solid ${hov ? '#6EE7B7' : '#E5E7EB'}`, borderRadius: 10, transition: 'all 0.15s' }}>
+                                        <div style={{ width: 36, height: 36, background: '#F3F4F6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><i className={`fa-solid ${fileIcon(att.file_type)}`} style={{ fontSize: 16, color: '#9CA3AF' }}></i></div>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <p style={{ fontFamily: font, ...T.bodyMed, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>{att.file_name}</p>
+                                            <span style={{ fontFamily: font, ...T.label, color: '#9CA3AF' }}>{formatSize(att.file_size)} · Uploaded by {att.uploaded_by || '—'} · {new Date(att.uploaded_at).toLocaleDateString()}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: 4, opacity: hov ? 1 : 0, transition: 'opacity 0.15s' }}>
+                                            <a href={att.file_url} target="_blank" rel="noopener noreferrer" style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: '#9CA3AF', textDecoration: 'none' }} title="Download"><i className="fa-solid fa-download" style={{ fontSize: 11 }}></i></a>
+                                            <button onClick={() => handleDeleteFile(att)} style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, color: '#9CA3AF', background: 'none', border: 'none', cursor: 'pointer' }} title="Delete"><i className="fa-solid fa-trash" style={{ fontSize: 11 }}></i></button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>}
             </div>
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -850,15 +628,16 @@ const AttachmentsTab = ({ storyId, storyUUID }) => {
     );
 };
 
-// ── Helper: generate next story ID ────────────────────────────────────────────
+// ── Helper: generate next story ID ───────────────────────────────────────────
 const generateNextStoryId = (existingIds = []) => {
     if (!existingIds.length) return 'US-001';
-    const nums = existingIds.map(id => { const match = id.match(/^US-(\d+)$/i); return match ? parseInt(match[1], 10) : 0; }).filter(n => !isNaN(n));
+    const nums = existingIds
+        .map(id => { const match = id.match(/^US-(\d+)$/i); return match ? parseInt(match[1], 10) : 0; })
+        .filter(n => !isNaN(n));
     const max = nums.length ? Math.max(...nums) : 0;
     return `US-${String(max + 1).padStart(3, '0')}`;
 };
 
-// ── EMPTY_FORM — includes successMessage & errorMessage ───────────────────────
 const EMPTY_FORM = {
     storyId: '', storyType: '', storyTitle: '', storySummary: '',
     moduleId: '', parentStoryId: '', sequence: '', businessContext: '',
@@ -867,34 +646,21 @@ const EMPTY_FORM = {
     module: '', feature: '', userRole: '', screenPage: '', asA: '', iWant: '',
     soThat: '', preconditions: '', mainFlow: '', alternateFlow: '', exceptionFlow: '',
     postconditions: '', businessRules: '', validationRules: '', fieldBehavior: '',
-    calculationLogic: '',
-    // ── NEW FIELDS ──────────────────────────────────────────
-    successMessage: '',
-    errorMessage: '',
-    // ────────────────────────────────────────────────────────
-    apiImpacted: '', dbTablesImpacted: '', integrationImpacted: '',
+    calculationLogic: '', apiImpacted: '', dbTablesImpacted: '', integrationImpacted: '',
     reportsImpacted: '', configurationImpacted: '', securityRBACImpact: '',
     auditTrailRequired: '', performanceImpact: '', testScenarioCount: '',
     currentStatus: '', blocked: false, blockedReason: '',
     storyPoints: '', estimateHours: '', plannedSprint: '', plannedRelease: '', versionBuild: '',
     assignedBa: [], assignedFrontendDeveloper: [], assignedBackendDeveloper: [], assignedTester: [],
-    linkedFeatures: [], relatedStoryIds: [],
+    linkedFeatures: [],
     approvalStatus: 'Pending', developmentStatus: 'Not Started', qaStatus: 'Not Started', releaseStatus: 'Not Released',
     createdBy: '', approvedBy: '', approvedAt: '', createdAt: '', updatedAt: ''
-};
-
-const STATUS_META = {
-    'Draft': { bg: '#f1f5f9', color: '#475569' },
-    'Submitted': { bg: '#eff6ff', color: '#2563eb' },
-    'In Progress': { bg: '#fff7ed', color: '#c2410c' },
-    'Completed': { bg: '#f0fdf4', color: '#15803d' },
-    'On Hold': { bg: '#fefce8', color: '#854d0e' },
-    'Cancelled': { bg: '#fef2f2', color: '#b91c1c' },
 };
 
 const UserStoryMapping = () => {
     const { storyId: urlStoryId } = useParams();
     const navigate = useNavigate();
+
     const isNew = !urlStoryId || urlStoryId === 'new';
 
     const [activeTab, setActiveTab] = useState('details');
@@ -902,44 +668,43 @@ const UserStoryMapping = () => {
     const [lastSaved, setLastSaved] = useState('never');
     const [showHistoryModal, setShowHistoryModal] = useState(false);
     const [showRelatedStories, setShowRelatedStories] = useState(false);
+    const [showRelatedBugs, setShowRelatedBugs] = useState(false);
+    const [showChangeRequests, setShowChangeRequests] = useState(false);
     const [saveLoading, setSaveLoading] = useState(false);
     const [storyUUID, setStoryUUID] = useState(null);
     const [tabCounts, setTabCounts] = useState({ testcases: null, bugs: null, comments: null, attachments: null });
-    const [isSaved, setIsSaved] = useState(!isNew);
-    const [toast, setToast] = useState(null);
-    const showToast = useCallback((message, type = 'success') => { setToast({ message, type }); setTimeout(() => setToast(null), 3500); }, []);
+
+    // ── Saved state & toast ──────────────────────────────────────────────────
+    const [isSaved, setIsSaved] = useState(!isNew); // existing stories start as "saved"
+    const [toast, setToast] = useState(null); // { message, type: 'success'|'error' }
+    const showToast = useCallback((message, type = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 3500);
+    }, []);
+
+    // ── Unsaved changes confirm modal ────────────────────────────────────────
     const [unsavedModal, setUnsavedModal] = useState({ show: false, onConfirm: null });
-    const confirmLeave = useCallback((onConfirm) => { if (isSaved) { onConfirm(); return; } setUnsavedModal({ show: true, onConfirm }); }, [isSaved]);
+
+    const confirmLeave = useCallback((onConfirm) => {
+        if (isSaved) { onConfirm(); return; }
+        setUnsavedModal({ show: true, onConfirm });
+    }, [isSaved]);
+
     const [storyIdEditing, setStoryIdEditing] = useState(false);
     const [storyIdDraft, setStoryIdDraft] = useState('');
     const [storyIdError, setStoryIdError] = useState('');
     const storyIdInputRef = useRef(null);
+
     const [formData, setFormData] = useState({ ...EMPTY_FORM, storyId: isNew ? '' : urlStoryId });
-
-    // ── All user stories for Related Stories dropdown ──────────────────────────
-    const [allStories, setAllStories] = useState([]);
-    const [allStoriesLoading, setAllStoriesLoading] = useState(true);
-
-    useEffect(() => {
-        const fetchAllStories = async () => {
-            setAllStoriesLoading(true);
-            try {
-                const { data } = await supabase
-                    .from('user_stories')
-                    .select('id, story_id, story_title, current_status, criticality')
-                    .order('story_id', { ascending: true });
-                setAllStories(data || []);
-            } catch (err) { console.error('fetchAllStories error:', err); }
-            finally { setAllStoriesLoading(false); }
-        };
-        fetchAllStories();
-    }, []);
 
     useEffect(() => {
         if (!isNew && urlStoryId) {
             setFormData(prev => ({ ...EMPTY_FORM, storyId: urlStoryId }));
-            setStoryUUID(null); setActiveTab('details'); setCollapsedSections({});
-            setLastSaved('never'); setTabCounts({ testcases: null, bugs: null, comments: null, attachments: null });
+            setStoryUUID(null);
+            setActiveTab('details');
+            setCollapsedSections({});
+            setLastSaved('never');
+            setTabCounts({ testcases: null, bugs: null, comments: null, attachments: null });
         }
     }, [urlStoryId]);
 
@@ -965,15 +730,16 @@ const UserStoryMapping = () => {
     const [profilesLoading, setProfilesLoading] = useState(true);
     const [features, setFeatures] = useState([]);
     const [featuresLoading, setFeaturesLoading] = useState(true);
-    const [versions, setVersions] = useState([]);
-    const [modules, setModules] = useState([]);
-    const [modulesLoading, setModulesLoading] = useState(true);
 
     useEffect(() => {
         const fetchProfiles = async () => {
             setProfilesLoading(true);
-            try { const { data } = await supabase.from('profiles').select('id, full_name, email, role').order('full_name', { ascending: true }); if (data) setProfiles(data); }
-            catch (err) { console.error(err); } finally { setProfilesLoading(false); }
+            try {
+                const { data, error } = await supabase.from('profiles').select('id, full_name, email, role').order('full_name', { ascending: true });
+                if (error) { console.error('Profiles fetch error:', error); return; }
+                if (data) setProfiles(data);
+            } catch (err) { console.error('Profiles unexpected error:', err); }
+            finally { setProfilesLoading(false); }
         };
         fetchProfiles();
     }, []);
@@ -981,68 +747,89 @@ const UserStoryMapping = () => {
     useEffect(() => {
         const fetchFeatures = async () => {
             setFeaturesLoading(true);
-            try { const { data } = await supabase.from('features').select('id, feature_name, feature_code, module_id').order('feature_name', { ascending: true }); if (data) setFeatures(data); }
-            catch (err) { console.error(err); } finally { setFeaturesLoading(false); }
+            try {
+                const { data, error } = await supabase.from('features').select('id, feature_name, feature_code, module_id').order('feature_name', { ascending: true });
+                if (error) { console.error('Features fetch error:', error); return; }
+                if (data) setFeatures(data);
+            } catch (err) { console.error('Features unexpected error:', err); }
+            finally { setFeaturesLoading(false); }
         };
         fetchFeatures();
     }, []);
 
     useEffect(() => {
-        const fetchVersions = async () => {
-            try { const { data } = await supabase.from("versions").select("id, version_number, build_number").order("created_date", { ascending: false }); setVersions(data || []); }
-            catch (err) { console.error(err); }
-        };
-        fetchVersions();
-    }, []);
-
-    useEffect(() => {
-        const fetchModules = async () => {
-            setModulesLoading(true);
-            try { const { data } = await supabase.from('modules').select('id, module_name, module_code').order('module_name', { ascending: true }); setModules(data || []); }
-            catch (err) { console.error(err); } finally { setModulesLoading(false); }
-        };
-        fetchModules();
-    }, []);
-
-    // ── Fetch existing story data (includes new fields) ────────────────────────
-    useEffect(() => {
         if (!formData.storyId) return;
         const fetchStoryData = async () => {
-            const { data } = await supabase.from('user_stories').select('*').eq('story_id', formData.storyId).single();
+            const { data } = await supabase
+                .from('user_stories')
+                .select('*')
+                .eq('story_id', formData.storyId)
+                .single();
             if (data) {
                 setStoryUUID(data.id);
                 setFormData(prev => ({
                     ...prev,
-                    storyType: data.story_type ?? '', storyTitle: data.story_title ?? '', storySummary: data.story_summary ?? '',
-                    moduleId: data.module_id ?? '', parentStoryId: data.parent_story_id ?? '', sequence: data.sequence ?? '',
-                    businessContext: data.business_context ?? '', problemStatement: data.problem_statement ?? '', expectedOutcome: data.expected_outcome ?? '',
-                    businessDomain: data.business_domain ?? '', processArea: data.process_area ?? '', transactionType: data.transaction_type ?? '',
-                    criticality: data.criticality ?? '', application: data.application ?? '', module: data.module ?? '', feature: data.feature ?? '',
-                    userRole: data.user_role ?? '', screenPage: data.screen_page ?? '', asA: data.as_a ?? '', iWant: data.i_want ?? '', soThat: data.so_that ?? '',
-                    preconditions: data.preconditions ?? '', mainFlow: data.main_flow ?? '', alternateFlow: data.alternate_flow ?? '',
-                    exceptionFlow: data.exception_flow ?? '', postconditions: data.postconditions ?? '', businessRules: data.business_rules ?? '',
-                    validationRules: data.validation_rules ?? '', fieldBehavior: data.field_behavior ?? '', calculationLogic: data.calculation_logic ?? '',
-                    // ── NEW FIELDS ──────────────────────────────────────────────
-                    successMessage: data.success_message ?? '',
-                    errorMessage: data.error_message ?? '',
-                    // ────────────────────────────────────────────────────────────
-                    apiImpacted: data.api_impacted ?? '', dbTablesImpacted: data.db_tables_impacted ?? '', integrationImpacted: data.integration_impacted ?? '',
-                    reportsImpacted: data.reports_impacted ?? '', configurationImpacted: data.configuration_impacted ?? '',
-                    securityRBACImpact: data.security_rbac_impact ?? '', auditTrailRequired: data.audit_trail_required ?? '',
-                    performanceImpact: data.performance_impact ?? '', testScenarioCount: data.test_scenario_count ?? '',
-                    currentStatus: data.current_status ?? '', blocked: data.blocked ?? false, blockedReason: data.blocked_reason ?? '',
-                    storyPoints: data.story_points ?? '', estimateHours: data.estimate_hours ?? '', plannedSprint: data.planned_sprint ?? '',
-                    plannedRelease: data.planned_release ?? '', versionBuild: data.version_build ?? '',
+                    storyType: data.story_type ?? '',
+                    storyTitle: data.story_title ?? '',
+                    storySummary: data.story_summary ?? '',
+                    moduleId: data.module_id ?? '',
+                    parentStoryId: data.parent_story_id ?? '',
+                    sequence: data.sequence ?? '',
+                    businessContext: data.business_context ?? '',
+                    problemStatement: data.problem_statement ?? '',
+                    expectedOutcome: data.expected_outcome ?? '',
+                    businessDomain: data.business_domain ?? '',
+                    processArea: data.process_area ?? '',
+                    transactionType: data.transaction_type ?? '',
+                    criticality: data.criticality ?? '',
+                    application: data.application ?? '',
+                    module: data.module ?? '',
+                    feature: data.feature ?? '',
+                    userRole: data.user_role ?? '',
+                    screenPage: data.screen_page ?? '',
+                    asA: data.as_a ?? '',
+                    iWant: data.i_want ?? '',
+                    soThat: data.so_that ?? '',
+                    preconditions: data.preconditions ?? '',
+                    mainFlow: data.main_flow ?? '',
+                    alternateFlow: data.alternate_flow ?? '',
+                    exceptionFlow: data.exception_flow ?? '',
+                    postconditions: data.postconditions ?? '',
+                    businessRules: data.business_rules ?? '',
+                    validationRules: data.validation_rules ?? '',
+                    fieldBehavior: data.field_behavior ?? '',
+                    calculationLogic: data.calculation_logic ?? '',
+                    apiImpacted: data.api_impacted ?? '',
+                    dbTablesImpacted: data.db_tables_impacted ?? '',
+                    integrationImpacted: data.integration_impacted ?? '',
+                    reportsImpacted: data.reports_impacted ?? '',
+                    configurationImpacted: data.configuration_impacted ?? '',
+                    securityRBACImpact: data.security_rbac_impact ?? '',
+                    auditTrailRequired: data.audit_trail_required ?? '',
+                    performanceImpact: data.performance_impact ?? '',
+                    testScenarioCount: data.test_scenario_count ?? '',
+                    currentStatus: data.current_status ?? '',
+                    blocked: data.blocked ?? false,
+                    blockedReason: data.blocked_reason ?? '',
+                    storyPoints: data.story_points ?? '',
+                    estimateHours: data.estimate_hours ?? '',
+                    plannedSprint: data.planned_sprint ?? '',
+                    plannedRelease: data.planned_release ?? '',
+                    versionBuild: data.version_build ?? '',
                     assignedBa: Array.isArray(data.assigned_ba) ? data.assigned_ba : (data.assigned_ba ? [data.assigned_ba] : []),
                     assignedFrontendDeveloper: Array.isArray(data.assigned_frontend_developer) ? data.assigned_frontend_developer : (data.assigned_frontend_developer ? [data.assigned_frontend_developer] : []),
                     assignedBackendDeveloper: Array.isArray(data.assigned_backend_developer) ? data.assigned_backend_developer : (data.assigned_backend_developer ? [data.assigned_backend_developer] : []),
                     assignedTester: Array.isArray(data.assigned_tester) ? data.assigned_tester : (data.assigned_tester ? [data.assigned_tester] : []),
                     linkedFeatures: Array.isArray(data.linked_features) ? data.linked_features : [],
-                    relatedStoryIds: Array.isArray(data.related_story_ids) ? data.related_story_ids : [],
-                    approvalStatus: data.approval_status ?? 'Pending', developmentStatus: data.development_status ?? 'Not Started',
-                    qaStatus: data.qa_status ?? 'Not Started', releaseStatus: data.release_status ?? 'Not Released',
-                    approvedBy: data.approved_by ?? '', approvedAt: data.approved_at ?? '',
-                    createdBy: data.created_by ?? '', createdAt: data.created_at ?? '', updatedAt: data.updated_at ?? '',
+                    approvalStatus: data.approval_status ?? 'Pending',
+                    developmentStatus: data.development_status ?? 'Not Started',
+                    qaStatus: data.qa_status ?? 'Not Started',
+                    releaseStatus: data.release_status ?? 'Not Released',
+                    approvedBy: data.approved_by ?? '',
+                    approvedAt: data.approved_at ?? '',
+                    createdBy: data.created_by ?? '',
+                    createdAt: data.created_at ?? '',
+                    updatedAt: data.updated_at ?? '',
                 }));
             }
         };
@@ -1052,19 +839,29 @@ const UserStoryMapping = () => {
     useEffect(() => {
         if (!storyUUID) return;
         const fetchCounts = async () => {
-            const [cm, at] = await Promise.all([
+            const [tc1, tc2, bg, cm, at] = await Promise.all([
+                supabase.from('test_cases').select('id', { count: 'exact', head: true }).eq('user_story_id', storyUUID),
+                supabase.from('test_cases').select('id', { count: 'exact', head: true }).contains('user_story_ids', [storyUUID]),
+                supabase.from('bugs').select('id', { count: 'exact', head: true }).eq('story_id', storyUUID),
                 supabase.from('comments').select('id', { count: 'exact', head: true }).eq('story_id', storyUUID),
                 supabase.from('attachments').select('id', { count: 'exact', head: true }).eq('story_id', storyUUID),
             ]);
+            // Deduplicate count by fetching actual IDs
             const { data: ids1 } = await supabase.from('test_cases').select('id').eq('user_story_id', storyUUID);
             const { data: ids2 } = await supabase.from('test_cases').select('id').contains('user_story_ids', [storyUUID]);
             const uniqueTcCount = new Set([...(ids1 || []).map(r => r.id), ...(ids2 || []).map(r => r.id)]).size;
-            setTabCounts({ testcases: uniqueTcCount, comments: cm.count, attachments: at.count });
+            setTabCounts({ testcases: uniqueTcCount, bugs: bg.count, comments: cm.count, attachments: at.count });
         };
         fetchCounts();
     }, [storyUUID, activeTab]);
 
-    const handleStoryIdEditStart = () => { setStoryIdDraft(formData.storyId); setStoryIdError(''); setStoryIdEditing(true); setTimeout(() => storyIdInputRef.current?.select(), 50); };
+    const handleStoryIdEditStart = () => {
+        setStoryIdDraft(formData.storyId);
+        setStoryIdError('');
+        setStoryIdEditing(true);
+        setTimeout(() => storyIdInputRef.current?.select(), 50);
+    };
+
     const handleStoryIdSave = async () => {
         const trimmed = storyIdDraft.trim().toUpperCase();
         if (!trimmed) { setStoryIdError('Story ID cannot be empty'); return; }
@@ -1072,67 +869,121 @@ const UserStoryMapping = () => {
         if (trimmed === formData.storyId) { setStoryIdEditing(false); return; }
         const { data } = await supabase.from('user_stories').select('id').eq('story_id', trimmed).maybeSingle();
         if (data) { setStoryIdError(`${trimmed} already exists`); return; }
-        setFormData(prev => ({ ...prev, storyId: trimmed })); setStoryUUID(null); setStoryIdEditing(false); setStoryIdError('');
+        setFormData(prev => ({ ...prev, storyId: trimmed }));
+        setStoryUUID(null);
+        setStoryIdEditing(false);
+        setStoryIdError('');
     };
-    const handleStoryIdKeyDown = (e) => { if (e.key === 'Enter') handleStoryIdSave(); if (e.key === 'Escape') { setStoryIdEditing(false); setStoryIdError(''); } };
-    const handleAddNewStory = () => { confirmLeave(() => navigate('/stories/new')); };
-    const handleBackToList = () => { confirmLeave(() => navigate('/stories')); };
+
+    const handleStoryIdKeyDown = (e) => {
+        if (e.key === 'Enter') handleStoryIdSave();
+        if (e.key === 'Escape') { setStoryIdEditing(false); setStoryIdError(''); }
+    };
+
+    const handleAddNewStory = () => {
+        confirmLeave(() => navigate('/stories/new'));
+    };
+
+    const handleBackToList = () => {
+        confirmLeave(() => navigate('/stories'));
+    };
 
     const tabs = [
         { id: 'details', label: 'Story Details', icon: 'fa-info-circle' },
         { id: 'testcases', label: 'Linked Test Cases', icon: 'fa-list-check', countKey: 'testcases' },
+        { id: 'bugs', label: 'Related Bugs', icon: 'fa-bug', countKey: 'bugs' },
         { id: 'comments', label: 'Comments', icon: 'fa-comment-dots', countKey: 'comments' },
         { id: 'attachments', label: 'Attachments', icon: 'fa-paperclip', countKey: 'attachments' },
     ];
 
     const toggleSection = useCallback((sectionId) => { setCollapsedSections(prev => ({ ...prev, [sectionId]: !prev[sectionId] })); }, []);
-    const handleInputChange = useCallback((field, value) => { setFormData(prev => ({ ...prev, [field]: value })); setIsSaved(false); }, []);
+    const handleInputChange = useCallback((field, value) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+        setIsSaved(false); // mark dirty on any change
+    }, []);
     const toggleAcceptanceCriteria = useCallback((id) => { setAcceptanceCriteria(prev => prev.map(item => item.id === id ? { ...item, checked: !item.checked } : item)); }, []);
     const toggleDefinitionOfDone = useCallback((id) => { setDefinitionOfDone(prev => prev.map(item => item.id === id ? { ...item, checked: !item.checked } : item)); }, []);
     const addAcceptanceCriteria = useCallback(() => { setAcceptanceCriteria(prev => { const newId = Math.max(...prev.map(ac => ac.id), 0) + 1; return [...prev, { id: newId, text: 'New acceptance criteria', checked: false }]; }); }, []);
 
-    // ── buildPayload — includes new columns ───────────────────────────────────
+    // ── buildPayload — matched exactly to user_stories schema ─────────────────
     const buildPayload = (extraStatus) => {
         const now = new Date().toISOString();
+        // approved_at must be a full ISO timestamp or null (it's timestamptz)
         let approvedAt = null;
-        if (formData.approvedAt) { approvedAt = formData.approvedAt.includes('T') ? formData.approvedAt : `${formData.approvedAt}T00:00:00.000Z`; }
+        if (formData.approvedAt) {
+            // if it's just a date string like "2026-04-09", convert to full ISO
+            approvedAt = formData.approvedAt.includes('T')
+                ? formData.approvedAt
+                : `${formData.approvedAt}T00:00:00.000Z`;
+        }
         return {
-            story_id: formData.storyId, story_type: formData.storyType || null, story_title: formData.storyTitle || 'Untitled Story',
-            story_summary: formData.storySummary || null, module_id: formData.moduleId || null, parent_story_id: formData.parentStoryId || null,
-            sequence: formData.sequence ? parseInt(formData.sequence) : null, business_context: formData.businessContext || null,
-            problem_statement: formData.problemStatement || null, expected_outcome: formData.expectedOutcome || null,
-            business_domain: formData.businessDomain || null, process_area: formData.processArea || null,
-            transaction_type: formData.transactionType || null, criticality: formData.criticality || null,
-            application: formData.application || null, module: formData.module || null, feature: formData.feature || null,
-            user_role: formData.userRole || null, screen_page: formData.screenPage || null,
-            as_a: formData.asA || null, i_want: formData.iWant || null, so_that: formData.soThat || null,
-            preconditions: formData.preconditions || null, main_flow: formData.mainFlow || null, alternate_flow: formData.alternateFlow || null,
-            exception_flow: formData.exceptionFlow || null, postconditions: formData.postconditions || null,
-            business_rules: formData.businessRules || null, validation_rules: formData.validationRules || null,
-            field_behavior: formData.fieldBehavior || null, calculation_logic: formData.calculationLogic || null,
-            // ── NEW COLUMNS ──────────────────────────────────────────────────
-            success_message: formData.successMessage || null,
-            error_message: formData.errorMessage || null,
-            // ────────────────────────────────────────────────────────────────
-            api_impacted: formData.apiImpacted || null, db_tables_impacted: formData.dbTablesImpacted || null,
-            integration_impacted: formData.integrationImpacted || null, reports_impacted: formData.reportsImpacted || null,
-            configuration_impacted: formData.configurationImpacted || null, security_rbac_impact: formData.securityRBACImpact || null,
-            audit_trail_required: formData.auditTrailRequired || null, performance_impact: formData.performanceImpact || null,
+            story_id: formData.storyId,
+            story_type: formData.storyType || null,
+            story_title: formData.storyTitle || 'Untitled Story',
+            story_summary: formData.storySummary || null,
+            module_id: formData.moduleId || null,
+            parent_story_id: formData.parentStoryId || null,
+            sequence: formData.sequence ? parseInt(formData.sequence) : null,
+            business_context: formData.businessContext || null,
+            problem_statement: formData.problemStatement || null,
+            expected_outcome: formData.expectedOutcome || null,
+            business_domain: formData.businessDomain || null,
+            process_area: formData.processArea || null,
+            transaction_type: formData.transactionType || null,
+            criticality: formData.criticality || null,
+            application: formData.application || null,
+            module: formData.module || null,
+            feature: formData.feature || null,
+            user_role: formData.userRole || null,
+            screen_page: formData.screenPage || null,
+            as_a: formData.asA || null,
+            i_want: formData.iWant || null,
+            so_that: formData.soThat || null,
+            preconditions: formData.preconditions || null,
+            main_flow: formData.mainFlow || null,
+            alternate_flow: formData.alternateFlow || null,
+            exception_flow: formData.exceptionFlow || null,
+            postconditions: formData.postconditions || null,
+            business_rules: formData.businessRules || null,
+            validation_rules: formData.validationRules || null,
+            field_behavior: formData.fieldBehavior || null,
+            calculation_logic: formData.calculationLogic || null,
+            api_impacted: formData.apiImpacted || null,
+            db_tables_impacted: formData.dbTablesImpacted || null,
+            integration_impacted: formData.integrationImpacted || null,
+            reports_impacted: formData.reportsImpacted || null,
+            configuration_impacted: formData.configurationImpacted || null,
+            security_rbac_impact: formData.securityRBACImpact || null,
+            audit_trail_required: formData.auditTrailRequired || null,
+            performance_impact: formData.performanceImpact || null,
             test_scenario_count: formData.testScenarioCount ? parseInt(formData.testScenarioCount) : null,
-            current_status: formData.currentStatus || extraStatus, blocked: formData.blocked ?? false, blocked_reason: formData.blockedReason || null,
-            acceptance_criteria: acceptanceCriteria, definition_of_done: definitionOfDone, status: extraStatus,
+            current_status: formData.currentStatus || extraStatus,
+            blocked: formData.blocked ?? false,
+            blocked_reason: formData.blockedReason || null,
+            acceptance_criteria: acceptanceCriteria,
+            definition_of_done: definitionOfDone,
+            status: extraStatus,
             story_points: formData.storyPoints ? parseInt(formData.storyPoints) : null,
             estimate_hours: formData.estimateHours ? parseFloat(formData.estimateHours) : null,
-            planned_sprint: formData.plannedSprint || null, planned_release: formData.plannedRelease || null, version_build: formData.versionBuild || null,
+            planned_sprint: formData.plannedSprint || null,
+            planned_release: formData.plannedRelease || null,
+            version_build: formData.versionBuild || null,
+            // jsonb column
             assigned_ba: formData.assignedBa.length > 0 ? formData.assignedBa : null,
+            // ARRAY columns
             assigned_frontend_developer: formData.assignedFrontendDeveloper.length > 0 ? formData.assignedFrontendDeveloper : null,
             assigned_backend_developer: formData.assignedBackendDeveloper.length > 0 ? formData.assignedBackendDeveloper : null,
             assigned_tester: formData.assignedTester.length > 0 ? formData.assignedTester : null,
             linked_features: formData.linkedFeatures.length > 0 ? formData.linkedFeatures : null,
-            approval_status: formData.approvalStatus || null, development_status: formData.developmentStatus || null,
-            qa_status: formData.qaStatus || null, release_status: formData.releaseStatus || null,
-            approved_by: formData.approvedBy || null, approved_at: approvedAt, created_by: formData.createdBy || null,
-            created_at: formData.createdAt || now, updated_at: now,
+            approval_status: formData.approvalStatus || null,
+            development_status: formData.developmentStatus || null,
+            qa_status: formData.qaStatus || null,
+            release_status: formData.releaseStatus || null,
+            approved_by: formData.approvedBy || null,
+            approved_at: approvedAt,
+            created_by: formData.createdBy || null,
+            created_at: formData.createdAt || now,
+            updated_at: now,
         };
     };
 
@@ -1141,7 +992,8 @@ const UserStoryMapping = () => {
             const { error: deleteError } = await supabase.from('user_story_features').delete().eq('story_uuid', savedStoryUUID);
             if (deleteError) throw deleteError;
             if (!selectedFeatures || selectedFeatures.length === 0) return;
-            const { data: featureRows } = await supabase.from('features').select('id, feature_name').in('feature_name', selectedFeatures);
+            const { data: featureRows, error: lookupError } = await supabase.from('features').select('id, feature_name').in('feature_name', selectedFeatures);
+            if (lookupError) throw lookupError;
             const featureIdMap = {};
             (featureRows || []).forEach(f => { featureIdMap[f.feature_name] = f.id; });
             const rows = selectedFeatures.map(name => ({ story_id: savedStoryId, story_uuid: savedStoryUUID, feature_name: name, feature_id: featureIdMap[name] ?? null }));
@@ -1157,9 +1009,12 @@ const UserStoryMapping = () => {
             if (error) throw error;
             const savedUUID = data?.id;
             if (savedUUID) { setStoryUUID(savedUUID); await syncFeatures(savedUUID, formData.storyId, formData.linkedFeatures); }
-            setLastSaved(new Date().toLocaleString()); setIsSaved(true); showToast('✅ Draft saved successfully!');
+            setLastSaved(new Date().toLocaleString());
+            setIsSaved(true);
+            showToast('✅ Draft saved successfully!');
             setTimeout(() => navigate('/stories'), 1000);
-        } catch (err) { showToast(`❌ ${err.message}`, 'error'); } finally { setSaveLoading(false); }
+        } catch (err) { showToast(`❌ ${err.message}`, 'error'); }
+        finally { setSaveLoading(false); }
     };
 
     const handleSaveAndSubmit = async () => {
@@ -1170,13 +1025,22 @@ const UserStoryMapping = () => {
             if (error) throw error;
             const savedUUID = data?.id;
             if (savedUUID) { setStoryUUID(savedUUID); await syncFeatures(savedUUID, formData.storyId, formData.linkedFeatures); }
-            setLastSaved(new Date().toLocaleString()); setIsSaved(true); showToast('✅ Story submitted successfully!');
+            setLastSaved(new Date().toLocaleString());
+            setIsSaved(true);
+            showToast('✅ Story submitted successfully!');
             setTimeout(() => navigate('/stories'), 1000);
-        } catch (err) { showToast(`❌ ${err.message}`, 'error'); } finally { setSaveLoading(false); }
+        } catch (err) { showToast(`❌ ${err.message}`, 'error'); }
+        finally { setSaveLoading(false); }
+    };
+
+    const handleDuplicate = () => {
+        const newId = `US-${String(parseInt(formData.storyId.split('-')[1]) + 1).padStart(3, '0')}`;
+        navigate(`/stories/${newId}`);
+        alert(`✅ Duplicated as ${newId}. Save to create.`);
     };
 
     const storyTypeOpts = ['Feature Enhancement', 'New Feature', 'Bug Fix', 'Technical Debt'];
-    const moduleIdOpts = modules.filter(m => m.module_name && m.module_name.trim() !== '').map(m => ({ value: m.module_code || m.id, label: m.module_code ? `${m.module_code} - ${m.module_name}` : m.module_name }));
+    const moduleIdOpts = ['MOD-001 - Dashboard', 'MOD-002 - User Management', 'MOD-003 - Reports', 'MOD-004 - Settings'];
     const businessDomainOpts = ['Operations', 'Finance', 'Sales', 'HR'];
     const transactionTypeOpts = ['Read', 'Create', 'Update', 'Delete'];
     const criticalityOpts = ['High', 'Medium', 'Low', 'Critical'];
@@ -1188,16 +1052,18 @@ const UserStoryMapping = () => {
     const devStatusOpts = ['Not Started', 'In Progress', 'Completed', 'On Hold'];
     const qaStatusOpts = ['Not Started', 'In Progress', 'Pass', 'Fail', 'Blocked'];
     const releaseStatusOpts = ['Not Released', 'Scheduled', 'Released', 'Rolled Back'];
+
     const teamMemberOpts = profiles.filter(p => p.full_name && p.full_name.trim() !== '').map(p => ({ value: p.full_name, label: p.role ? `${p.full_name} (${p.role})` : p.full_name }));
-    const featureOpts = features.filter(f => f.feature_name && f.feature_name.trim() !== '').map(f => ({ value: f.feature_name, label: f.feature_code ? `${f.feature_name} (${f.feature_code})` : f.feature_name }));
-
-    const relatedStoryOpts = allStories
-        .filter(s => s.story_id !== formData.storyId)
-        .map(s => ({ value: s.story_id, label: `${s.story_id}${s.story_title ? ` — ${s.story_title}` : ''}` }));
-
-    const relatedStoryObjects = formData.relatedStoryIds
-        .map(id => allStories.find(s => s.story_id === id))
-        .filter(Boolean);
+    // Build featureOpts from DB features, then add any already-linked features
+    // that aren't in the DB list (e.g. renamed or deleted) so they still show as selected
+    const featureOptsFromDB = features
+        .filter(f => f.feature_name && f.feature_name.trim() !== '')
+        .map(f => ({ value: f.feature_name, label: f.feature_code ? `${f.feature_name} (${f.feature_code})` : f.feature_name }));
+    const featureOptsValues = new Set(featureOptsFromDB.map(o => o.value));
+    const missingLinked = (formData.linkedFeatures || [])
+        .filter(name => name && !featureOptsValues.has(name))
+        .map(name => ({ value: name, label: name }));
+    const featureOpts = [...featureOptsFromDB, ...missingLinked];
 
     const inputCls = "w-full px-4 py-2.5 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary";
     const labelCls = "text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block";
@@ -1206,14 +1072,24 @@ const UserStoryMapping = () => {
         <>
             <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
             <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-            <RichTextareaStyles />
 
+            {/* ── Toast notification ── */}
             {toast && (
-                <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, padding: '14px 20px', borderRadius: 12, background: toast.type === 'error' ? '#DC2626' : '#16a34a', color: '#fff', fontSize: 14, fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', display: 'flex', alignItems: 'center', gap: 10, animation: 'slideIn 0.25s ease' }}>
-                    <i className={`fa-solid ${toast.type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-check'}`} />{toast.message}
+                <div style={{
+                    position: 'fixed', top: 20, right: 20, zIndex: 9999,
+                    padding: '14px 20px', borderRadius: 12,
+                    background: toast.type === 'error' ? '#DC2626' : '#16a34a',
+                    color: '#fff', fontSize: 14, fontWeight: 600,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    animation: 'slideIn 0.25s ease',
+                }}>
+                    <i className={`fa-solid ${toast.type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-check'}`} />
+                    {toast.message}
                 </div>
             )}
 
+            {/* ── Unsaved changes modal ── */}
             {unsavedModal.show && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
                     <div style={{ background: '#fff', borderRadius: 16, padding: 28, maxWidth: 400, width: '100%', boxShadow: '0 20px 48px rgba(0,0,0,0.18)' }}>
@@ -1221,10 +1097,20 @@ const UserStoryMapping = () => {
                             <i className="fa-solid fa-triangle-exclamation" style={{ color: '#D97706', fontSize: 20 }} />
                         </div>
                         <h3 style={{ fontSize: 16, fontWeight: 700, textAlign: 'center', marginBottom: 8, color: '#111827' }}>Unsaved Changes</h3>
-                        <p style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', marginBottom: 24, lineHeight: 1.5 }}>You have unsaved changes that will be lost if you leave. Do you want to continue without saving?</p>
+                        <p style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', marginBottom: 24, lineHeight: 1.5 }}>
+                            You have unsaved changes that will be lost if you leave. Do you want to continue without saving?
+                        </p>
                         <div style={{ display: 'flex', gap: 10 }}>
-                            <button onClick={() => setUnsavedModal({ show: false, onConfirm: null })} style={{ flex: 1, padding: '10px 0', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', color: '#374151' }}>Stay & Save</button>
-                            <button onClick={() => { unsavedModal.onConfirm(); setUnsavedModal({ show: false, onConfirm: null }); }} style={{ flex: 1, padding: '10px 0', background: '#DC2626', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#fff' }}>Leave Anyway</button>
+                            <button
+                                onClick={() => setUnsavedModal({ show: false, onConfirm: null })}
+                                style={{ flex: 1, padding: '10px 0', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', color: '#374151' }}>
+                                Stay & Save
+                            </button>
+                            <button
+                                onClick={() => { unsavedModal.onConfirm(); setUnsavedModal({ show: false, onConfirm: null }); }}
+                                style={{ flex: 1, padding: '10px 0', background: '#DC2626', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#fff' }}>
+                                Leave Anyway
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1234,12 +1120,14 @@ const UserStoryMapping = () => {
                 ::-webkit-scrollbar { display: none; }
                 body { font-family: 'Roboto', sans-serif; }
                 @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
-                @keyframes spin { to { transform: rotate(360deg); } }
                 .section-header { cursor: pointer; transition: all 0.2s; }
                 .section-header:hover { background-color: #F8FAFC; }
                 .status-badge { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 500; }
                 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
                 .modal-content { background: white; border-radius: 0.5rem; padding: 2rem; max-width: 600px; width: 100%; max-height: 80vh; overflow-y: auto; }
+                .add-story-btn { position: relative; overflow: hidden; }
+                .add-story-btn::after { content: ''; position: absolute; inset: 0; background: rgba(255,255,255,0.15); opacity: 0; transition: opacity 0.15s; }
+                .add-story-btn:hover::after { opacity: 1; }
                 .story-id-edit-input:focus { outline: none; box-shadow: 0 0 0 2px rgba(99,102,241,0.25); }
             `}</style>
 
@@ -1249,35 +1137,71 @@ const UserStoryMapping = () => {
                         <div className="px-4 lg:px-8 py-4">
                             <div className="flex items-center justify-between gap-4 flex-wrap">
                                 <div className="flex items-center gap-3 min-w-0">
-                                    <button onClick={handleBackToList} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0">
-                                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L5 7L9 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                                    <button
+                                        onClick={handleBackToList}
+                                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0"
+                                        title="Back to User Stories list"
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                                            <path d="M9 2L5 7L9 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
                                         <span className="hidden sm:inline">Stories</span>
                                     </button>
+
                                     <span className="text-muted-foreground text-sm hidden sm:inline">/</span>
+
                                     <div className="min-w-0">
                                         <div className="flex items-center gap-3 mb-1 flex-wrap">
                                             <div className="flex items-center gap-1.5">
                                                 {storyIdEditing ? (
                                                     <div className="flex flex-col gap-1">
                                                         <div className="flex items-center gap-1.5">
-                                                            <input ref={storyIdInputRef} value={storyIdDraft} onChange={e => { setStoryIdDraft(e.target.value.toUpperCase()); setStoryIdError(''); }} onKeyDown={handleStoryIdKeyDown} placeholder="US-###" className="story-id-edit-input px-2.5 py-1 text-xl font-bold border-2 border-indigo-400 rounded-lg bg-white text-foreground w-32" style={{ fontSize: '1.15rem' }} />
-                                                            <button onClick={handleStoryIdSave} className="flex items-center justify-center w-7 h-7 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"><i className="fa-solid fa-check" style={{ fontSize: 11 }}></i></button>
-                                                            <button onClick={() => { setStoryIdEditing(false); setStoryIdError(''); }} className="flex items-center justify-center w-7 h-7 bg-gray-200 hover:bg-gray-300 text-gray-600 rounded-md transition-colors"><i className="fa-solid fa-times" style={{ fontSize: 11 }}></i></button>
+                                                            <input
+                                                                ref={storyIdInputRef}
+                                                                value={storyIdDraft}
+                                                                onChange={e => { setStoryIdDraft(e.target.value.toUpperCase()); setStoryIdError(''); }}
+                                                                onKeyDown={handleStoryIdKeyDown}
+                                                                placeholder="US-###"
+                                                                className="story-id-edit-input px-2.5 py-1 text-xl font-bold border-2 border-indigo-400 rounded-lg bg-white text-foreground w-32"
+                                                                style={{ fontSize: '1.15rem' }}
+                                                            />
+                                                            <button onClick={handleStoryIdSave} className="flex items-center justify-center w-7 h-7 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors" title="Confirm">
+                                                                <i className="fa-solid fa-check" style={{ fontSize: 11 }}></i>
+                                                            </button>
+                                                            <button onClick={() => { setStoryIdEditing(false); setStoryIdError(''); }} className="flex items-center justify-center w-7 h-7 bg-gray-200 hover:bg-gray-300 text-gray-600 rounded-md transition-colors" title="Cancel">
+                                                                <i className="fa-solid fa-times" style={{ fontSize: 11 }}></i>
+                                                            </button>
                                                         </div>
-                                                        {storyIdError && <span className="text-xs text-red-500 flex items-center gap-1"><i className="fa-solid fa-circle-exclamation" style={{ fontSize: 10 }}></i>{storyIdError}</span>}
+                                                        {storyIdError && (
+                                                            <span className="text-xs text-red-500 flex items-center gap-1">
+                                                                <i className="fa-solid fa-circle-exclamation" style={{ fontSize: 10 }}></i>{storyIdError}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 ) : (
-                                                    <button onClick={handleStoryIdEditStart} className="group flex items-center gap-1.5 hover:bg-indigo-50 rounded-lg px-1.5 py-0.5 transition-colors" title="Click to edit Story ID">
-                                                        <h2 className="text-xl lg:text-2xl font-bold text-foreground">{isNew ? 'New Story' : `User Story: ${formData.storyId}`}</h2>
+                                                    <button
+                                                        onClick={handleStoryIdEditStart}
+                                                        className="group flex items-center gap-1.5 hover:bg-indigo-50 rounded-lg px-1.5 py-0.5 transition-colors"
+                                                        title="Click to edit Story ID"
+                                                    >
+                                                        <h2 className="text-xl lg:text-2xl font-bold text-foreground">
+                                                            {isNew ? 'New Story' : `User Story: ${formData.storyId}`}
+                                                        </h2>
                                                         {!isNew && <i className="fa-solid fa-pencil text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity" style={{ fontSize: 12 }}></i>}
                                                     </button>
                                                 )}
                                             </div>
-                                            {formData.currentStatus && (<span className="status-badge bg-blue-500 bg-opacity-10 text-blue-600"><i className="fa-solid fa-circle text-xs"></i> {formData.currentStatus}</span>)}
+                                            {formData.currentStatus && (
+                                                <span className="status-badge bg-blue-500 bg-opacity-10 text-blue-600">
+                                                    <i className="fa-solid fa-circle text-xs"></i> {formData.currentStatus}
+                                                </span>
+                                            )}
                                         </div>
                                         <p className="text-sm text-muted-foreground">{formData.storyTitle || 'No title yet'}</p>
                                     </div>
                                 </div>
+
+
                             </div>
                         </div>
                     </header>
@@ -1308,18 +1232,29 @@ const UserStoryMapping = () => {
                                                 <div>
                                                     <label className={labelCls}>Story ID</label>
                                                     <div className="relative">
-                                                        <input type="text" value={formData.storyId} readOnly className="w-full px-4 py-2.5 bg-muted border border-border rounded-lg text-sm pr-10 cursor-default" />
-                                                        <button onClick={handleStoryIdEditStart} className="absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors" title="Edit Story ID"><i className="fa-solid fa-pencil" style={{ fontSize: 11 }}></i></button>
+                                                        <input
+                                                            type="text"
+                                                            value={formData.storyId}
+                                                            readOnly
+                                                            className="w-full px-4 py-2.5 bg-muted border border-border rounded-lg text-sm pr-10 cursor-default"
+                                                        />
+                                                        <button
+                                                            onClick={handleStoryIdEditStart}
+                                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                                            title="Edit Story ID"
+                                                        >
+                                                            <i className="fa-solid fa-pencil" style={{ fontSize: 11 }}></i>
+                                                        </button>
                                                     </div>
-                                                    <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1"><i className="fa-solid fa-circle-info text-indigo-400" style={{ fontSize: 10 }}></i>Auto-generated · click <i className="fa-solid fa-pencil text-indigo-400 mx-0.5" style={{ fontSize: 9 }}></i> to change</p>
+                                                    <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                                                        <i className="fa-solid fa-circle-info text-indigo-400" style={{ fontSize: 10 }}></i>
+                                                        Auto-generated · click <i className="fa-solid fa-pencil text-indigo-400 mx-0.5" style={{ fontSize: 9 }}></i> to change
+                                                    </p>
                                                 </div>
                                                 <div><label className={labelCls}>Story Type</label><CustomSelect value={formData.storyType} onChange={v => handleInputChange('storyType', v)} options={storyTypeOpts} /></div>
                                                 <div className="sm:col-span-2"><label className={labelCls}>Story Title <span className="text-destructive">*</span></label><input type="text" value={formData.storyTitle} onChange={e => handleInputChange('storyTitle', e.target.value)} placeholder="Enter story title..." className={inputCls} /></div>
-                                                <div className="sm:col-span-2"><label className={labelCls}>Story Summary</label><RichTextarea rows={3} value={formData.storySummary} onChange={v => handleInputChange('storySummary', v)} className={inputCls} placeholder="Brief summary..." /></div>
-                                                <div>
-                                                    <label className={labelCls}>Module ID</label>
-                                                    <CustomSelect value={formData.moduleId} onChange={v => handleInputChange('moduleId', v)} options={moduleIdOpts} placeholder={modulesLoading ? 'Loading modules…' : moduleIdOpts.length === 0 ? 'No modules found' : 'Select…'} />
-                                                </div>
+                                                <div className="sm:col-span-2"><label className={labelCls}>Story Summary</label><textarea rows="3" value={formData.storySummary} onChange={e => handleInputChange('storySummary', e.target.value)} className={inputCls} placeholder="Brief summary..." /></div>
+                                                <div><label className={labelCls}>Module ID</label><CustomSelect value={formData.moduleId} onChange={v => handleInputChange('moduleId', v)} options={moduleIdOpts} /></div>
                                                 <div><label className={labelCls}>Parent Story ID</label><input type="text" value={formData.parentStoryId} onChange={e => handleInputChange('parentStoryId', e.target.value)} placeholder="US-XXX" className={inputCls} /></div>
                                                 <div><label className={labelCls}>Sequence/Order</label><input type="number" value={formData.sequence} onChange={e => handleInputChange('sequence', e.target.value)} placeholder="e.g. 1" className={inputCls} /></div>
                                             </div>
@@ -1327,7 +1262,7 @@ const UserStoryMapping = () => {
 
                                         <Section id="business-context" title="Business Context" icon="fa-briefcase" iconColor="bg-blue-500" collapsedSections={collapsedSections} toggleSection={toggleSection}>
                                             <div className="space-y-6">
-                                                {[['businessContext', 'Business Context', 3, 'Describe the business context...'], ['problemStatement', 'Problem Statement', 3, 'What problem are we solving?'], ['expectedOutcome', 'Expected Outcome', 3, 'What is the expected outcome?']].map(([field, lbl, rows, ph]) => (<div key={field}><label className={labelCls}>{lbl}</label><RichTextarea rows={rows} value={formData[field]} onChange={v => handleInputChange(field, v)} className={inputCls} placeholder={ph} /></div>))}
+                                                {[['businessContext', 'Business Context', 3, 'Describe the business context...'], ['problemStatement', 'Problem Statement', 3, 'What problem are we solving?'], ['expectedOutcome', 'Expected Outcome', 3, 'What is the expected outcome?']].map(([field, lbl, rows, ph]) => (<div key={field}><label className={labelCls}>{lbl}</label><textarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} className={inputCls} placeholder={ph} /></div>))}
                                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                                     <div><label className={labelCls}>Business Domain</label><CustomSelect value={formData.businessDomain} onChange={v => handleInputChange('businessDomain', v)} options={businessDomainOpts} /></div>
                                                     <div><label className={labelCls}>Process Area</label><input type="text" value={formData.processArea} onChange={e => handleInputChange('processArea', e.target.value)} placeholder="e.g. Monitoring" className={inputCls} /></div>
@@ -1346,7 +1281,11 @@ const UserStoryMapping = () => {
                                                 <div><label className={labelCls}>User Role/Persona</label><CustomSelect value={formData.userRole} onChange={v => handleInputChange('userRole', v)} options={userRoleOpts} /></div>
                                                 <div><label className={labelCls}>Screen/Page Name</label><input type="text" value={formData.screenPage} onChange={e => handleInputChange('screenPage', e.target.value)} placeholder="e.g. Main Dashboard" className={inputCls} /></div>
                                                 <div className="sm:col-span-2">
-                                                    <label className={labelCls}><i className="fa-solid fa-puzzle-piece text-purple-500 mr-1.5"></i>Linked Features{formData.linkedFeatures.length > 0 && <span className="ml-2 px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs font-bold rounded-full normal-case">{formData.linkedFeatures.length}</span>}</label>
+                                                    <label className={labelCls}>
+                                                        <i className="fa-solid fa-puzzle-piece text-purple-500 mr-1.5"></i>
+                                                        Linked Features
+                                                        {formData.linkedFeatures.length > 0 && <span className="ml-2 px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs font-bold rounded-full normal-case">{formData.linkedFeatures.length}</span>}
+                                                    </label>
                                                     <MultiSelect values={formData.linkedFeatures} onChange={v => handleInputChange('linkedFeatures', v)} options={featureOpts} placeholder={featuresLoading ? 'Loading features…' : featureOpts.length === 0 ? 'No features found' : 'Select features…'} searchPlaceholder="Search features..." />
                                                 </div>
                                             </div>
@@ -1358,7 +1297,9 @@ const UserStoryMapping = () => {
                                                     {[['asA', 'As a', 'text', 1, 'e.g. QA Manager'], ['iWant', 'I want', 'textarea', 2, 'e.g. to see real-time updates...'], ['soThat', 'So that', 'textarea', 2, 'e.g. I can monitor progress...']].map(([field, lbl, type, rows, ph]) => (
                                                         <div key={field}>
                                                             <label className="text-xs font-semibold text-green-700 uppercase tracking-wider mb-2 block">{lbl}</label>
-                                                            {type === 'textarea' ? <RichTextarea rows={rows} value={formData[field]} onChange={v => handleInputChange(field, v)} placeholder={ph} className="w-full px-4 py-2.5 bg-white border border-green-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500" /> : <input type="text" value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} placeholder={ph} className="w-full px-4 py-2.5 bg-white border border-green-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />}
+                                                            {type === 'textarea'
+                                                                ? <textarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} placeholder={ph} className="w-full px-4 py-2.5 bg-white border border-green-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+                                                                : <input type="text" value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} placeholder={ph} className="w-full px-4 py-2.5 bg-white border border-green-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />}
                                                         </div>
                                                     ))}
                                                 </div>
@@ -1368,65 +1309,16 @@ const UserStoryMapping = () => {
                                         <Section id="detailed-behavior" title="Detailed Behavior" icon="fa-diagram-project" iconColor="bg-orange-500" collapsedSections={collapsedSections} toggleSection={toggleSection}>
                                             <div className="space-y-6">
                                                 {[['preconditions', 'Preconditions', 3, 'Conditions that must be met...'], ['mainFlow', 'Main Flow', 5, 'Step-by-step main flow...'], ['alternateFlow', 'Alternate Flow', 4, 'Alternate paths...'], ['exceptionFlow', 'Exception Flow', 4, 'Error handling...'], ['postconditions', 'Postconditions', 3, 'State after completion...']].map(([field, lbl, rows, ph]) => (
-                                                    <div key={field}><label className={labelCls}>{lbl}</label><RichTextarea rows={rows} value={formData[field]} onChange={v => handleInputChange(field, v)} className={inputCls} placeholder={ph} /></div>
+                                                    <div key={field}><label className={labelCls}>{lbl}</label><textarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} className={inputCls} placeholder={ph} /></div>
                                                 ))}
                                             </div>
                                         </Section>
 
-                                        {/* ── Business Rules & Validation — includes Success/Error Message ── */}
                                         <Section id="business-rules" title="Business Rules & Validation" icon="fa-scale-balanced" iconColor="bg-red-500" collapsedSections={collapsedSections} toggleSection={toggleSection}>
                                             <div className="space-y-6">
-                                                {[
-                                                    ['businessRules', 'Business Rules', 4, 'List business rules...'],
-                                                    ['validationRules', 'Validation Rules', 4, 'List validation rules...'],
-                                                    ['fieldBehavior', 'Field Behavior', 3, 'Describe field behaviors...'],
-                                                    ['calculationLogic', 'Calculation Logic', 3, 'Describe calculation logic...'],
-                                                ].map(([field, lbl, rows, ph]) => (
-                                                    <div key={field}>
-                                                        <label className={labelCls}>{lbl}</label>
-                                                        <RichTextarea rows={rows} value={formData[field]} onChange={v => handleInputChange(field, v)} className={inputCls} placeholder={ph} />
-                                                    </div>
+                                                {[['businessRules', 'Business Rules', 4, 'List business rules...'], ['validationRules', 'Validation Rules', 4, 'List validation rules...'], ['fieldBehavior', 'Field Behavior', 3, 'Describe field behaviors...'], ['calculationLogic', 'Calculation Logic', 3, 'Describe calculation logic...']].map(([field, lbl, rows, ph]) => (
+                                                    <div key={field}><label className={labelCls}>{lbl}</label><textarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} className={inputCls} placeholder={ph} /></div>
                                                 ))}
-
-                                                {/* Success Message & Error Message side-by-side */}
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                                    <div>
-                                                        <label className={labelCls}>
-                                                            <i className="fa-solid fa-circle-check text-green-500 mr-1.5"></i>
-                                                            Success Message
-                                                        </label>
-                                                        <RichTextarea
-                                                            rows={3}
-                                                            value={formData.successMessage}
-                                                            onChange={v => handleInputChange('successMessage', v)}
-                                                            className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-sm focus:ring-2 focus:ring-green-400"
-                                                            placeholder="e.g. Record saved successfully. Your changes have been applied."
-                                                            style={{ borderColor: formData.successMessage ? '#86efac' : undefined, background: formData.successMessage ? '#f0fdf4' : undefined }}
-                                                        />
-                                                        <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
-                                                            <i className="fa-solid fa-circle-info text-green-400" style={{ fontSize: 10 }}></i>
-                                                            Message shown on successful operation
-                                                        </p>
-                                                    </div>
-                                                    <div>
-                                                        <label className={labelCls}>
-                                                            <i className="fa-solid fa-circle-xmark text-red-500 mr-1.5"></i>
-                                                            Error Message
-                                                        </label>
-                                                        <RichTextarea
-                                                            rows={3}
-                                                            value={formData.errorMessage}
-                                                            onChange={v => handleInputChange('errorMessage', v)}
-                                                            className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-sm focus:ring-2 focus:ring-red-400"
-                                                            placeholder="e.g. Unable to save record. Please check the required fields and try again."
-                                                            style={{ borderColor: formData.errorMessage ? '#fca5a5' : undefined, background: formData.errorMessage ? '#fff1f2' : undefined }}
-                                                        />
-                                                        <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
-                                                            <i className="fa-solid fa-circle-info text-red-400" style={{ fontSize: 10 }}></i>
-                                                            Message shown when an error occurs
-                                                        </p>
-                                                    </div>
-                                                </div>
                                             </div>
                                         </Section>
 
@@ -1454,7 +1346,7 @@ const UserStoryMapping = () => {
                                         <Section id="technical-references" title="Technical References" icon="fa-code" iconColor="bg-indigo-500" collapsedSections={collapsedSections} toggleSection={toggleSection}>
                                             <div className="space-y-6">
                                                 {[['apiImpacted', 'API Impacted', 3, 'List APIs impacted...'], ['dbTablesImpacted', 'DB Tables Impacted', 2, 'List DB tables...'], ['integrationImpacted', 'Integration Impacted', 2, 'List integrations...'], ['reportsImpacted', 'Reports Impacted', 2, 'List reports...'], ['configurationImpacted', 'Configuration Impacted', 2, 'List config settings...']].map(([field, lbl, rows, ph]) => (
-                                                    <div key={field}><label className={labelCls}>{lbl}</label><RichTextarea rows={rows} value={formData[field]} onChange={v => handleInputChange(field, v)} className={inputCls} placeholder={ph} /></div>
+                                                    <div key={field}><label className={labelCls}>{lbl}</label><textarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} className={inputCls} placeholder={ph} /></div>
                                                 ))}
                                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                                     <div><label className={labelCls}>Security/RBAC Impact</label><CustomSelect value={formData.securityRBACImpact} onChange={v => handleInputChange('securityRBACImpact', v)} options={yesNoOpts} /></div>
@@ -1466,7 +1358,7 @@ const UserStoryMapping = () => {
 
                                     </div>
 
-                                    {/* RIGHT SIDEBAR */}
+                                    {/* ── RIGHT SIDEBAR ── */}
                                     <div className="space-y-6">
                                         <div className="bg-card border border-border rounded-lg shadow-sm p-6">
                                             <h3 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2"><i className="fa-solid fa-circle-info text-primary"></i> Quick Information</h3>
@@ -1477,8 +1369,8 @@ const UserStoryMapping = () => {
                                                 <div><label className="text-xs text-muted-foreground block mb-1">Estimate Hours</label><input type="number" min="0" step="0.5" value={formData.estimateHours} onChange={e => handleInputChange('estimateHours', e.target.value)} placeholder="e.g. 8.5" className="w-full px-3 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary" /></div>
                                                 <div className="pt-3 border-t border-border space-y-3">
                                                     <div><label className="text-xs text-muted-foreground block mb-1">Planned Sprint</label><input type="text" value={formData.plannedSprint} onChange={e => handleInputChange('plannedSprint', e.target.value)} placeholder="e.g. Sprint 12" className="w-full px-3 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary" /></div>
-                                                    <div><label className="text-xs text-muted-foreground block mb-1">Planned Release</label><CustomSelect value={formData.plannedRelease} onChange={v => handleInputChange('plannedRelease', v)} options={versions.map(v => ({ value: v.version_number, label: v.version_number }))} placeholder="Select version…" /></div>
-                                                    <div><label className="text-xs text-muted-foreground block mb-1">Build Number</label><CustomSelect value={formData.versionBuild} onChange={v => handleInputChange('versionBuild', v)} options={versions.map(v => ({ value: v.build_number, label: v.build_number }))} placeholder="Select build…" /></div>
+                                                    <div><label className="text-xs text-muted-foreground block mb-1">Planned Release</label><input type="text" value={formData.plannedRelease} onChange={e => handleInputChange('plannedRelease', e.target.value)} placeholder="e.g. v2.4.0" className="w-full px-3 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary" /></div>
+                                                    <div><label className="text-xs text-muted-foreground block mb-1">Version/Build</label><input type="text" value={formData.versionBuild} onChange={e => handleInputChange('versionBuild', e.target.value)} placeholder="e.g. build-1042" className="w-full px-3 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary" /></div>
                                                 </div>
                                                 {formData.linkedFeatures.length > 0 && (
                                                     <div className="pt-3 border-t border-border">
@@ -1493,27 +1385,34 @@ const UserStoryMapping = () => {
                                             <h3 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2">
                                                 <i className="fa-solid fa-users text-primary"></i>Team Assignment
                                                 {profilesLoading && <span className="text-xs text-muted-foreground font-normal ml-1 flex items-center gap-1"><span className="w-3 h-3 border border-primary border-t-transparent rounded-full animate-spin inline-block"></span>loading…</span>}
+                                                {!profilesLoading && teamMemberOpts.length === 0 && <span className="text-xs text-amber-500 font-normal ml-1">(no profiles found)</span>}
                                             </h3>
                                             <div className="space-y-5">
                                                 <div>
                                                     <label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-2"><i className="fa-solid fa-user-tie text-purple-500 text-xs"></i>Assigned BA{formData.assignedBa.length > 0 && <span className="ml-auto px-1.5 py-0.5 bg-primary bg-opacity-10 text-primary text-xs font-bold rounded-full">{formData.assignedBa.length}</span>}</label>
-                                                    <MultiSelect values={formData.assignedBa} onChange={v => handleInputChange('assignedBa', v)} options={teamMemberOpts} placeholder={profilesLoading ? 'Loading members…' : 'Select BAs…'} searchPlaceholder="Search members..." />
+                                                    <MultiSelect values={formData.assignedBa} onChange={v => handleInputChange('assignedBa', v)} options={teamMemberOpts} placeholder={profilesLoading ? 'Loading members…' : teamMemberOpts.length === 0 ? 'No profiles found' : 'Select BAs…'} searchPlaceholder="Search members..." />
                                                 </div>
                                                 <div className="border border-blue-200 rounded-xl p-4 space-y-4 bg-blue-50/40">
                                                     <p className="text-xs font-semibold text-blue-700 flex items-center gap-1.5"><i className="fa-solid fa-code text-blue-500 text-xs"></i>Developers</p>
                                                     <div>
-                                                        <label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-2"><span className="w-4 h-4 rounded bg-blue-100 flex items-center justify-center flex-shrink-0"><i className="fa-solid fa-desktop text-blue-500" style={{ fontSize: 9 }}></i></span>Frontend{formData.assignedFrontendDeveloper.length > 0 && <span className="ml-auto px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">{formData.assignedFrontendDeveloper.length}</span>}</label>
-                                                        <MultiSelect values={formData.assignedFrontendDeveloper} onChange={v => handleInputChange('assignedFrontendDeveloper', v)} options={teamMemberOpts} placeholder={profilesLoading ? 'Loading members…' : 'Select Frontend Devs…'} searchPlaceholder="Search members..." />
+                                                        <label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-2"><span className="w-4 h-4 rounded bg-blue-100 flex items-center justify-center flex-shrink-0"><i className="fa-solid fa-desktop text-blue-500" style={{ fontSize: 9 }}></i></span>Frontend Developer{formData.assignedFrontendDeveloper.length > 0 && <span className="ml-auto px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">{formData.assignedFrontendDeveloper.length}</span>}</label>
+                                                        <MultiSelect values={formData.assignedFrontendDeveloper} onChange={v => handleInputChange('assignedFrontendDeveloper', v)} options={teamMemberOpts} placeholder={profilesLoading ? 'Loading members…' : teamMemberOpts.length === 0 ? 'No profiles found' : 'Select Frontend Devs…'} searchPlaceholder="Search members..." />
                                                     </div>
                                                     <div>
-                                                        <label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-2"><span className="w-4 h-4 rounded bg-indigo-100 flex items-center justify-center flex-shrink-0"><i className="fa-solid fa-server text-indigo-500" style={{ fontSize: 9 }}></i></span>Backend{formData.assignedBackendDeveloper.length > 0 && <span className="ml-auto px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full">{formData.assignedBackendDeveloper.length}</span>}</label>
-                                                        <MultiSelect values={formData.assignedBackendDeveloper} onChange={v => handleInputChange('assignedBackendDeveloper', v)} options={teamMemberOpts} placeholder={profilesLoading ? 'Loading members…' : 'Select Backend Devs…'} searchPlaceholder="Search members..." />
+                                                        <label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-2"><span className="w-4 h-4 rounded bg-indigo-100 flex items-center justify-center flex-shrink-0"><i className="fa-solid fa-server text-indigo-500" style={{ fontSize: 9 }}></i></span>Backend Developer{formData.assignedBackendDeveloper.length > 0 && <span className="ml-auto px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full">{formData.assignedBackendDeveloper.length}</span>}</label>
+                                                        <MultiSelect values={formData.assignedBackendDeveloper} onChange={v => handleInputChange('assignedBackendDeveloper', v)} options={teamMemberOpts} placeholder={profilesLoading ? 'Loading members…' : teamMemberOpts.length === 0 ? 'No profiles found' : 'Select Backend Devs…'} searchPlaceholder="Search members..." />
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-2"><i className="fa-solid fa-flask text-green-500 text-xs"></i>Tester{formData.assignedTester.length > 0 && <span className="ml-auto px-1.5 py-0.5 bg-primary bg-opacity-10 text-primary text-xs font-bold rounded-full">{formData.assignedTester.length}</span>}</label>
-                                                    <MultiSelect values={formData.assignedTester} onChange={v => handleInputChange('assignedTester', v)} options={teamMemberOpts} placeholder={profilesLoading ? 'Loading members…' : 'Select Testers…'} searchPlaceholder="Search members..." />
+                                                    <label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-2"><i className="fa-solid fa-flask text-green-500 text-xs"></i>Assigned Tester{formData.assignedTester.length > 0 && <span className="ml-auto px-1.5 py-0.5 bg-primary bg-opacity-10 text-primary text-xs font-bold rounded-full">{formData.assignedTester.length}</span>}</label>
+                                                    <MultiSelect values={formData.assignedTester} onChange={v => handleInputChange('assignedTester', v)} options={teamMemberOpts} placeholder={profilesLoading ? 'Loading members…' : teamMemberOpts.length === 0 ? 'No profiles found' : 'Select Testers…'} searchPlaceholder="Search members..." />
                                                 </div>
+                                                {!profilesLoading && teamMemberOpts.length === 0 && (
+                                                    <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                                                        <i className="fa-solid fa-triangle-exclamation text-amber-500 text-xs mt-0.5 flex-shrink-0"></i>
+                                                        <p className="text-xs text-amber-700 leading-relaxed">No profiles loaded. You may need to add a Supabase RLS policy:<code className="block mt-1 bg-amber-100 px-2 py-1 rounded font-mono text-xs">CREATE POLICY "read_profiles" ON profiles FOR SELECT USING (true);</code></p>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
@@ -1527,7 +1426,7 @@ const UserStoryMapping = () => {
                                                 <div><p className="text-xs text-muted-foreground mb-2">Release Status</p><CustomSelect value={formData.releaseStatus} onChange={v => handleInputChange('releaseStatus', v)} options={releaseStatusOpts} /></div>
                                                 <div className="pt-4 border-t border-border">
                                                     <div className="flex items-center gap-2 mb-2"><input type="checkbox" checked={formData.blocked} onChange={e => handleInputChange('blocked', e.target.checked)} className="w-4 h-4 text-primary rounded" /><p className="text-xs font-semibold text-muted-foreground">Blocked</p></div>
-                                                    {formData.blocked && <RichTextarea rows={2} value={formData.blockedReason} onChange={v => handleInputChange('blockedReason', v)} className="w-full px-3 py-2 bg-input border border-border rounded-lg text-xs focus:ring-2 focus:ring-primary" placeholder="Describe the blocker..." />}
+                                                    {formData.blocked && <textarea rows="2" value={formData.blockedReason} onChange={e => handleInputChange('blockedReason', e.target.value)} className="w-full px-3 py-2 bg-input border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Describe the blocker..." />}
                                                 </div>
                                             </div>
                                         </div>
@@ -1535,10 +1434,9 @@ const UserStoryMapping = () => {
                                         <div className="bg-card border border-border rounded-lg shadow-sm p-6">
                                             <h3 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2"><i className="fa-solid fa-link text-primary"></i> Related Items</h3>
                                             <div className="space-y-3">
-                                                <button onClick={() => setShowRelatedStories(true)} className="w-full flex items-center justify-between px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors">
-                                                    <span className="text-sm font-medium text-blue-700">Related User Stories</span>
-                                                    <span className="px-2 py-1 bg-blue-200 text-blue-700 text-xs font-semibold rounded">{formData.relatedStoryIds.length}</span>
-                                                </button>
+                                                <button onClick={() => setShowRelatedStories(true)} className="w-full flex items-center justify-between px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"><span className="text-sm font-medium text-blue-700">Related User Stories</span><span className="px-2 py-1 bg-blue-200 text-blue-700 text-xs font-semibold rounded">0</span></button>
+                                                <button onClick={() => setActiveTab('bugs')} className="w-full flex items-center justify-between px-3 py-2 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"><span className="text-sm font-medium text-red-700">Related Bugs</span><span className="px-2 py-1 bg-red-200 text-red-700 text-xs font-semibold rounded">{tabCounts.bugs ?? 0}</span></button>
+                                                <button onClick={() => setShowChangeRequests(true)} className="w-full flex items-center justify-between px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors"><span className="text-sm font-medium text-purple-700">Change Requests</span><span className="px-2 py-1 bg-purple-200 text-purple-700 text-xs font-semibold rounded">0</span></button>
                                             </div>
                                         </div>
 
@@ -1559,6 +1457,7 @@ const UserStoryMapping = () => {
                             )}
 
                             {activeTab === 'testcases' && <div className="bg-card border border-border rounded-lg shadow-sm p-6"><TestCasesTab storyId={formData.storyId} storyUUID={storyUUID} /></div>}
+                            {activeTab === 'bugs' && <div className="bg-card border border-border rounded-lg shadow-sm p-6"><BugsTab storyId={formData.storyId} storyUUID={storyUUID} /></div>}
                             {activeTab === 'comments' && <div className="bg-card border border-border rounded-lg shadow-sm p-6"><CommentsTab storyId={formData.storyId} storyUUID={storyUUID} /></div>}
                             {activeTab === 'attachments' && <div className="bg-card border border-border rounded-lg shadow-sm p-6"><AttachmentsTab storyId={formData.storyId} storyUUID={storyUUID} /></div>}
                         </div>
@@ -1580,112 +1479,9 @@ const UserStoryMapping = () => {
                         </div>
                     </footer>
 
-                    {showRelatedStories && (
-                        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-                            onClick={() => setShowRelatedStories(false)}>
-                            <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.18)', width: '100%', maxWidth: 680, maxHeight: '85vh', display: 'flex', flexDirection: 'column', fontFamily: "'Roboto', sans-serif" }}
-                                onClick={e => e.stopPropagation()}>
-                                <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                        <div style={{ width: 36, height: 36, background: '#eff6ff', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            <i className="fa-solid fa-link" style={{ color: '#2563eb', fontSize: 14 }}></i>
-                                        </div>
-                                        <div>
-                                            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0 }}>Related User Stories</h3>
-                                            <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>Link other stories to {formData.storyId}</p>
-                                        </div>
-                                    </div>
-                                    <button onClick={() => setShowRelatedStories(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 18, padding: 4 }}>
-                                        <i className="fa-solid fa-times"></i>
-                                    </button>
-                                </div>
-                                <div style={{ padding: '16px 24px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
-                                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                        Add Related Story
-                                    </label>
-                                    {allStoriesLoading ? (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', border: '1.5px solid #e2e6f0', borderRadius: 10, color: '#94a3b8', fontSize: 13 }}>
-                                            <div style={{ width: 14, height: 14, border: '2px solid #94a3b8', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }}></div>
-                                            Loading stories…
-                                        </div>
-                                    ) : (
-                                        <CustomSelect
-                                            value=""
-                                            onChange={val => {
-                                                if (!val) return;
-                                                if (!formData.relatedStoryIds.includes(val)) {
-                                                    handleInputChange('relatedStoryIds', [...formData.relatedStoryIds, val]);
-                                                }
-                                            }}
-                                            options={relatedStoryOpts.filter(o => !formData.relatedStoryIds.includes(o.value))}
-                                            placeholder="— Select a story to link —"
-                                        />
-                                    )}
-                                </div>
-                                <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px 20px' }}>
-                                    {relatedStoryObjects.length === 0 ? (
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 0', gap: 10 }}>
-                                            <div style={{ width: 48, height: 48, background: '#f1f5f9', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                <i className="fa-solid fa-link-slash" style={{ color: '#94a3b8', fontSize: 20 }}></i>
-                                            </div>
-                                            <p style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>No related stories linked yet</p>
-                                            <p style={{ fontSize: 12, color: '#94a3b8' }}>Use the dropdown above to link stories</p>
-                                        </div>
-                                    ) : (
-                                        <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
-                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                                                <thead>
-                                                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                                                        {['Story ID', 'Title', 'Status', 'Criticality', ''].map(h => (
-                                                            <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
-                                                        ))}
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {relatedStoryObjects.map((s, i) => {
-                                                        const sm = STATUS_META[s.current_status] || STATUS_META['Draft'];
-                                                        return (
-                                                            <tr key={s.story_id} style={{ borderBottom: i < relatedStoryObjects.length - 1 ? '1px solid #f1f5f9' : 'none', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                                                                <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
-                                                                    <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#16a34a', background: '#f0fdf4', padding: '2px 8px', borderRadius: 5 }}>{s.story_id}</span>
-                                                                </td>
-                                                                <td style={{ padding: '10px 14px', color: '#0f172a', fontWeight: 500, maxWidth: 240 }}>
-                                                                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.story_title || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Untitled</span>}</div>
-                                                                </td>
-                                                                <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
-                                                                    {s.current_status ? (
-                                                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 99, background: sm.bg, color: sm.color, fontSize: 11, fontWeight: 600 }}>
-                                                                            {s.current_status}
-                                                                        </span>
-                                                                    ) : <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span>}
-                                                                </td>
-                                                                <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontSize: 12, color: '#64748b' }}>{s.criticality || '—'}</td>
-                                                                <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                                                                    <button
-                                                                        onClick={() => handleInputChange('relatedStoryIds', formData.relatedStoryIds.filter(id => id !== s.story_id))}
-                                                                        style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 7, background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: 11 }}
-                                                                        title="Remove"
-                                                                    >
-                                                                        <i className="fa-solid fa-trash"></i>
-                                                                    </button>
-                                                                </td>
-                                                            </tr>
-                                                        );
-                                                    })}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
-                                </div>
-                                <div style={{ padding: '14px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-                                    <span style={{ fontSize: 12, color: '#94a3b8' }}>{formData.relatedStoryIds.length} related {formData.relatedStoryIds.length === 1 ? 'story' : 'stories'} linked</span>
-                                    <button onClick={() => setShowRelatedStories(false)} style={{ padding: '9px 22px', background: '#15803d', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Done</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
                     {showHistoryModal && <div className="modal-overlay" onClick={() => setShowHistoryModal(false)}><div className="modal-content" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold mb-4">Story History</h3><p className="text-sm text-gray-600 mb-4">Version history for this user story.</p><div className="border-l-4 border-blue-500 pl-4 py-2"><p className="text-sm font-medium">Draft Created</p><p className="text-xs text-gray-500">Just now by System</p></div><button onClick={() => setShowHistoryModal(false)} className="mt-6 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">Close</button></div></div>}
+                    {showRelatedStories && <div className="modal-overlay" onClick={() => setShowRelatedStories(false)}><div className="modal-content" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold mb-4">Related User Stories</h3><p className="text-sm text-gray-600">No related stories found for {formData.storyId}.</p><button onClick={() => setShowRelatedStories(false)} className="mt-6 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">Close</button></div></div>}
+                    {showChangeRequests && <div className="modal-overlay" onClick={() => setShowChangeRequests(false)}><div className="modal-content" onClick={e => e.stopPropagation()}><h3 className="text-lg font-bold mb-4">Change Requests</h3><p className="text-sm text-gray-600">No change requests found for {formData.storyId}.</p><button onClick={() => setShowChangeRequests(false)} className="mt-6 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">Close</button></div></div>}
                 </div>
             </div>
         </>

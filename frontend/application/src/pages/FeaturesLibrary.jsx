@@ -105,7 +105,6 @@ const GLOBAL_STYLES = `
   input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
   input[type="number"] { -moz-appearance: textfield; }
 
-  /* ── Rich textarea ── identical look to fl-input / native textarea ── */
   .fl-rich-area {
     width: 100%; padding: 9px 13px;
     background: #FAFBF9; border: 1px solid #DDE3D8;
@@ -159,7 +158,6 @@ const T = {
     purpleTint: "rgba(124,58,237,0.08)",
 };
 
-// ─── Badges ────────────────────────────────────────────────────────────────────
 const PRIORITY_STYLE = {
     High: { background: "rgba(220,38,38,0.09)", color: "#B91C1C" },
     Medium: { background: "rgba(217,119,6,0.09)", color: "#B45309" },
@@ -182,15 +180,10 @@ const Chip = ({ label, style: s, mono }) => (
 );
 
 // ─── Rich Textarea ─────────────────────────────────────────────────────────────
-// Looks identical to a native textarea / fl-input.
-// Enter        → inserts a bullet point (• ) on a new line
-// Shift+Enter  → plain newline, no bullet
-// Ctrl/Cmd+B   → wraps selected text in <b>
 const RichTextarea = memo(({ value = "", onChange, placeholder, minHeight = 68 }) => {
     const ref = useRef(null);
     const skipSync = useRef(false);
 
-    // Sync external value → DOM only when the parent resets it (modal open/close)
     useEffect(() => {
         const el = ref.current;
         if (!el || skipSync.current) return;
@@ -206,23 +199,17 @@ const RichTextarea = memo(({ value = "", onChange, placeholder, minHeight = 68 }
     }, [onChange]);
 
     const handleKeyDown = useCallback((e) => {
-        // ── Ctrl/Cmd + B → bold ──────────────────────────────────────────────
         if ((e.ctrlKey || e.metaKey) && e.key === "b") {
             e.preventDefault();
             const sel = window.getSelection();
             if (!sel || sel.rangeCount === 0) return;
             const range = sel.getRangeAt(0);
-            if (range.collapsed) return; // nothing selected → skip
+            if (range.collapsed) return;
             const b = document.createElement("b");
-            try {
-                range.surroundContents(b);
-            } catch {
-                // surroundContents fails when selection crosses element boundaries;
-                // fall back to extracting and wrapping
+            try { range.surroundContents(b); } catch {
                 b.appendChild(range.extractContents());
                 range.insertNode(b);
             }
-            // Move caret after the bold node
             range.setStartAfter(b);
             range.collapse(true);
             sel.removeAllRanges();
@@ -231,19 +218,14 @@ const RichTextarea = memo(({ value = "", onChange, placeholder, minHeight = 68 }
             return;
         }
 
-        // ── Enter → bullet point ─────────────────────────────────────────────
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             const sel = window.getSelection();
             if (!sel || sel.rangeCount === 0) return;
             const range = sel.getRangeAt(0);
             range.deleteContents();
-
-            // Insert newline + bullet character
             const bullet = document.createTextNode("\n• ");
             range.insertNode(bullet);
-
-            // Move caret to end of inserted text
             range.setStartAfter(bullet);
             range.collapse(true);
             sel.removeAllRanges();
@@ -252,7 +234,6 @@ const RichTextarea = memo(({ value = "", onChange, placeholder, minHeight = 68 }
             return;
         }
 
-        // ── Shift+Enter → plain newline ──────────────────────────────────────
         if (e.key === "Enter" && e.shiftKey) {
             e.preventDefault();
             const sel = window.getSelection();
@@ -261,7 +242,6 @@ const RichTextarea = memo(({ value = "", onChange, placeholder, minHeight = 68 }
             range.deleteContents();
             const br = document.createElement("br");
             range.insertNode(br);
-            // Insert an extra zero-width space so caret lands after the <br>
             const zws = document.createTextNode("\u200B");
             range.setStartAfter(br);
             range.insertNode(zws);
@@ -287,7 +267,6 @@ const RichTextarea = memo(({ value = "", onChange, placeholder, minHeight = 68 }
     );
 });
 
-// Strip HTML tags → plain text (used before saving to Supabase)
 const stripHtml = (html = "") => {
     const d = document.createElement("div");
     d.innerHTML = html;
@@ -435,7 +414,6 @@ const splitCSVLine = (line) => {
 };
 const normaliseHeader = (h) => h.replace(/^\uFEFF/, "").replace(/^["'\s]+|["'\s]+$/g, "").toLowerCase().trim();
 
-// ─── Column definitions ────────────────────────────────────────────────────────
 const FEATURE_COLUMNS = [
     { label: "Module Name", required: true, hint: "Any text. Must match an existing module name." },
     { label: "Feature Name", required: true, hint: "Name of the feature." },
@@ -462,7 +440,6 @@ const VALID_PRIORITIES = ["High", "Medium", "Low"];
 const VALID_STATUSES = ["Active", "Draft", "Archived"];
 const VALID_TEST_TYPES = TEST_TYPE_OPTIONS.map(o => o.id);
 
-// ─── Shared Import UI ──────────────────────────────────────────────────────────
 function ColumnReference({ columns }) {
     return (
         <div style={{ border: `1px solid ${T.border}`, borderRadius: 10, overflow: "hidden" }}>
@@ -638,12 +615,9 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
         if (allLines.length < 2) return { rows: [], rowErrors: [], fatalError: "CSV must have a header row and at least one data row." };
         const rawHeaders = splitCSVLine(allLines[0]).map(normaliseHeader);
         const keyMap = {
-            "module name": "module_name",
-            "feature name": "feature_name",
-            "feature code": "feature_code",
-            "user story": "user_story",
-            "description": "description",
-            "assign to": "assign_to",
+            "module name": "module_name", "feature name": "feature_name",
+            "feature code": "feature_code", "user story": "user_story",
+            "description": "description", "assign to": "assign_to",
         };
         const idxMap = {};
         rawHeaders.forEach((h, i) => { const k = keyMap[h]; if (k) idxMap[k] = i; });
@@ -683,48 +657,26 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
         if (!parsed?.rows?.length) return;
         setImporting(true);
         const success = [], failed = [];
-
         const moduleMap = {};
         for (const m of modules) {
             const key = (m.module_name || m.name || "").toLowerCase().trim();
             if (key) moduleMap[key] = m.id;
         }
-
         const userMap = {};
-        for (const u of users) {
-            if (u.name) userMap[u.name.toLowerCase().trim()] = u.id;
-        }
-
+        for (const u of users) { if (u.name) userMap[u.name.toLowerCase().trim()] = u.id; }
         for (const row of parsed.rows) {
             const moduleId = moduleMap[row.module_name.toLowerCase().trim()];
-            if (!moduleId) {
-                failed.push({ name: row.feature_name, reason: `Module "${row.module_name}" not found. Available: ${Object.keys(moduleMap).join(", ")}` });
-                continue;
-            }
+            if (!moduleId) { failed.push({ name: row.feature_name, reason: `Module "${row.module_name}" not found.` }); continue; }
             const assignId = row.assign_to ? (userMap[row.assign_to.toLowerCase().trim()] || null) : null;
-
             const { error } = await supabase.from("features").insert([{
-                module_id: moduleId,
-                feature_name: row.feature_name,
-                feature_code: row.feature_code,
-                user_story: row.user_story || null,
-                description: row.description,
-                assign_to: assignId,
-                created_at: new Date().toISOString(),
+                module_id: moduleId, feature_name: row.feature_name, feature_code: row.feature_code,
+                user_story: row.user_story || null, description: row.description,
+                assign_to: assignId, created_at: new Date().toISOString(),
             }]);
-
-            if (error) {
-                console.error("Feature insert error:", error, row);
-                failed.push({ name: row.feature_name, reason: error.message });
-            } else {
-                success.push(row.feature_name);
-            }
+            if (error) failed.push({ name: row.feature_name, reason: error.message });
+            else success.push(row.feature_name);
         }
-
-        const skipped = (parsed.rowErrors || []).map(e => ({
-            name: e.name || `Row ${e.row}`,
-            reason: Array.isArray(e.messages) ? e.messages.join(" · ") : e.messages,
-        }));
+        const skipped = (parsed.rowErrors || []).map(e => ({ name: e.name || `Row ${e.row}`, reason: Array.isArray(e.messages) ? e.messages.join(" · ") : e.messages }));
         setResult({ success, failed: [...skipped, ...failed] });
         setImporting(false);
         if (success.length) onSuccess();
@@ -738,13 +690,13 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
             <div className="fl-modal-enter" style={{ background: T.surface, borderRadius: 16, boxShadow: "0 24px 64px rgba(0,0,0,0.18)", width: "100%", maxWidth: 600, maxHeight: "90vh", overflowY: "auto", fontFamily: T.sans }} onClick={e => e.stopPropagation()}>
                 <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${T.borderLight}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between", position: "sticky", top: 0, background: T.surface, zIndex: 10 }}>
                     <div><h3 style={{ fontSize: 17, fontWeight: 700, color: T.text, margin: 0 }}>Import Features</h3><p style={{ fontSize: 13, color: T.textMuted, margin: "3px 0 0" }}>Upload a CSV file to bulk import features</p></div>
-                    <button onClick={handleClose} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 18, padding: "2px 4px", lineHeight: 1 }}>✕</button>
+                    <button type="button" onClick={handleClose} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 18, padding: "2px 4px", lineHeight: 1 }}>✕</button>
                 </div>
                 <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
                     {!result ? (<>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, padding: "14px 18px", background: T.blueTint, border: `1px solid rgba(37,99,235,0.18)`, borderRadius: 10 }}>
                             <div><p style={{ fontSize: 13, fontWeight: 700, color: T.blue, margin: "0 0 2px" }}>Download Import Template</p><p style={{ fontSize: 12, color: "#3B82F6", margin: 0 }}>Get the CSV template with all required columns.</p></div>
-                            <button onClick={() => downloadCSV(FEATURE_COLUMNS, "features_import_template.csv", ["Login Module", "Two-Factor Auth", "FEAT-001", "US-015", "Adds 2FA via TOTP", "Jane Smith"])} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", background: T.surface, border: `1px solid rgba(37,99,235,0.3)`, color: T.blue, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.sans }}><i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Template</button>
+                            <button type="button" onClick={() => downloadCSV(FEATURE_COLUMNS, "features_import_template.csv", ["Login Module", "Two-Factor Auth", "FEAT-001", "US-015", "Adds 2FA via TOTP", "Jane Smith"])} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", background: T.surface, border: `1px solid rgba(37,99,235,0.3)`, color: T.blue, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.sans }}><i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Template</button>
                         </div>
                         {modules.length > 0 && (
                             <div style={{ padding: "10px 14px", background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 9 }}>
@@ -760,13 +712,13 @@ function ImportFeaturesModal({ onClose, onSuccess, modules, users }) {
                     </>) : (<ImportResultScreen result={result} />)}
                 </div>
                 <div style={{ padding: "14px 24px", borderTop: `1px solid ${T.borderLight}`, position: "sticky", bottom: 0, background: T.surface, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10 }}>
-                    <button onClick={handleClose} disabled={importing} style={{ padding: "9px 22px", background: T.surface, border: `1px solid ${T.border}`, color: T.textMid, borderRadius: 8, fontWeight: 500, fontSize: 13, cursor: "pointer", fontFamily: T.sans }}>Cancel</button>
+                    <button type="button" onClick={handleClose} disabled={importing} style={{ padding: "9px 22px", background: T.surface, border: `1px solid ${T.border}`, color: T.textMid, borderRadius: 8, fontWeight: 500, fontSize: 13, cursor: "pointer", fontFamily: T.sans }}>Cancel</button>
                     {!result ? (
-                        <button onClick={handleImport} disabled={!canImport} style={{ padding: "9px 22px", background: "#15803d", border: "none", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: canImport ? "pointer" : "not-allowed", fontFamily: T.sans, opacity: canImport ? 1 : 0.45, display: "inline-flex", alignItems: "center", gap: 8 }}>
+                        <button type="button" onClick={handleImport} disabled={!canImport} style={{ padding: "9px 22px", background: "#15803d", border: "none", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: canImport ? "pointer" : "not-allowed", fontFamily: T.sans, opacity: canImport ? 1 : 0.45, display: "inline-flex", alignItems: "center", gap: 8 }}>
                             {importing ? <><i className="fa-solid fa-spinner fa-spin" style={{ fontSize: 11 }}></i> Importing…</> : <><i className="fa-solid fa-file-import" style={{ fontSize: 11 }}></i> Import {validRows > 0 ? `${validRows} Feature${validRows !== 1 ? "s" : ""}` : "Features"}</>}
                         </button>
                     ) : (
-                        <button onClick={handleClose} style={{ padding: "9px 22px", background: "#15803d", border: "none", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: T.sans }}>Done</button>
+                        <button type="button" onClick={handleClose} style={{ padding: "9px 22px", background: "#15803d", border: "none", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: T.sans }}>Done</button>
                     )}
                 </div>
             </div>
@@ -788,21 +740,14 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
         if (allLines.length < 2) return { rows: [], rowErrors: [], fatalError: "CSV must have a header row and at least one data row." };
         const rawHeaders = splitCSVLine(allLines[0]).map(normaliseHeader);
         const keyMap = {
-            "feature code": "feature_code",
-            "test case name": "name",
-            "priority": "priority",
-            "status": "status",
-            "test type": "test_type",
-            "test scenario": "test_scenario",
-            "pre requisites": "pre_requisites",
-            "test steps": "test_steps",
-            "expected result": "expected_result",
-            "assigned to": "assigned_to",
-            "user story codes": "user_story_codes",
+            "feature code": "feature_code", "test case name": "name",
+            "priority": "priority", "status": "status", "test type": "test_type",
+            "test scenario": "test_scenario", "pre requisites": "pre_requisites",
+            "test steps": "test_steps", "expected result": "expected_result",
+            "assigned to": "assigned_to", "user story codes": "user_story_codes",
         };
         const idxMap = {};
         rawHeaders.forEach((h, i) => { const k = keyMap[h]; if (k) idxMap[k] = i; });
-
         const required = ["feature_code", "name", "priority", "status", "test_type", "test_scenario", "pre_requisites", "test_steps", "expected_result", "assigned_to"];
         const missing = required.filter(k => idxMap[k] === undefined).map(k => TC_COLUMNS.find(c => keyMap[normaliseHeader(c.label)] === k)?.label || k);
         if (missing.length) return { rows: [], rowErrors: [], fatalError: `Missing required column${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}. Please use the provided template.` };
@@ -830,17 +775,8 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
             if (!get("test_steps")) errs.push("Test Steps is required");
             if (!get("expected_result")) errs.push("Expected Result is required");
             if (!assigned_to) errs.push("Assigned To is required");
-
             if (errs.length) rowErrors.push({ row: rowNum, name: name || `Row ${rowNum}`, messages: errs });
-            else rows.push({
-                feature_code, name, priority, status, test_type,
-                test_scenario: get("test_scenario"),
-                pre_requisites: get("pre_requisites"),
-                test_steps: get("test_steps"),
-                expected_result: get("expected_result"),
-                assigned_to,
-                user_story_codes,
-            });
+            else rows.push({ feature_code, name, priority, status, test_type, test_scenario: get("test_scenario"), pre_requisites: get("pre_requisites"), test_steps: get("test_steps"), expected_result: get("expected_result"), assigned_to, user_story_codes });
         });
         return { rows, rowErrors, fatalError: null };
     };
@@ -856,111 +792,50 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
         if (!parsed?.rows?.length) return;
         setImporting(true);
         const success = [], failed = [];
-
         const featureMap = {};
         for (const f of flatFeatures) {
             const key = (f.feature_code || f.code || "").toLowerCase().trim();
             if (key) featureMap[key] = { id: f.id, moduleId: f.moduleId || f.module_id };
         }
-
         const userMap = {};
-        for (const u of users) {
-            if (u.name) userMap[u.name.toLowerCase().trim()] = u.id;
-        }
-
+        for (const u of users) { if (u.name) userMap[u.name.toLowerCase().trim()] = u.id; }
         const storyMap = {};
         for (const s of userStories) {
             if (s.code) storyMap[s.code.toLowerCase().trim()] = s.id;
             if (s.id) storyMap[String(s.id).toLowerCase().trim()] = s.id;
         }
-
         let allTCIds = [];
-        {
-            let from = 0;
-            while (true) {
-                const { data: page } = await supabase
-                    .from("test_cases")
-                    .select("test_case_id")
-                    .range(from, from + 999);
-                if (!page || page.length === 0) break;
-                allTCIds = allTCIds.concat(page.map(t => ({ tcId: t.test_case_id })));
-                if (page.length < 1000) break;
-                from += 1000;
-            }
-        }
-
+        { let from = 0; while (true) { const { data: page } = await supabase.from("test_cases").select("test_case_id").range(from, from + 999); if (!page || page.length === 0) break; allTCIds = allTCIds.concat(page.map(t => ({ tcId: t.test_case_id }))); if (page.length < 1000) break; from += 1000; } }
         const { data: authData } = await supabase.auth.getUser();
         const authUserId = authData?.user?.id || null;
-
         for (const row of parsed.rows) {
             const featKey = row.feature_code.toLowerCase().trim();
             const feat = featureMap[featKey];
-            if (!feat) {
-                failed.push({
-                    name: row.name,
-                    reason: `Feature code "${row.feature_code}" not found. Available codes: ${Object.keys(featureMap).slice(0, 10).join(", ")}${Object.keys(featureMap).length > 10 ? "…" : ""}`,
-                });
-                continue;
-            }
-
+            if (!feat) { failed.push({ name: row.name, reason: `Feature code "${row.feature_code}" not found.` }); continue; }
             const assignId = row.assigned_to ? (userMap[row.assigned_to.toLowerCase().trim()] || null) : null;
-
             let storyIds = [];
             if (row.user_story_codes && row.user_story_codes.trim()) {
-                const storyCodes = row.user_story_codes
-                    .split(";")
-                    .map(s => s.trim())
-                    .filter(Boolean);
+                const storyCodes = row.user_story_codes.split(";").map(s => s.trim()).filter(Boolean);
                 const notFound = storyCodes.filter(code => !storyMap[code.toLowerCase().trim()]);
-                if (notFound.length) {
-                    failed.push({
-                        name: row.name,
-                        reason: `User story code(s) not found: ${notFound.join(", ")}. Available: ${Object.keys(storyMap).slice(0, 10).join(", ")}${Object.keys(storyMap).length > 10 ? "…" : ""}`,
-                    });
-                    continue;
-                }
+                if (notFound.length) { failed.push({ name: row.name, reason: `User story code(s) not found: ${notFound.join(", ")}` }); continue; }
                 storyIds = storyCodes.map(code => storyMap[code.toLowerCase().trim()]);
             }
-
             const nextTcId = generateNextTcId(allTCIds);
             allTCIds.push({ tcId: nextTcId });
-
-            const stepsArray = row.test_steps
-                ? row.test_steps.split("|").map(s => s.trim()).filter(Boolean)
-                : null;
-
+            const stepsArray = row.test_steps ? row.test_steps.split("|").map(s => s.trim()).filter(Boolean) : null;
             const { error } = await supabase.from("test_cases").insert([{
-                id: generateUUID(),
-                test_case_id: nextTcId,
-                name: row.name,
-                test_scenario: row.test_scenario || null,
-                preconditions: row.pre_requisites || null,
-                test_steps: stepsArray,
-                expected_result: row.expected_result || null,
-                feature_id: feat.id,
-                module_id: feat.moduleId,
-                priority: row.priority,
-                status: row.status,
-                test_type: row.test_type,
-                assigned_to: assignId,
+                id: generateUUID(), test_case_id: nextTcId, name: row.name,
+                test_scenario: row.test_scenario || null, preconditions: row.pre_requisites || null,
+                test_steps: stepsArray, expected_result: row.expected_result || null,
+                feature_id: feat.id, module_id: feat.moduleId, priority: row.priority,
+                status: row.status, test_type: row.test_type, assigned_to: assignId,
                 user_story_ids: storyIds.length > 0 ? storyIds : null,
-                created_by: authUserId,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
+                created_by: authUserId, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
             }]);
-
-            if (error) {
-                console.error("TC insert error:", error, row);
-                failed.push({ name: row.name, reason: error.message });
-            } else {
-                success.push(row.name);
-            }
+            if (error) failed.push({ name: row.name, reason: error.message });
+            else success.push(row.name);
         }
-
-        const skipped = (parsed.rowErrors || []).map(e => ({
-            name: e.name || `Row ${e.row}`,
-            reason: Array.isArray(e.messages) ? e.messages.join(" · ") : e.messages,
-        }));
+        const skipped = (parsed.rowErrors || []).map(e => ({ name: e.name || `Row ${e.row}`, reason: Array.isArray(e.messages) ? e.messages.join(" · ") : e.messages }));
         setResult({ success, failed: [...skipped, ...failed] });
         setImporting(false);
         if (success.length) onSuccess();
@@ -974,23 +849,19 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
             <div className="fl-modal-enter" style={{ background: T.surface, borderRadius: 16, boxShadow: "0 24px 64px rgba(0,0,0,0.18)", width: "100%", maxWidth: 640, maxHeight: "90vh", overflowY: "auto", fontFamily: T.sans }} onClick={e => e.stopPropagation()}>
                 <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${T.borderLight}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between", position: "sticky", top: 0, background: T.surface, zIndex: 10 }}>
                     <div><h3 style={{ fontSize: 17, fontWeight: 700, color: T.text, margin: 0 }}>Import Test Cases</h3><p style={{ fontSize: 13, color: T.textMuted, margin: "3px 0 0" }}>Upload a CSV file to bulk import test cases</p></div>
-                    <button onClick={handleClose} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 18, padding: "2px 4px", lineHeight: 1 }}>✕</button>
+                    <button type="button" onClick={handleClose} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 18, padding: "2px 4px", lineHeight: 1 }}>✕</button>
                 </div>
                 <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
                     {!result ? (<>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, padding: "14px 18px", background: T.blueTint, border: `1px solid rgba(37,99,235,0.18)`, borderRadius: 10 }}>
                             <div><p style={{ fontSize: 13, fontWeight: 700, color: T.blue, margin: "0 0 2px" }}>Download Import Template</p><p style={{ fontSize: 12, color: "#3B82F6", margin: 0 }}>Get the CSV template with all required columns.</p></div>
-                            <button onClick={() => downloadCSV(TC_COLUMNS, "test_cases_import_template.csv", ["FEAT-001", "Login with valid credentials", "High", "Active", "Functional", "Verify user can log in", "Registered account exists", "Navigate to login|Enter credentials|Click Login", "User redirected to dashboard", "Jane Smith", "US-001;US-002"])} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", background: T.surface, border: `1px solid rgba(37,99,235,0.3)`, color: T.blue, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.sans }}><i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Template</button>
+                            <button type="button" onClick={() => downloadCSV(TC_COLUMNS, "test_cases_import_template.csv", ["FEAT-001", "Login with valid credentials", "High", "Active", "Functional", "Verify user can log in", "Registered account exists", "Navigate to login|Enter credentials|Click Login", "User redirected to dashboard", "Jane Smith", "US-001;US-002"])} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", background: T.surface, border: `1px solid rgba(37,99,235,0.3)`, color: T.blue, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: T.sans }}><i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Template</button>
                         </div>
                         {flatFeatures.length > 0 && (
                             <div style={{ padding: "10px 14px", background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 9 }}>
                                 <p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Available Feature Codes</p>
                                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                    {flatFeatures.map(f => (
-                                        <span key={f.id} style={{ fontSize: 11, fontFamily: T.mono, background: T.surface, border: `1px solid ${T.border}`, color: T.purple, padding: "2px 8px", borderRadius: 5 }}>
-                                            {f.feature_code || f.code}
-                                        </span>
-                                    ))}
+                                    {flatFeatures.map(f => (<span key={f.id} style={{ fontSize: 11, fontFamily: T.mono, background: T.surface, border: `1px solid ${T.border}`, color: T.purple, padding: "2px 8px", borderRadius: 5 }}>{f.feature_code || f.code}</span>))}
                                 </div>
                             </div>
                         )}
@@ -998,11 +869,7 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
                             <div style={{ padding: "10px 14px", background: T.surfaceAlt, border: `1px solid ${T.borderLight}`, borderRadius: 9 }}>
                                 <p style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Available User Story Codes (optional)</p>
                                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                    {userStories.map(s => (
-                                        <span key={s.id} style={{ fontSize: 11, fontFamily: T.mono, background: T.surface, border: `1px solid ${T.border}`, color: T.red, padding: "2px 8px", borderRadius: 5 }}>
-                                            {s.code}
-                                        </span>
-                                    ))}
+                                    {userStories.map(s => (<span key={s.id} style={{ fontSize: 11, fontFamily: T.mono, background: T.surface, border: `1px solid ${T.border}`, color: T.red, padding: "2px 8px", borderRadius: 5 }}>{s.code}</span>))}
                                 </div>
                             </div>
                         )}
@@ -1012,13 +879,13 @@ function ImportTestCasesModal({ onClose, onSuccess, flatFeatures, users, userSto
                     </>) : (<ImportResultScreen result={result} />)}
                 </div>
                 <div style={{ padding: "14px 24px", borderTop: `1px solid ${T.borderLight}`, position: "sticky", bottom: 0, background: T.surface, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10 }}>
-                    <button onClick={handleClose} disabled={importing} style={{ padding: "9px 22px", background: T.surface, border: `1px solid ${T.border}`, color: T.textMid, borderRadius: 8, fontWeight: 500, fontSize: 13, cursor: "pointer", fontFamily: T.sans }}>Cancel</button>
+                    <button type="button" onClick={handleClose} disabled={importing} style={{ padding: "9px 22px", background: T.surface, border: `1px solid ${T.border}`, color: T.textMid, borderRadius: 8, fontWeight: 500, fontSize: 13, cursor: "pointer", fontFamily: T.sans }}>Cancel</button>
                     {!result ? (
-                        <button onClick={handleImport} disabled={!canImport} style={{ padding: "9px 22px", background: "#15803d", border: "none", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: canImport ? "pointer" : "not-allowed", fontFamily: T.sans, opacity: canImport ? 1 : 0.45, display: "inline-flex", alignItems: "center", gap: 8 }}>
+                        <button type="button" onClick={handleImport} disabled={!canImport} style={{ padding: "9px 22px", background: "#15803d", border: "none", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: canImport ? "pointer" : "not-allowed", fontFamily: T.sans, opacity: canImport ? 1 : 0.45, display: "inline-flex", alignItems: "center", gap: 8 }}>
                             {importing ? <><i className="fa-solid fa-spinner fa-spin" style={{ fontSize: 11 }}></i> Importing…</> : <><i className="fa-solid fa-file-import" style={{ fontSize: 11 }}></i> Import {validRows > 0 ? `${validRows} Test Case${validRows !== 1 ? "s" : ""}` : "Test Cases"}</>}
                         </button>
                     ) : (
-                        <button onClick={handleClose} style={{ padding: "9px 22px", background: "#15803d", border: "none", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: T.sans }}>Done</button>
+                        <button type="button" onClick={handleClose} style={{ padding: "9px 22px", background: "#15803d", border: "none", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: T.sans }}>Done</button>
                     )}
                 </div>
             </div>
@@ -1076,8 +943,8 @@ const TestCaseRow = memo(({ tc, onEdit, onDelete }) => (
         <td style={{ padding: "10px 16px", whiteSpace: "nowrap", fontSize: 11, color: T.textMuted, fontFamily: T.mono }}>{tc.updated}</td>
         <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-                <button className="fl-icon-btn edit" onClick={onEdit} title="Edit"><i className="fa-solid fa-pen-to-square"></i></button>
-                <button className="fl-icon-btn delete" onClick={onDelete} title="Delete"><i className="fa-solid fa-trash"></i></button>
+                <button type="button" className="fl-icon-btn edit" onClick={onEdit} title="Edit"><i className="fa-solid fa-pen-to-square"></i></button>
+                <button type="button" className="fl-icon-btn delete" onClick={onDelete} title="Delete"><i className="fa-solid fa-trash"></i></button>
             </div>
         </td>
     </tr>
@@ -1121,13 +988,13 @@ const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEditTC, onDeleteT
                         </div>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                        <button className="fl-btn-primary" onClick={(e) => { e.stopPropagation(); onAddTC(e, feat.moduleId, feat.id); }}>
+                        <button type="button" className="fl-btn-primary" onClick={(e) => { e.stopPropagation(); onAddTC(e, feat.moduleId, feat.id); }}>
                             <i className="fa-solid fa-plus" style={{ fontSize: 10 }}></i> Test Case
                         </button>
-                        <button className="fl-btn-ghost" onClick={onEdit} title="Edit Feature">
+                        <button type="button" className="fl-btn-ghost" onClick={onEdit} title="Edit Feature">
                             <i className="fa-solid fa-pen-to-square" style={{ fontSize: 11 }}></i>
                         </button>
-                        <button className="fl-btn-danger-sm" onClick={onDelete} title="Delete Feature">
+                        <button type="button" className="fl-btn-danger-sm" onClick={onDelete} title="Delete Feature">
                             <i className="fa-solid fa-trash" style={{ fontSize: 11 }}></i>
                         </button>
                         <i className={`fa-solid fa-chevron-right fl-chevron${isOpen ? " open" : ""}`} style={{ color: T.textFaint, fontSize: 10 }}></i>
@@ -1171,8 +1038,8 @@ const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEditTC, onDeleteT
                                 Showing {currentPage * tcPageSize + 1}–{Math.min((currentPage + 1) * tcPageSize, totalTCs)} of {totalTCs} test cases
                             </span>
                             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                <button className="fl-page-btn" disabled={currentPage === 0} onClick={() => onTcPageChange(feat.id, 0)}>«</button>
-                                <button className="fl-page-btn" disabled={currentPage === 0} onClick={() => onTcPageChange(feat.id, currentPage - 1)}>‹</button>
+                                <button type="button" className="fl-page-btn" disabled={currentPage === 0} onClick={() => onTcPageChange(feat.id, 0)}>«</button>
+                                <button type="button" className="fl-page-btn" disabled={currentPage === 0} onClick={() => onTcPageChange(feat.id, currentPage - 1)}>‹</button>
                                 {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
                                     let pg = i;
                                     if (totalPages > 7) {
@@ -1181,13 +1048,13 @@ const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEditTC, onDeleteT
                                         else pg = currentPage - 3 + i;
                                     }
                                     return (
-                                        <button key={pg} className={`fl-page-btn${pg === currentPage ? " active" : ""}`} onClick={() => onTcPageChange(feat.id, pg)}>
+                                        <button type="button" key={pg} className={`fl-page-btn${pg === currentPage ? " active" : ""}`} onClick={() => onTcPageChange(feat.id, pg)}>
                                             {pg + 1}
                                         </button>
                                     );
                                 })}
-                                <button className="fl-page-btn" disabled={currentPage >= totalPages - 1} onClick={() => onTcPageChange(feat.id, currentPage + 1)}>›</button>
-                                <button className="fl-page-btn" disabled={currentPage >= totalPages - 1} onClick={() => onTcPageChange(feat.id, totalPages - 1)}>»</button>
+                                <button type="button" className="fl-page-btn" disabled={currentPage >= totalPages - 1} onClick={() => onTcPageChange(feat.id, currentPage + 1)}>›</button>
+                                <button type="button" className="fl-page-btn" disabled={currentPage >= totalPages - 1} onClick={() => onTcPageChange(feat.id, totalPages - 1)}>»</button>
                             </div>
                         </div>
                     )}
@@ -1255,8 +1122,10 @@ export default function FeaturesLibrary() {
     const [openFeatures, setOpenFeatures] = useState({});
     const [tcPages, setTcPages] = useState({});
     const TC_PAGE_SIZE = 20;
+
     const [featPage, setFeatPage] = useState(0);
     const FEAT_PAGE_SIZE = 10;
+
     const [searchQuery, setSearchQuery] = useState("");
     const [filterStatus, setFilterStatus] = useState("");
     const [loading, setLoading] = useState(true);
@@ -1274,9 +1143,6 @@ export default function FeaturesLibrary() {
     const [deleteFeatureModal, setDeleteFeatureModal] = useState(false);
     const [deleteFeatureTarget, setDeleteFeatureTarget] = useState(null);
     const [form, setForm] = useState(emptyForm);
-
-    const usersRef = useRef(users);
-    useEffect(() => { usersRef.current = users; }, [users]);
 
     const fetchAllRows = useCallback(async (table, selectCols, orderCol = null) => {
         const PAGE = 1000;
@@ -1383,9 +1249,7 @@ export default function FeaturesLibrary() {
 
     const fetchTotalTCCount = useCallback(async () => {
         try {
-            const { count } = await supabase
-                .from("test_cases")
-                .select("*", { count: "exact", head: true });
+            const { count } = await supabase.from("test_cases").select("*", { count: "exact", head: true });
             if (count !== null) setTotalTestCasesCount(count);
         } catch (err) { console.error(err); }
     }, []);
@@ -1394,20 +1258,19 @@ export default function FeaturesLibrary() {
         Promise.all([fetchModulesWithFeatures(), fetchUsers(), fetchUserStories(), fetchTotalTCCount()]);
     }, [fetchModulesWithFeatures, fetchUsers, fetchUserStories, fetchTotalTCCount]);
 
-    useEffect(() => {
-        setFeatPage(0);
-    }, [searchQuery, filterStatus]);
+    const userMap = useMemo(() => {
+        const map = {};
+        for (const u of users) { if (u.id) map[u.id] = u.name; }
+        return map;
+    }, [users]);
 
     const flatFeatures = useMemo(() => {
-        const userMap = {};
-        for (const u of users) { if (u.id) userMap[u.id] = u.name; }
-
         return modules.flatMap(mod =>
             mod.features.map(feat => {
                 const assignedUserName = feat.assign_to ? (userMap[feat.assign_to] || null) : null;
                 const resolvedTCs = feat.testCases.map(tc => ({
                     ...tc,
-                    assigneeName: tc.assigneeId ? (userMap[tc.assigneeId] || tc.assigneeId) : null,
+                    assigneeName: tc.assigneeId ? (userMap[tc.assigneeId] || null) : null,
                 }));
                 return {
                     ...feat,
@@ -1420,7 +1283,7 @@ export default function FeaturesLibrary() {
                 };
             })
         );
-    }, [modules, users]);
+    }, [modules, userMap]);
 
     const totalFeatures = useMemo(() => flatFeatures.length, [flatFeatures]);
     const totalModules = useMemo(() => modules.length, [modules]);
@@ -1429,13 +1292,13 @@ export default function FeaturesLibrary() {
     const testerOptions = useMemo(() => [{ id: "", name: "Select Tester" }, ...users.map(u => ({ id: u.id, name: u.name }))], [users]);
     const moduleOptions = useMemo(() => [{ id: "", name: "Choose Module" }, ...modules.map(m => ({ id: m.id, name: m.name }))], [modules]);
 
+    // ─── FIXED: filteredFeatures with auto-expand ──────────────────────────────
     const filteredFeatures = useMemo(() => {
         let list = flatFeatures;
 
         if (filterStatus) {
-            list = list.filter(f =>
-                (f.status || "Active").toLowerCase() === filterStatus.toLowerCase()
-            );
+            const fs = filterStatus.toLowerCase();
+            list = list.filter(f => (f.status || "Active").toLowerCase() === fs);
         }
 
         const q = searchQuery.trim().toLowerCase();
@@ -1457,10 +1320,39 @@ export default function FeaturesLibrary() {
                 )) return true;
                 return false;
             });
+
+            // Auto-expand all matched features so test cases are visible
+            setOpenFeatures(prev => {
+                const next = { ...prev };
+                list.forEach(f => { next[f.id] = true; });
+                return next;
+            });
         }
 
         return list;
     }, [flatFeatures, searchQuery, filterStatus]);
+
+    const totalFeatPages = Math.max(1, Math.ceil(filteredFeatures.length / FEAT_PAGE_SIZE));
+    const safeFeatPage = Math.min(featPage, totalFeatPages - 1);
+    const pagedFeatures = filteredFeatures.slice(safeFeatPage * FEAT_PAGE_SIZE, (safeFeatPage + 1) * FEAT_PAGE_SIZE);
+
+    const handleSearchChange = useCallback((e) => {
+        setSearchQuery(e.target.value);
+        setFeatPage(0);
+    }, []);
+
+    const handleStatusChange = useCallback((val) => {
+        setFilterStatus(val);
+        setFeatPage(0);
+    }, []);
+
+    // ─── FIXED: clear also collapses all cards ─────────────────────────────────
+    const handleClearFilters = useCallback(() => {
+        setSearchQuery("");
+        setFilterStatus("");
+        setFeatPage(0);
+        setOpenFeatures({});
+    }, []);
 
     const stats = useMemo(() => [
         { label: "Modules", value: totalModules, icon: "fa-puzzle-piece", color: "blue" },
@@ -1469,9 +1361,6 @@ export default function FeaturesLibrary() {
         { label: "Active Features", value: flatFeatures.filter(f => (f.status || "Active") === "Active").length, icon: "fa-check-circle", color: "amber" },
         { label: "Team Members", value: users.length, icon: "fa-users", color: "red" },
     ], [totalModules, totalFeatures, totalTestCasesCount, flatFeatures, users.length]);
-
-    const totalFeatPages = Math.ceil(filteredFeatures.length / FEAT_PAGE_SIZE);
-    const pagedFeatures = filteredFeatures.slice(featPage * FEAT_PAGE_SIZE, (featPage + 1) * FEAT_PAGE_SIZE);
 
     const toggleFeature = useCallback(id => {
         setOpenFeatures(p => ({ ...p, [id]: !p[id] }));
@@ -1694,16 +1583,16 @@ export default function FeaturesLibrary() {
                         <p style={{ fontSize: 12, color: T.textMuted, margin: "2px 0 0", lineHeight: 1.5 }}>All features with linked modules and test cases</p>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <button className="fl-btn-ghost" onClick={exportToCSV} style={{ padding: "8px 14px", fontSize: 13 }}>
+                        <button type="button" className="fl-btn-ghost" onClick={exportToCSV} style={{ padding: "8px 14px", fontSize: 13 }}>
                             <i className="fa-solid fa-download" style={{ fontSize: 11 }}></i> Export
                         </button>
-                        <button className="fl-btn-ghost" onClick={() => setImportFeaturesModal(true)} style={{ padding: "8px 14px", fontSize: 13 }}>
+                        <button type="button" className="fl-btn-ghost" onClick={() => setImportFeaturesModal(true)} style={{ padding: "8px 14px", fontSize: 13 }}>
                             <i className="fa-solid fa-upload" style={{ fontSize: 11 }}></i> Import Features
                         </button>
-                        <button className="fl-btn-ghost" onClick={() => setImportTCModal(true)} style={{ padding: "8px 14px", fontSize: 13 }}>
+                        <button type="button" className="fl-btn-ghost" onClick={() => setImportTCModal(true)} style={{ padding: "8px 14px", fontSize: 13 }}>
                             <i className="fa-solid fa-upload" style={{ fontSize: 11 }}></i> Import Test Cases
                         </button>
-                        <button className="fl-btn-primary" onClick={openAddFeatureModal} style={{ padding: "8px 16px", fontSize: 13 }}>
+                        <button type="button" className="fl-btn-primary" onClick={openAddFeatureModal} style={{ padding: "8px 16px", fontSize: 13 }}>
                             <i className="fa-solid fa-plus" style={{ fontSize: 11 }}></i> Add Feature
                         </button>
                     </div>
@@ -1715,7 +1604,7 @@ export default function FeaturesLibrary() {
 
                     {error && (
                         <div style={{ background: T.redTint, border: `1px solid rgba(220,38,38,0.2)`, color: T.red, padding: "12px 16px", borderRadius: 8, marginBottom: 20, fontSize: 13 }}>
-                            {error} <button onClick={fetchModulesWithFeatures} style={{ marginLeft: 12, textDecoration: "underline", background: "none", border: "none", color: T.red, cursor: "pointer", fontSize: 12 }}>Retry</button>
+                            {error} <button type="button" onClick={fetchModulesWithFeatures} style={{ marginLeft: 12, textDecoration: "underline", background: "none", border: "none", color: T.red, cursor: "pointer", fontSize: 12 }}>Retry</button>
                         </div>
                     )}
 
@@ -1724,7 +1613,7 @@ export default function FeaturesLibrary() {
                         {stats.map(s => <StatCard key={s.label} stat={s} />)}
                     </div>
 
-                    {/* Filters */}
+                    {/* ── Filters ── */}
                     <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, marginBottom: 20, padding: "14px 18px" }}>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 180px 120px", gap: 12 }}>
                             <div style={{ position: "relative" }}>
@@ -1733,75 +1622,117 @@ export default function FeaturesLibrary() {
                                     type="text"
                                     placeholder="Search features, modules, test case IDs…"
                                     value={searchQuery}
-                                    onChange={e => setSearchQuery(e.target.value)}
+                                    onChange={handleSearchChange}
                                     style={{ paddingLeft: 36 }}
                                 />
-                                <i className="fa-solid fa-search" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: T.textFaint, fontSize: 12 }}></i>
+                                <i className="fa-solid fa-search" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: T.textFaint, fontSize: 12, pointerEvents: "none" }}></i>
+                                {searchQuery && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setSearchQuery(""); setFeatPage(0); setOpenFeatures({}); }}
+                                        style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: T.textFaint, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "2px 4px" }}
+                                        title="Clear search"
+                                    >✕</button>
+                                )}
                             </div>
-                            <Dropdown options={FILTER_STATUS_OPT} selected={filterStatus} onChange={setFilterStatus} placeholder="All Status" />
-                            <button className="fl-btn-ghost" onClick={() => { setSearchQuery(""); setFilterStatus(""); }} style={{ justifyContent: "center" }}>Clear</button>
+                            <Dropdown
+                                options={FILTER_STATUS_OPT}
+                                selected={filterStatus}
+                                onChange={handleStatusChange}
+                                placeholder="All Status"
+                            />
+                            <button
+                                type="button"
+                                className="fl-btn-ghost"
+                                onClick={handleClearFilters}
+                                style={{ justifyContent: "center" }}
+                            >
+                                <i className="fa-solid fa-xmark" style={{ fontSize: 11 }}></i> Clear
+                            </button>
                         </div>
+
+                        {(searchQuery || filterStatus) && (
+                            <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.borderLight}`, display: "flex", alignItems: "center", gap: 8 }}>
+                                <i className="fa-solid fa-filter" style={{ fontSize: 10, color: T.textFaint }}></i>
+                                <span style={{ fontSize: 12, color: T.textMuted, fontFamily: T.sans }}>
+                                    {filteredFeatures.length === 0
+                                        ? "No features match your search"
+                                        : <><strong style={{ color: T.text }}>{filteredFeatures.length}</strong> feature{filteredFeatures.length !== 1 ? "s" : ""} found</>
+                                    }
+                                    {searchQuery && <> for <strong style={{ color: T.green }}>"{searchQuery}"</strong></>}
+                                    {filterStatus && <> · Status: <strong style={{ color: T.green }}>{filterStatus}</strong></>}
+                                </span>
+                            </div>
+                        )}
                     </div>
 
-                    {filteredFeatures.length === 0 && (
+                    {filteredFeatures.length === 0 ? (
                         <div style={{ textAlign: "center", padding: "48px 0" }}>
-                            <div style={{ width: 48, height: 48, background: T.surfaceAlt, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-                                <i className="fa-solid fa-inbox" style={{ color: T.textFaint, fontSize: 20 }}></i>
+                            <div style={{ width: 56, height: 56, background: T.surfaceAlt, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+                                <i className="fa-solid fa-magnifying-glass" style={{ color: T.textFaint, fontSize: 22 }}></i>
                             </div>
-                            <p style={{ color: T.textMuted, fontSize: 13, margin: 0 }}>No features found. Create one to get started.</p>
+                            <p style={{ color: T.textMid, fontSize: 14, fontWeight: 600, margin: "0 0 4px" }}>
+                                {searchQuery || filterStatus ? "No results found" : "No features yet"}
+                            </p>
+                            <p style={{ color: T.textFaint, fontSize: 12, margin: "0 0 16px" }}>
+                                {searchQuery || filterStatus
+                                    ? `Try adjusting your search or filters`
+                                    : "Create a feature to get started"}
+                            </p>
+                            {(searchQuery || filterStatus) && (
+                                <button type="button" className="fl-btn-ghost" onClick={handleClearFilters} style={{ margin: "0 auto" }}>
+                                    <i className="fa-solid fa-xmark" style={{ fontSize: 11 }}></i> Clear filters
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                            {pagedFeatures.map(feat => (
+                                <FeatureCard
+                                    key={feat.id}
+                                    feat={feat}
+                                    isOpen={!!openFeatures[feat.id]}
+                                    onToggle={() => toggleFeature(feat.id)}
+                                    onAddTC={openAddModal}
+                                    onEditTC={openEditModal}
+                                    onDeleteTC={openDeleteModal}
+                                    onEdit={(e) => openEditFeatureModal(e, feat)}
+                                    onDelete={(e) => openDeleteFeatureModal(e, feat)}
+                                    tcPage={tcPages[feat.id] || 0}
+                                    onTcPageChange={handleTcPageChange}
+                                    tcPageSize={TC_PAGE_SIZE}
+                                />
+                            ))}
                         </div>
                     )}
 
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {pagedFeatures.map(feat => (
-                            <FeatureCard
-                                key={feat.id}
-                                feat={feat}
-                                isOpen={!!openFeatures[feat.id]}
-                                onToggle={() => toggleFeature(feat.id)}
-                                onAddTC={openAddModal}
-                                onEditTC={openEditModal}
-                                onDeleteTC={openDeleteModal}
-                                onEdit={(e) => openEditFeatureModal(e, feat)}
-                                onDelete={(e) => openDeleteFeatureModal(e, feat)}
-                                tcPage={tcPages[feat.id] || 0}
-                                onTcPageChange={handleTcPageChange}
-                                tcPageSize={TC_PAGE_SIZE}
-                            />
-                        ))}
-                    </div>
-
-                    {totalFeatPages > 1 && (
+                    {totalFeatPages > 1 && filteredFeatures.length > 0 && (
                         <div style={{
                             display: "flex", alignItems: "center", justifyContent: "space-between",
                             marginTop: 16, padding: "12px 18px",
                             background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10,
                         }}>
                             <span style={{ fontSize: 12, color: T.textMuted, fontFamily: T.sans }}>
-                                Showing {featPage * FEAT_PAGE_SIZE + 1}–{Math.min((featPage + 1) * FEAT_PAGE_SIZE, filteredFeatures.length)} of {filteredFeatures.length} features
+                                Showing {safeFeatPage * FEAT_PAGE_SIZE + 1}–{Math.min((safeFeatPage + 1) * FEAT_PAGE_SIZE, filteredFeatures.length)} of {filteredFeatures.length} features
                             </span>
                             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                <button className="fl-page-btn" disabled={featPage === 0} onClick={() => setFeatPage(0)}>«</button>
-                                <button className="fl-page-btn" disabled={featPage === 0} onClick={() => setFeatPage(p => p - 1)}>‹</button>
+                                <button type="button" className="fl-page-btn" disabled={safeFeatPage === 0} onClick={() => setFeatPage(0)}>«</button>
+                                <button type="button" className="fl-page-btn" disabled={safeFeatPage === 0} onClick={() => setFeatPage(p => Math.max(0, p - 1))}>‹</button>
                                 {Array.from({ length: Math.min(totalFeatPages, 7) }, (_, i) => {
                                     let pg = i;
                                     if (totalFeatPages > 7) {
-                                        if (featPage <= 3) pg = i;
-                                        else if (featPage >= totalFeatPages - 4) pg = totalFeatPages - 7 + i;
-                                        else pg = featPage - 3 + i;
+                                        if (safeFeatPage <= 3) pg = i;
+                                        else if (safeFeatPage >= totalFeatPages - 4) pg = totalFeatPages - 7 + i;
+                                        else pg = safeFeatPage - 3 + i;
                                     }
                                     return (
-                                        <button
-                                            key={pg}
-                                            className={`fl-page-btn${pg === featPage ? " active" : ""}`}
-                                            onClick={() => setFeatPage(pg)}
-                                        >
+                                        <button type="button" key={pg} className={`fl-page-btn${pg === safeFeatPage ? " active" : ""}`} onClick={() => setFeatPage(pg)}>
                                             {pg + 1}
                                         </button>
                                     );
                                 })}
-                                <button className="fl-page-btn" disabled={featPage >= totalFeatPages - 1} onClick={() => setFeatPage(p => p + 1)}>›</button>
-                                <button className="fl-page-btn" disabled={featPage >= totalFeatPages - 1} onClick={() => setFeatPage(totalFeatPages - 1)}>»</button>
+                                <button type="button" className="fl-page-btn" disabled={safeFeatPage >= totalFeatPages - 1} onClick={() => setFeatPage(p => Math.min(totalFeatPages - 1, p + 1))}>›</button>
+                                <button type="button" className="fl-page-btn" disabled={safeFeatPage >= totalFeatPages - 1} onClick={() => setFeatPage(totalFeatPages - 1)}>»</button>
                             </div>
                         </div>
                     )}
@@ -1815,7 +1746,7 @@ export default function FeaturesLibrary() {
                     <div className="fl-modal-enter" style={modalBox()} onClick={e => e.stopPropagation()}>
                         <div style={MODAL_HEADER}>
                             <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, margin: 0 }}>Add New Feature</h3>
-                            <button onClick={() => setAddFeatureModal(false)} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 16 }}><i className="fa-solid fa-times"></i></button>
+                            <button type="button" onClick={() => setAddFeatureModal(false)} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 16 }}><i className="fa-solid fa-times"></i></button>
                         </div>
                         <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
                             <Field label="Module" required>
@@ -1848,8 +1779,8 @@ export default function FeaturesLibrary() {
                             </Field>
                         </div>
                         <div style={MODAL_FOOTER}>
-                            <button onClick={() => setAddFeatureModal(false)} style={BTN_CANCEL}>Cancel</button>
-                            <button onClick={handleAddFeature} style={BTN_PRIMARY}>Add Feature</button>
+                            <button type="button" onClick={() => setAddFeatureModal(false)} style={BTN_CANCEL}>Cancel</button>
+                            <button type="button" onClick={handleAddFeature} style={BTN_PRIMARY}>Add Feature</button>
                         </div>
                     </div>
                 </div>
@@ -1866,7 +1797,7 @@ export default function FeaturesLibrary() {
                                 </div>
                                 <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, margin: 0 }}>Edit Feature</h3>
                             </div>
-                            <button onClick={() => setEditFeatureModal(false)} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 16 }}><i className="fa-solid fa-times"></i></button>
+                            <button type="button" onClick={() => setEditFeatureModal(false)} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 16 }}><i className="fa-solid fa-times"></i></button>
                         </div>
                         <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
                             <Field label="Module" required>
@@ -1896,8 +1827,8 @@ export default function FeaturesLibrary() {
                             </Field>
                         </div>
                         <div style={MODAL_FOOTER}>
-                            <button onClick={() => setEditFeatureModal(false)} style={BTN_CANCEL}>Cancel</button>
-                            <button onClick={handleEditFeature} style={BTN_PRIMARY}>Save Changes</button>
+                            <button type="button" onClick={() => setEditFeatureModal(false)} style={BTN_CANCEL}>Cancel</button>
+                            <button type="button" onClick={handleEditFeature} style={BTN_PRIMARY}>Save Changes</button>
                         </div>
                     </div>
                 </div>
@@ -1936,8 +1867,8 @@ export default function FeaturesLibrary() {
                                 </div>
                             )}
                             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-                                <button onClick={() => setDeleteFeatureModal(false)} style={BTN_CANCEL}>Cancel</button>
-                                <button onClick={handleDeleteFeature} style={BTN_DANGER}>Delete Feature</button>
+                                <button type="button" onClick={() => setDeleteFeatureModal(false)} style={BTN_CANCEL}>Cancel</button>
+                                <button type="button" onClick={handleDeleteFeature} style={BTN_DANGER}>Delete Feature</button>
                             </div>
                         </div>
                     </div>
@@ -1950,7 +1881,7 @@ export default function FeaturesLibrary() {
                     <div className="fl-modal-enter" style={modalBox("620px")} onClick={e => e.stopPropagation()}>
                         <div style={MODAL_HEADER}>
                             <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, margin: 0 }}>Add Test Case</h3>
-                            <button onClick={() => setAddModal({ open: false })} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 16 }}><i className="fa-solid fa-times"></i></button>
+                            <button type="button" onClick={() => setAddModal({ open: false })} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 16 }}><i className="fa-solid fa-times"></i></button>
                         </div>
                         <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
@@ -2007,8 +1938,8 @@ export default function FeaturesLibrary() {
                             </Field>
                         </div>
                         <div style={MODAL_FOOTER}>
-                            <button onClick={() => setAddModal({ open: false })} style={BTN_CANCEL}>Cancel</button>
-                            <button onClick={handleAddTestCase} style={BTN_PRIMARY}>Add Test Case</button>
+                            <button type="button" onClick={() => setAddModal({ open: false })} style={BTN_CANCEL}>Cancel</button>
+                            <button type="button" onClick={handleAddTestCase} style={BTN_PRIMARY}>Add Test Case</button>
                         </div>
                     </div>
                 </div>
@@ -2020,7 +1951,7 @@ export default function FeaturesLibrary() {
                     <div className="fl-modal-enter" style={modalBox("620px")} onClick={e => e.stopPropagation()}>
                         <div style={MODAL_HEADER}>
                             <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, margin: 0 }}>Edit Test Case</h3>
-                            <button onClick={() => setEditModal({ open: false })} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 16 }}><i className="fa-solid fa-times"></i></button>
+                            <button type="button" onClick={() => setEditModal({ open: false })} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 16 }}><i className="fa-solid fa-times"></i></button>
                         </div>
                         <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
@@ -2074,8 +2005,8 @@ export default function FeaturesLibrary() {
                             </Field>
                         </div>
                         <div style={MODAL_FOOTER}>
-                            <button onClick={() => setEditModal({ open: false })} style={BTN_CANCEL}>Cancel</button>
-                            <button onClick={handleEditTestCase} style={BTN_PRIMARY}>Save Changes</button>
+                            <button type="button" onClick={() => setEditModal({ open: false })} style={BTN_CANCEL}>Cancel</button>
+                            <button type="button" onClick={handleEditTestCase} style={BTN_PRIMARY}>Save Changes</button>
                         </div>
                     </div>
                 </div>
@@ -2100,8 +2031,8 @@ export default function FeaturesLibrary() {
                                 <p style={{ fontSize: 12, color: T.textMuted, margin: 0 }}>{deleteModal.tc?.name}</p>
                             </div>
                             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-                                <button onClick={() => setDeleteModal({ open: false })} style={BTN_CANCEL}>Cancel</button>
-                                <button onClick={handleDeleteTestCase} style={BTN_DANGER}>Delete</button>
+                                <button type="button" onClick={() => setDeleteModal({ open: false })} style={BTN_CANCEL}>Cancel</button>
+                                <button type="button" onClick={handleDeleteTestCase} style={BTN_DANGER}>Delete</button>
                             </div>
                         </div>
                     </div>

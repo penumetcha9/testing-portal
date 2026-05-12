@@ -34,6 +34,8 @@ const Badge = ({ text, meta }) => {
 };
 
 // ── Filter Pill ───────────────────────────────────────────────────────────────
+// PILL_W  — every trigger button is exactly this wide (never shifts on selection)
+// DROP_W  — every dropdown panel is exactly this wide (never grows with content)
 const PILL_W = 148;
 const DROP_W = 220;
 
@@ -48,31 +50,94 @@ const FilterPill = ({ label, icon, options, value, onChange }) => {
     }, []);
 
     const active = !!value;
-    const displayLabel = active ? (value.length > 14 ? value.slice(0, 13) + '…' : value) : label;
+    // Truncate to prevent button from overflowing its fixed width
+    const displayLabel = active
+        ? (value.length > 14 ? value.slice(0, 13) + '…' : value)
+        : label;
 
     return (
         <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
-            <button onClick={() => setOpen(p => !p)} style={{ width: PILL_W, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, padding: '7px 12px', background: active ? '#f0fdf4' : '#fff', border: `1.5px solid ${active ? '#22c55e' : '#e2e8f0'}`, borderRadius: 99, fontSize: 13, fontWeight: active ? 600 : 500, color: active ? '#15803d' : '#374151', cursor: 'pointer', overflow: 'hidden', boxShadow: active ? '0 0 0 3px rgba(34,197,94,0.10)' : 'none', transition: 'background 0.15s, border-color 0.15s, box-shadow 0.15s' }}>
+            {/* Trigger button — fixed width always */}
+            <button
+                onClick={() => setOpen(p => !p)}
+                style={{
+                    width: PILL_W,
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
+                    padding: '7px 12px',
+                    background: active ? '#f0fdf4' : '#fff',
+                    border: `1.5px solid ${active ? '#22c55e' : '#e2e8f0'}`,
+                    borderRadius: 99, fontSize: 13, fontWeight: active ? 600 : 500,
+                    color: active ? '#15803d' : '#374151',
+                    cursor: 'pointer', overflow: 'hidden',
+                    boxShadow: active ? '0 0 0 3px rgba(34,197,94,0.10)' : 'none',
+                    transition: 'background 0.15s, border-color 0.15s, box-shadow 0.15s',
+                }}
+            >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', flex: 1, minWidth: 0 }}>
                     <i className={`fa-solid ${icon}`} style={{ fontSize: 11, flexShrink: 0 }} />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayLabel}</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {displayLabel}
+                    </span>
                 </span>
                 {active ? (
-                    <span onClick={e => { e.stopPropagation(); onChange(''); setOpen(false); }} style={{ display: 'flex', alignItems: 'center', color: '#16a34a', flexShrink: 0, cursor: 'pointer' }}>
-                        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+                    <span
+                        onClick={e => { e.stopPropagation(); onChange(''); setOpen(false); }}
+                        style={{ display: 'flex', alignItems: 'center', color: '#16a34a', flexShrink: 0, cursor: 'pointer' }}
+                    >
+                        <svg width="12" height="12" viewBox="0 0 12 12">
+                            <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                        </svg>
                     </span>
                 ) : (
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0 }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0 }}>
+                        <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
                 )}
             </button>
+
+            {/* Dropdown panel — fixed width always */}
             {open && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 9999, background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 12, boxShadow: '0 8px 28px rgba(0,0,0,0.12)', width: DROP_W, padding: 6, animation: 'pillDrop 0.15s ease', maxHeight: 260, overflowY: 'auto' }}>
-                    <div onClick={() => { onChange(''); setOpen(false); }} style={{ padding: '8px 12px', borderRadius: 8, fontSize: 13, color: '#94a3b8', cursor: 'pointer' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>All {label}</div>
-                    {options.length === 0 && <div style={{ padding: '8px 12px', fontSize: 12, color: '#cbd5e1', fontStyle: 'italic' }}>No options found</div>}
+                <div style={{
+                    position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 9999,
+                    background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 12,
+                    boxShadow: '0 8px 28px rgba(0,0,0,0.12)',
+                    width: DROP_W,
+                    padding: 6,
+                    animation: 'pillDrop 0.15s ease',
+                }}>
+                    {/* Reset row */}
+                    <div
+                        onClick={() => { onChange(''); setOpen(false); }}
+                        style={{ padding: '8px 12px', borderRadius: 8, fontSize: 13, color: '#94a3b8', cursor: 'pointer' }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                        All {label}
+                    </div>
+
+                    {/* Options — text truncated so panel never widens */}
                     {options.map(opt => (
-                        <div key={opt} onClick={() => { onChange(opt); setOpen(false); }} style={{ padding: '8px 12px', borderRadius: 8, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: value === opt ? '#15803d' : '#1e293b', fontWeight: value === opt ? 600 : 400, background: value === opt ? '#f0fdf4' : 'transparent' }} onMouseEnter={e => { if (value !== opt) e.currentTarget.style.background = '#f8fafc'; }} onMouseLeave={e => { if (value !== opt) e.currentTarget.style.background = value === opt ? '#f0fdf4' : 'transparent'; }}>
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{opt}</span>
-                            {value === opt && <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, marginLeft: 8 }}><path d="M2 6l3 3 5-5" stroke="#16a34a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                        <div
+                            key={opt}
+                            onClick={() => { onChange(opt); setOpen(false); }}
+                            style={{
+                                padding: '8px 12px', borderRadius: 8, fontSize: 13, cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                color: value === opt ? '#15803d' : '#1e293b',
+                                fontWeight: value === opt ? 600 : 400,
+                                background: value === opt ? '#f0fdf4' : 'transparent',
+                            }}
+                            onMouseEnter={e => { if (value !== opt) e.currentTarget.style.background = '#f8fafc'; }}
+                            onMouseLeave={e => { if (value !== opt) e.currentTarget.style.background = value === opt ? '#f0fdf4' : 'transparent'; }}
+                        >
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                                {opt}
+                            </span>
+                            {value === opt && (
+                                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, marginLeft: 8 }}>
+                                    <path d="M2 6l3 3 5-5" stroke="#16a34a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                            )}
                         </div>
                     ))}
                 </div>
@@ -81,106 +146,80 @@ const FilterPill = ({ label, icon, options, value, onChange }) => {
     );
 };
 
-// ── Pagination ────────────────────────────────────────────────────────────────
-const Pagination = ({ currentPage, totalPages, totalItems, pageSize, onPageChange, onPageSizeChange, pageSizeOptions }) => {
-    const pages = [];
-    const delta = 2;
-    for (let i = 1; i <= totalPages; i++) {
-        if (i === 1 || i === totalPages || (i >= currentPage - delta && i <= currentPage + delta)) pages.push(i);
-    }
-    const withEllipsis = [];
-    let prev = null;
-    for (const page of pages) {
-        if (prev !== null && page - prev > 1) withEllipsis.push('...');
-        withEllipsis.push(page);
-        prev = page;
-    }
-    const from = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-    const to = Math.min(currentPage * pageSize, totalItems);
-
-    const btnBase = { border: '1.5px solid #e2e8f0', background: '#fff', borderRadius: 8, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 12, color: '#475569', transition: 'all 0.12s' };
-    const btnDisabled = { ...btnBase, opacity: 0.35, cursor: 'not-allowed' };
-
-    return (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px 18px', background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 12, flexWrap: 'wrap', marginTop: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 12.5, color: '#64748b' }}>Rows per page:</span>
-                <select value={pageSize} onChange={e => { onPageSizeChange(Number(e.target.value)); onPageChange(1); }} style={{ padding: '5px 10px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 12.5, color: '#374151', background: '#fff', cursor: 'pointer', outline: 'none' }}>
-                    {pageSizeOptions.map(n => <option key={n} value={n}>{n}</option>)}
-                </select>
-                <span style={{ fontSize: 12, color: '#94a3b8' }}>{from}–{to} of {totalItems}</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <button onClick={() => onPageChange(1)} disabled={currentPage === 1} style={currentPage === 1 ? btnDisabled : btnBase} title="First">
-                    <i className="fa-solid fa-angles-left" style={{ fontSize: 11 }} />
-                </button>
-                <button onClick={() => onPageChange(currentPage - 1)} disabled={currentPage === 1} style={currentPage === 1 ? btnDisabled : btnBase} title="Previous">
-                    <i className="fa-solid fa-angle-left" style={{ fontSize: 11 }} />
-                </button>
-                {withEllipsis.map((item, idx) =>
-                    item === '...' ? (
-                        <span key={`e-${idx}`} style={{ width: 30, textAlign: 'center', fontSize: 13, color: '#94a3b8' }}>…</span>
-                    ) : (
-                        <button key={item} onClick={() => onPageChange(item)} style={{ ...btnBase, background: item === currentPage ? '#15803d' : '#fff', borderColor: item === currentPage ? '#15803d' : '#e2e8f0', color: item === currentPage ? '#fff' : '#374151', fontWeight: item === currentPage ? 700 : 400 }}>
-                            {item}
-                        </button>
-                    )
-                )}
-                <button onClick={() => onPageChange(currentPage + 1)} disabled={currentPage === totalPages || totalPages === 0} style={currentPage === totalPages || totalPages === 0 ? btnDisabled : btnBase} title="Next">
-                    <i className="fa-solid fa-angle-right" style={{ fontSize: 11 }} />
-                </button>
-                <button onClick={() => onPageChange(totalPages)} disabled={currentPage === totalPages || totalPages === 0} style={currentPage === totalPages || totalPages === 0 ? btnDisabled : btnBase} title="Last">
-                    <i className="fa-solid fa-angles-right" style={{ fontSize: 11 }} />
-                </button>
-            </div>
-        </div>
-    );
-};
-
 // ── Story Card (Grid view) ────────────────────────────────────────────────────
-const StoryCard = ({ story, onClick, onEdit, onDelete }) => {
+const StoryCard = ({ story, onClick }) => {
     const [hov, setHov] = useState(false);
     const sm = STATUS_META[story.current_status] || STATUS_META['Draft'];
     const cm = CRIT_META[story.criticality];
     return (
-        <div onClick={() => onClick(story)} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-            style={{ width: '100%', height: '100%', background: '#fff', border: `1.5px solid ${hov ? '#22c55e' : '#e2e8f0'}`, borderRadius: 14, padding: '18px 20px', cursor: 'pointer', transition: 'all 0.18s cubic-bezier(.4,0,.2,1)', boxShadow: hov ? '0 8px 24px rgba(34,197,94,0.13), 0 2px 8px rgba(0,0,0,0.05)' : '0 1px 4px rgba(0,0,0,0.05)', transform: hov ? 'translateY(-2px)' : 'translateY(0)', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
+        <div
+            onClick={() => onClick(story)}
+            onMouseEnter={() => setHov(true)}
+            onMouseLeave={() => setHov(false)}
+            style={{
+                width: '100%', height: '100%',
+                background: '#fff', border: `1.5px solid ${hov ? '#22c55e' : '#e2e8f0'}`,
+                borderRadius: 14, padding: '18px 20px', cursor: 'pointer',
+                transition: 'all 0.18s cubic-bezier(.4,0,.2,1)',
+                boxShadow: hov ? '0 8px 24px rgba(34,197,94,0.13), 0 2px 8px rgba(0,0,0,0.05)' : '0 1px 4px rgba(0,0,0,0.05)',
+                transform: hov ? 'translateY(-2px)' : 'translateY(0)',
+                position: 'relative', overflow: 'hidden',
+                display: 'flex', flexDirection: 'column',
+                boxSizing: 'border-box',
+            }}
+        >
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg,#22c55e,#16a34a)', opacity: hov ? 1 : 0, transition: 'opacity 0.18s', borderRadius: '14px 14px 0 0' }} />
+
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                    <span style={{ fontFamily: "'DM Mono', 'Fira Mono', monospace", fontSize: 12, fontWeight: 600, color: '#16a34a', background: '#f0fdf4', padding: '2px 8px', borderRadius: 6 }}>{story.story_id}</span>
-                    {story.story_type && <span style={{ fontSize: 11, color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: 6, fontWeight: 500 }}>{story.story_type}</span>}
+                    <span style={{ fontFamily: "'DM Mono', 'Fira Mono', monospace", fontSize: 12, fontWeight: 600, color: '#16a34a', background: '#f0fdf4', padding: '2px 8px', borderRadius: 6 }}>
+                        {story.story_id}
+                    </span>
+                    {story.story_type && (
+                        <span style={{ fontSize: 11, color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: 6, fontWeight: 500 }}>
+                            {story.story_type}
+                        </span>
+                    )}
                 </div>
-                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                    <button onClick={e => onEdit(e, story)} title="Edit story" style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 7, background: '#eff6ff', color: '#2563eb', cursor: 'pointer', fontSize: 12 }} onMouseEnter={e => e.currentTarget.style.background = '#dbeafe'} onMouseLeave={e => e.currentTarget.style.background = '#eff6ff'}>
-                        <i className="fa-solid fa-pen-to-square" />
-                    </button>
-                    <button onClick={e => { e.stopPropagation(); onDelete(story); }} title="Delete story" style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 7, background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: 12 }} onMouseEnter={e => e.currentTarget.style.background = '#fecaca'} onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}>
-                        <i className="fa-solid fa-trash" />
-                    </button>
+                <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+                    <Badge text={story.current_status || 'Draft'} meta={sm} />
+                    {story.criticality && <Badge text={story.criticality} meta={cm} />}
                 </div>
             </div>
-            <div style={{ display: 'flex', gap: 5, marginBottom: 6, flexWrap: 'wrap' }}>
-                <Badge text={story.current_status || 'Draft'} meta={sm} />
-                {story.criticality && <Badge text={story.criticality} meta={cm} />}
-            </div>
+
             <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: '0 0 6px', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                 {story.story_title || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Untitled story</span>}
             </h3>
-            {story.story_summary && <p style={{ fontSize: 12.5, color: '#64748b', lineHeight: 1.5, margin: '0 0 12px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{story.story_summary}</p>}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, paddingTop: 10, borderTop: '1px solid #f1f5f9', marginTop: 'auto' }}>
+
+            {story.story_summary && (
+                <p style={{ fontSize: 12.5, color: '#64748b', lineHeight: 1.5, margin: '0 0 12px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    {story.story_summary}
+                </p>
+            )}
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, paddingTop: 10, borderTop: '1px solid #f1f5f9' }}>
                 {story.module && <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: '#64748b' }}><i className="fa-solid fa-cube" style={{ color: '#a78bfa', fontSize: 10 }} />{story.module}</span>}
                 {story.feature && <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: '#64748b' }}><i className="fa-solid fa-puzzle-piece" style={{ color: '#34d399', fontSize: 10 }} />{story.feature}</span>}
                 {story.planned_release && <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: '#64748b' }}><i className="fa-solid fa-tag" style={{ color: '#60a5fa', fontSize: 10 }} />{story.planned_release}</span>}
                 {story.story_points && <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: '#64748b' }}><i className="fa-solid fa-circle-dot" style={{ color: '#fb923c', fontSize: 10 }} />{story.story_points} pts</span>}
-                <span style={{ marginLeft: 'auto', fontSize: 11, color: '#94a3b8' }}>{story.updated_at ? new Date(story.updated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}</span>
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: '#94a3b8' }}>
+                    {story.updated_at ? new Date(story.updated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}
+                </span>
             </div>
+
             <div style={{ display: 'flex', gap: 5, marginTop: 8, flexWrap: 'wrap' }}>
                 {[
                     { label: 'Dev', val: story.development_status, c: { 'Completed': '#22c55e', 'In Progress': '#f97316', 'Not Started': null, 'On Hold': '#eab308' } },
                     { label: 'QA', val: story.qa_status, c: { 'Pass': '#22c55e', 'Fail': '#ef4444', 'In Progress': '#f97316', 'Not Started': null, 'Blocked': '#f97316' } },
                     { label: 'Release', val: story.release_status, c: { 'Released': '#22c55e', 'Scheduled': '#3b82f6', 'Not Released': null, 'Rolled Back': '#ef4444' } },
-                ].map(({ label, val, c }) => { const clr = c[val]; return clr ? <span key={label} style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 99, background: `${clr}18`, color: clr, border: `1px solid ${clr}30` }}>{label}: {val}</span> : null; })}
+                ].map(({ label, val, c }) => {
+                    const clr = c[val];
+                    return clr ? (
+                        <span key={label} style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 99, background: `${clr}18`, color: clr, border: `1px solid ${clr}30` }}>
+                            {label}: {val}
+                        </span>
+                    ) : null;
+                })}
             </div>
         </div>
     );
@@ -195,9 +234,26 @@ const StatsRow = ({ stories }) => {
         { label: 'Submitted', val: counts['Submitted'] || 0, color: '#2563eb', icon: 'fa-paper-plane' },
     ];
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24, width: '100%' }}>
+        <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: 12,
+            marginBottom: 24,
+            width: '100%',
+        }}>
             {stats.map(s => (
-                <div key={s.label} style={{ height: 72, background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: '0 20px', display: 'flex', alignItems: 'center', gap: 14, boxSizing: 'border-box', overflow: 'hidden' }}>
+                <div key={s.label} style={{
+                    height: 72,
+                    background: '#fff',
+                    border: '1.5px solid #e2e8f0',
+                    borderRadius: 12,
+                    padding: '0 20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 14,
+                    boxSizing: 'border-box',
+                    overflow: 'hidden',
+                }}>
                     <div style={{ width: 38, height: 38, flexShrink: 0, borderRadius: 10, background: `${s.color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <i className={`fa-solid ${s.icon}`} style={{ color: s.color, fontSize: 15 }} />
                     </div>
@@ -219,43 +275,15 @@ const UserStoriesList = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [search, setSearch] = useState('');
-    const [filterModule, setFilterModule] = useState('');
-    const [filterFeature, setFilterFeature] = useState('');
     const [filterVersion, setFilterVersion] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
+    const [filterCrit, setFilterCrit] = useState('');
     const [sortBy, setSortBy] = useState('updated_at');
     const [viewMode, setViewMode] = useState('grid');
+    const [page, setPage] = useState(0);
+    const PAGE_SIZE = 12;
 
-    // ── Pagination ────────────────────────────────────────────────────────────
-    const [currentPage, setCurrentPage] = useState(1);
-    const [pageSize, setPageSize] = useState(12);
-
-    // Reset page when filters/search/sort/view change
-    useEffect(() => { setCurrentPage(1); }, [search, filterModule, filterFeature, filterVersion, filterStatus, sortBy, viewMode]);
-
-    const [moduleOpts, setModuleOpts] = useState([]);
-    const [featureOpts, setFeatureOpts] = useState([]);
     const [versionOpts, setVersionOpts] = useState([]);
-
-    const [editingStory, setEditingStory] = useState(null);
-    const [editForm, setEditForm] = useState({});
-    const [editLoading, setEditLoading] = useState(false);
-    const [deleteTarget, setDeleteTarget] = useState(null);
-    const [deleteLoading, setDeleteLoading] = useState(false);
-
-    useEffect(() => {
-        const fetchOptions = async () => {
-            const [{ data: modulesData }, { data: featuresData }, { data: versionsData }] = await Promise.all([
-                supabase.from('modules').select('module_name').order('module_name'),
-                supabase.from('features').select('feature_name').order('feature_name'),
-                supabase.from('versions').select('version_number').order('version_number'),
-            ]);
-            setModuleOpts((modulesData || []).map(m => m.module_name).filter(Boolean));
-            setFeatureOpts((featuresData || []).map(f => f.feature_name).filter(Boolean));
-            setVersionOpts((versionsData || []).map(v => v.version_number).filter(Boolean));
-        };
-        fetchOptions();
-    }, []);
 
     useEffect(() => {
         (async () => {
@@ -266,7 +294,9 @@ const UserStoriesList = () => {
                     .select('id,story_id,story_type,story_title,story_summary,module,feature,planned_release,version_build,current_status,criticality,story_points,development_status,qa_status,release_status,approval_status,created_at,updated_at,created_by')
                     .order('updated_at', { ascending: false });
                 if (error) throw error;
-                setStories(data || []);
+                const rows = data || [];
+                setStories(rows);
+                setVersionOpts([...new Set(rows.map(r => r.planned_release || r.version_build).filter(Boolean))].sort());
             } catch (err) { setError(err.message); }
             finally { setLoading(false); }
         })();
@@ -275,51 +305,14 @@ const UserStoriesList = () => {
     const handleSelectStory = (story) => navigate(`/stories/${story.story_id}`);
     const handleNewStory = () => navigate('/stories/new');
 
-    const fetchStories = async () => {
-        const { data, error } = await supabase
-            .from('user_stories')
-            .select('id,story_id,story_type,story_title,story_summary,module,feature,planned_release,version_build,current_status,criticality,story_points,development_status,qa_status,release_status,approval_status,created_at,updated_at,created_by')
-            .order('updated_at', { ascending: false });
-        if (!error) setStories(data || []);
-    };
-
-    const openEditModal = (e, story) => {
-        e.stopPropagation();
-        setEditForm({ story_title: story.story_title || '', story_summary: story.story_summary || '', story_type: story.story_type || '', current_status: story.current_status || 'Draft', criticality: story.criticality || '', module: story.module || '', feature: story.feature || '', planned_release: story.planned_release || '', story_points: story.story_points || '', development_status: story.development_status || '', qa_status: story.qa_status || '', release_status: story.release_status || '' });
-        setEditingStory(story);
-    };
-
-    const handleUpdateStory = async () => {
-        if (!editForm.story_title) { alert('Story title is required'); return; }
-        setEditLoading(true);
-        const { data: updated, error } = await supabase.from('user_stories').update({ story_title: editForm.story_title, story_summary: editForm.story_summary || null, story_type: editForm.story_type || null, current_status: editForm.current_status || 'Draft', criticality: editForm.criticality || null, module: editForm.module || null, feature: editForm.feature || null, planned_release: editForm.planned_release || null, story_points: editForm.story_points ? parseInt(editForm.story_points) : null, development_status: editForm.development_status || null, qa_status: editForm.qa_status || null, release_status: editForm.release_status || null, updated_at: new Date().toISOString() }).eq('id', editingStory.id).select();
-        setEditLoading(false);
-        if (error) { alert(`Error: ${error.message}`); return; }
-        if (!updated || updated.length === 0) { alert('Update blocked — check RLS policies on user_stories table.'); return; }
-        setEditingStory(null);
-        fetchStories();
-    };
-
-    const handleDeleteStory = async () => {
-        if (!deleteTarget) return;
-        setDeleteLoading(true);
-        const { error } = await supabase.from('user_stories').delete().eq('id', deleteTarget.id);
-        setDeleteLoading(false);
-        if (error) { alert(`Error: ${error.message}`); return; }
-        setDeleteTarget(null);
-        fetchStories();
-    };
-
-    // ── Filtered + sorted (all pages) ─────────────────────────────────────────
     const filtered = stories
         .filter(s => {
             const q = search.toLowerCase();
             return (
                 (!q || (s.story_id || '').toLowerCase().includes(q) || (s.story_title || '').toLowerCase().includes(q) || (s.story_summary || '').toLowerCase().includes(q))
-                && (!filterModule || s.module === filterModule)
-                && (!filterFeature || s.feature === filterFeature)
                 && (!filterVersion || s.planned_release === filterVersion || s.version_build === filterVersion)
                 && (!filterStatus || s.current_status === filterStatus)
+                && (!filterCrit || s.criticality === filterCrit)
             );
         })
         .sort((a, b) => {
@@ -329,17 +322,14 @@ const UserStoriesList = () => {
             return new Date(b.updated_at || 0) - new Date(a.updated_at || 0);
         });
 
-    // ── Paginated slice ───────────────────────────────────────────────────────
-    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-    const safePage = Math.min(currentPage, totalPages);
-    const pageStart = (safePage - 1) * pageSize;
-    const paged = filtered.slice(pageStart, pageStart + pageSize);
+    const activeFCount = [filterVersion, filterStatus, filterCrit].filter(Boolean).length;
+    const clearAll = () => { setFilterVersion(''); setFilterStatus(''); setFilterCrit(''); setSearch(''); setPage(0); };
 
-    const gridPageSizes = [6, 12, 24, 48];
-    const listPageSizes = [10, 25, 50, 100];
+    React.useEffect(() => { setPage(0); }, [search, filterVersion, filterStatus, filterCrit, sortBy]);
 
-    const activeFCount = [filterModule, filterFeature, filterVersion, filterStatus].filter(Boolean).length;
-    const clearAll = () => { setFilterModule(''); setFilterFeature(''); setFilterVersion(''); setFilterStatus(''); setSearch(''); };
+    const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+    const safePage = Math.min(page, Math.max(0, totalPages - 1));
+    const paged = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
     return (
         <>
@@ -370,25 +360,43 @@ const UserStoriesList = () => {
                                 <p style={{ fontSize: 12.5, color: '#64748b', margin: 0 }}>NexTech RMS · Story backlog</p>
                             </div>
                         </div>
-                        <button onClick={handleNewStory} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 22px', background: '#15803d', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 14px rgba(21,128,61,0.30)', transition: 'all 0.15s' }} onMouseEnter={e => e.currentTarget.style.boxShadow = '0 6px 20px rgba(21,128,61,0.40)'} onMouseLeave={e => e.currentTarget.style.boxShadow = '0 4px 14px rgba(21,128,61,0.30)'}>
-                            <i className="fa-solid fa-plus" style={{ fontSize: 12 }} />New User Story
+                        <button
+                            onClick={handleNewStory}
+                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 22px', background: '#15803d', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 14px rgba(21,128,61,0.30)', transition: 'all 0.15s' }}
+                            onMouseEnter={e => e.currentTarget.style.boxShadow = '0 6px 20px rgba(21,128,61,0.40)'}
+                            onMouseLeave={e => e.currentTarget.style.boxShadow = '0 4px 14px rgba(21,128,61,0.30)'}
+                        >
+                            <i className="fa-solid fa-plus" style={{ fontSize: 12 }} />
+                            New User Story
                         </button>
                     </div>
                 </div>
 
                 <div style={{ maxWidth: 1400, margin: '0 auto', padding: '28px 32px' }}>
 
-                    {/* Stats — always reflect ALL stories, not just the current page */}
+                    {/* Stats */}
                     {!loading && !error && <StatsRow stories={stories} />}
 
                     {/* Search + Sort + View */}
                     <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                         <div style={{ position: 'relative', flex: '1 1 260px', minWidth: 200 }}>
                             <i className="fa-solid fa-magnifying-glass" style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: 13 }} />
-                            <input className="s-input" type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by story ID, title or summary…" style={{ width: '100%', padding: '9px 36px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13.5, background: '#fff', color: '#1e293b', transition: 'all 0.15s' }} />
-                            {search && <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0 }}><svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg></button>}
+                            <input
+                                className="s-input" type="text" value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                placeholder="Search by story ID, title or summary…"
+                                style={{ width: '100%', padding: '9px 36px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13.5, background: '#fff', color: '#1e293b', transition: 'all 0.15s' }}
+                            />
+                            {search && (
+                                <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0 }}>
+                                    <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+                                </button>
+                            )}
                         </div>
-                        <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ padding: '8px 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13, color: '#374151', background: '#fff', cursor: 'pointer', outline: 'none' }}>
+                        <select
+                            value={sortBy} onChange={e => setSortBy(e.target.value)}
+                            style={{ padding: '8px 12px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 13, color: '#374151', background: '#fff', cursor: 'pointer', outline: 'none' }}
+                        >
                             <option value="updated_at">Latest Updated</option>
                             <option value="story_id">Story ID</option>
                             <option value="title">Title A–Z</option>
@@ -403,15 +411,15 @@ const UserStoriesList = () => {
                         </div>
                     </div>
 
-                    {/* Filter pills */}
+                    {/* Filter pills — all same fixed width, never resize */}
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 22 }}>
-                        <FilterPill label="Module" icon="fa-cube" options={moduleOpts} value={filterModule} onChange={setFilterModule} />
-                        <FilterPill label="Feature" icon="fa-puzzle-piece" options={featureOpts} value={filterFeature} onChange={setFilterFeature} />
                         <FilterPill label="Version" icon="fa-tag" options={versionOpts} value={filterVersion} onChange={setFilterVersion} />
                         <FilterPill label="Status" icon="fa-circle-half-stroke" options={Object.keys(STATUS_META)} value={filterStatus} onChange={setFilterStatus} />
+                        <FilterPill label="Criticality" icon="fa-bolt" options={Object.keys(CRIT_META)} value={filterCrit} onChange={setFilterCrit} />
                         {activeFCount > 0 && (
                             <button onClick={clearAll} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: 99, fontSize: 12.5, color: '#dc2626', fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
-                                <i className="fa-solid fa-filter-circle-xmark" style={{ fontSize: 11 }} />Clear {activeFCount} filter{activeFCount > 1 ? 's' : ''}
+                                <i className="fa-solid fa-filter-circle-xmark" style={{ fontSize: 11 }} />
+                                Clear {activeFCount} filter{activeFCount > 1 ? 's' : ''}
                             </button>
                         )}
                         <span style={{ marginLeft: 'auto', fontSize: 12.5, color: '#94a3b8', fontWeight: 500, whiteSpace: 'nowrap' }}>
@@ -442,138 +450,88 @@ const UserStoriesList = () => {
                             </div>
                             <p style={{ fontSize: 15, fontWeight: 600, color: '#475569', margin: 0 }}>No stories found</p>
                             <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>Try adjusting your search or filters</p>
-                            {activeFCount > 0 && <button onClick={clearAll} style={{ marginTop: 4, padding: '8px 18px', background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: 8, color: '#15803d', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Clear all filters</button>}
+                            {activeFCount > 0 && (
+                                <button onClick={clearAll} style={{ marginTop: 4, padding: '8px 18px', background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: 8, color: '#15803d', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                                    Clear all filters
+                                </button>
+                            )}
                         </div>
                     )}
 
                     {/* Grid view */}
                     {!loading && !error && filtered.length > 0 && viewMode === 'grid' && (
-                        <>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gridAutoRows: '220px', gap: 16 }}>
-                                {paged.map((story, i) => (
-                                    <div key={story.id} style={{ animation: `fadeUp 0.25s ease ${Math.min(i * 0.04, 0.5)}s both` }}>
-                                        <StoryCard story={story} onClick={handleSelectStory} onEdit={openEditModal} onDelete={setDeleteTarget} />
-                                    </div>
-                                ))}
-                            </div>
-                            <Pagination
-                                currentPage={safePage} totalPages={totalPages} totalItems={filtered.length}
-                                pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize}
-                                pageSizeOptions={gridPageSizes}
-                            />
-                        </>
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+                            gridAutoRows: '160px',
+                            gap: 16,
+                        }}>
+                            {paged.map((story, i) => (
+                                <div key={story.id} style={{ animation: `fadeUp 0.25s ease ${Math.min(i * 0.04, 0.5)}s both` }}>
+                                    <StoryCard story={story} onClick={handleSelectStory} />
+                                </div>
+                            ))}
+                        </div>
                     )}
 
                     {/* List view */}
                     {!loading && !error && filtered.length > 0 && viewMode === 'list' && (
-                        <>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 140px 110px 100px 100px 72px', gap: 12, padding: '8px 18px', background: '#f1f5f9', borderRadius: 8 }}>
-                                    {['Story ID', 'Title', 'Module / Feature', 'Status', 'Criticality', 'Version', ''].map(h => (
-                                        <span key={h} style={{ fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</span>
-                                    ))}
-                                </div>
-                                {paged.map((s, i) => (
-                                    <div key={s.id} className="list-row" style={{ animation: `fadeUp 0.2s ease ${Math.min(i * 0.03, 0.4)}s both`, display: 'grid', gridTemplateColumns: '110px 1fr 140px 110px 100px 100px 72px', gap: 12, alignItems: 'center', padding: '12px 18px', background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 12, transition: 'all 0.15s' }}>
-                                        <span onClick={() => handleSelectStory(s)} style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, fontWeight: 600, color: '#16a34a', cursor: 'pointer' }}>{s.story_id}</span>
-                                        <div style={{ minWidth: 0, cursor: 'pointer' }} onClick={() => handleSelectStory(s)}>
-                                            <p style={{ fontSize: 13.5, fontWeight: 600, color: '#0f172a', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.story_title || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Untitled</span>}</p>
-                                            {s.story_type && <span style={{ fontSize: 11, color: '#94a3b8' }}>{s.story_type}</span>}
-                                        </div>
-                                        <div style={{ minWidth: 0, cursor: 'pointer' }} onClick={() => handleSelectStory(s)}>
-                                            {s.module && <p style={{ fontSize: 12, color: '#64748b', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.module}</p>}
-                                            {s.feature && <p style={{ fontSize: 11, color: '#94a3b8', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.feature}</p>}
-                                        </div>
-                                        <Badge text={s.current_status || 'Draft'} meta={STATUS_META[s.current_status] || STATUS_META['Draft']} />
-                                        {s.criticality ? <Badge text={s.criticality} meta={CRIT_META[s.criticality]} /> : <span style={{ fontSize: 11, color: '#94a3b8' }}>—</span>}
-                                        <span style={{ fontSize: 12, color: '#64748b' }}>{s.planned_release || s.version_build || '—'}</span>
-                                        <div style={{ display: 'flex', gap: 4 }}>
-                                            <button onClick={e => openEditModal(e, s)} title="Edit" style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 7, background: '#eff6ff', color: '#2563eb', cursor: 'pointer', fontSize: 11 }} onMouseEnter={e => e.currentTarget.style.background = '#dbeafe'} onMouseLeave={e => e.currentTarget.style.background = '#eff6ff'}>
-                                                <i className="fa-solid fa-pen-to-square" />
-                                            </button>
-                                            <button onClick={e => { e.stopPropagation(); setDeleteTarget(s); }} title="Delete" style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 7, background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: 11 }} onMouseEnter={e => e.currentTarget.style.background = '#fecaca'} onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}>
-                                                <i className="fa-solid fa-trash" />
-                                            </button>
-                                        </div>
-                                    </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 140px 110px 100px 100px', gap: 12, padding: '8px 18px', background: '#f1f5f9', borderRadius: 8 }}>
+                                {['Story ID', 'Title', 'Module / Feature', 'Status', 'Criticality', 'Version'].map(h => (
+                                    <span key={h} style={{ fontSize: 10.5, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</span>
                                 ))}
                             </div>
-                            <Pagination
-                                currentPage={safePage} totalPages={totalPages} totalItems={filtered.length}
-                                pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize}
-                                pageSizeOptions={listPageSizes}
-                            />
-                        </>
+                            {paged.map((s, i) => (
+                                <div key={s.id} className="list-row" onClick={() => handleSelectStory(s)}
+                                    style={{ animation: `fadeUp 0.2s ease ${Math.min(i * 0.03, 0.4)}s both`, display: 'grid', gridTemplateColumns: '110px 1fr 140px 110px 100px 100px', gap: 12, alignItems: 'center', padding: '12px 18px', background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 12, cursor: 'pointer', transition: 'all 0.15s' }}>
+                                    <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, fontWeight: 600, color: '#16a34a' }}>{s.story_id}</span>
+                                    <div style={{ minWidth: 0 }}>
+                                        <p style={{ fontSize: 13.5, fontWeight: 600, color: '#0f172a', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {s.story_title || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Untitled</span>}
+                                        </p>
+                                        {s.story_type && <span style={{ fontSize: 11, color: '#94a3b8' }}>{s.story_type}</span>}
+                                    </div>
+                                    <div style={{ minWidth: 0 }}>
+                                        {s.module && <p style={{ fontSize: 12, color: '#64748b', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.module}</p>}
+                                        {s.feature && <p style={{ fontSize: 11, color: '#94a3b8', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.feature}</p>}
+                                    </div>
+                                    <Badge text={s.current_status || 'Draft'} meta={STATUS_META[s.current_status] || STATUS_META['Draft']} />
+                                    {s.criticality ? <Badge text={s.criticality} meta={CRIT_META[s.criticality]} /> : <span style={{ fontSize: 11, color: '#94a3b8' }}>—</span>}
+                                    <span style={{ fontSize: 12, color: '#64748b' }}>{s.planned_release || s.version_build || '—'}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    {/* Pagination */}
+                    {!loading && !error && totalPages > 1 && (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 24, padding: '12px 20px', background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 12 }}>
+                            <span style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>
+                                Showing {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} of {filtered.length} stories
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <button onClick={() => setPage(0)} disabled={safePage === 0} style={{ padding: '6px 10px', border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', color: safePage === 0 ? '#cbd5e1' : '#374151', cursor: safePage === 0 ? 'not-allowed' : 'pointer', fontSize: 13 }}>«</button>
+                                <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={safePage === 0} style={{ padding: '6px 10px', border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', color: safePage === 0 ? '#cbd5e1' : '#374151', cursor: safePage === 0 ? 'not-allowed' : 'pointer', fontSize: 13 }}>‹</button>
+                                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                                    let pg = i;
+                                    if (totalPages > 7) {
+                                        if (safePage <= 3) pg = i;
+                                        else if (safePage >= totalPages - 4) pg = totalPages - 7 + i;
+                                        else pg = safePage - 3 + i;
+                                    }
+                                    return (
+                                        <button key={pg} onClick={() => setPage(pg)} style={{ padding: '6px 11px', border: `1.5px solid ${pg === safePage ? '#22c55e' : '#e2e8f0'}`, borderRadius: 8, background: pg === safePage ? '#f0fdf4' : '#fff', color: pg === safePage ? '#15803d' : '#374151', fontWeight: pg === safePage ? 700 : 400, cursor: 'pointer', fontSize: 13, minWidth: 36 }}>
+                                            {pg + 1}
+                                        </button>
+                                    );
+                                })}
+                                <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={safePage >= totalPages - 1} style={{ padding: '6px 10px', border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', color: safePage >= totalPages - 1 ? '#cbd5e1' : '#374151', cursor: safePage >= totalPages - 1 ? 'not-allowed' : 'pointer', fontSize: 13 }}>›</button>
+                                <button onClick={() => setPage(totalPages - 1)} disabled={safePage >= totalPages - 1} style={{ padding: '6px 10px', border: '1.5px solid #e2e8f0', borderRadius: 8, background: '#fff', color: safePage >= totalPages - 1 ? '#cbd5e1' : '#374151', cursor: safePage >= totalPages - 1 ? 'not-allowed' : 'pointer', fontSize: 13 }}>»</button>
+                            </div>
+                        </div>
                     )}
                 </div>
             </div>
-
-            {/* ── Edit Story Modal ── */}
-            {editingStory && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setEditingStory(null)}>
-                    <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.18)', width: '100%', maxWidth: 640, maxHeight: '90vh', overflowY: 'auto', fontFamily: "'DM Sans',sans-serif" }} onClick={e => e.stopPropagation()}>
-                        <div style={{ padding: '20px 24px 16px', borderBottom: '1.5px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 14, position: 'sticky', top: 0, background: '#fff', zIndex: 10 }}>
-                            <div style={{ width: 38, height: 38, background: '#eff6ff', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><i className="fa-solid fa-pen-to-square" style={{ color: '#2563eb', fontSize: 15 }} /></div>
-                            <div style={{ flex: 1 }}><h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0 }}>Edit User Story</h3><p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>{editingStory.story_id}</p></div>
-                            <button onClick={() => setEditingStory(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 18, padding: 4 }}><i className="fa-solid fa-times" /></button>
-                        </div>
-                        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-                            <div><label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Story Title <span style={{ color: '#ef4444' }}>*</span></label><input value={editForm.story_title} onChange={e => setEditForm(f => ({ ...f, story_title: e.target.value }))} placeholder="e.g., User can reset their password" style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13.5, color: '#0f172a', outline: 'none', boxSizing: 'border-box' }} onFocus={e => e.target.style.borderColor = '#22c55e'} onBlur={e => e.target.style.borderColor = '#e2e8f0'} /></div>
-                            <div><label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Summary</label><textarea value={editForm.story_summary} onChange={e => setEditForm(f => ({ ...f, story_summary: e.target.value }))} rows={3} placeholder="Brief description…" style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', resize: 'none', boxSizing: 'border-box' }} onFocus={e => e.target.style.borderColor = '#22c55e'} onBlur={e => e.target.style.borderColor = '#e2e8f0'} /></div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                                <div><label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Story Type</label><select value={editForm.story_type} onChange={e => setEditForm(f => ({ ...f, story_type: e.target.value }))} style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', background: '#fff', cursor: 'pointer' }}><option value="">Select type…</option>{['Feature', 'Bug Fix', 'Improvement', 'Technical', 'Research'].map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                                <div><label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</label><select value={editForm.current_status} onChange={e => setEditForm(f => ({ ...f, current_status: e.target.value }))} style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', background: '#fff', cursor: 'pointer' }}>{Object.keys(STATUS_META).map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                                <div><label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Criticality</label><select value={editForm.criticality} onChange={e => setEditForm(f => ({ ...f, criticality: e.target.value }))} style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', background: '#fff', cursor: 'pointer' }}><option value="">Select…</option>{Object.keys(CRIT_META).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-                                <div><label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Story Points</label><input type="number" min="0" value={editForm.story_points} onChange={e => setEditForm(f => ({ ...f, story_points: e.target.value }))} placeholder="e.g., 5" style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', boxSizing: 'border-box' }} onFocus={e => e.target.style.borderColor = '#22c55e'} onBlur={e => e.target.style.borderColor = '#e2e8f0'} /></div>
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                                <div><label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Module</label><input value={editForm.module} onChange={e => setEditForm(f => ({ ...f, module: e.target.value }))} placeholder="e.g., Billing" style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', boxSizing: 'border-box' }} onFocus={e => e.target.style.borderColor = '#22c55e'} onBlur={e => e.target.style.borderColor = '#e2e8f0'} /></div>
-                                <div><label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Feature</label><input value={editForm.feature} onChange={e => setEditForm(f => ({ ...f, feature: e.target.value }))} placeholder="e.g., Invoice generation" style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', boxSizing: 'border-box' }} onFocus={e => e.target.style.borderColor = '#22c55e'} onBlur={e => e.target.style.borderColor = '#e2e8f0'} /></div>
-                            </div>
-                            <div><label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Planned Release / Version</label><input value={editForm.planned_release} onChange={e => setEditForm(f => ({ ...f, planned_release: e.target.value }))} placeholder="e.g., v2.1.0" style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, color: '#374151', outline: 'none', boxSizing: 'border-box' }} onFocus={e => e.target.style.borderColor = '#22c55e'} onBlur={e => e.target.style.borderColor = '#e2e8f0'} /></div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
-                                {[{ key: 'development_status', label: 'Dev Status', opts: ['Not Started', 'In Progress', 'On Hold', 'Completed'] }, { key: 'qa_status', label: 'QA Status', opts: ['Not Started', 'In Progress', 'Pass', 'Fail', 'Blocked'] }, { key: 'release_status', label: 'Release Status', opts: ['Not Released', 'Scheduled', 'Released', 'Rolled Back'] }].map(({ key, label, opts }) => (
-                                    <div key={key}><label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</label><select value={editForm[key]} onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))} style={{ width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 12, color: '#374151', outline: 'none', background: '#fff', cursor: 'pointer' }}><option value="">Select…</option>{opts.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
-                                ))}
-                            </div>
-                        </div>
-                        <div style={{ padding: '14px 24px', borderTop: '1.5px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', bottom: 0, background: '#fff' }}>
-                            <button onClick={() => setEditingStory(null)} style={{ padding: '9px 22px', border: '1.5px solid #e2e8f0', borderRadius: 9, background: '#fff', color: '#475569', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
-                            <button onClick={handleUpdateStory} disabled={editLoading} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 24px', border: 'none', borderRadius: 9, background: '#15803d', color: '#fff', fontSize: 13, fontWeight: 600, cursor: editLoading ? 'not-allowed' : 'pointer', opacity: editLoading ? 0.7 : 1 }}>
-                                {editLoading ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : <><i className="fa-solid fa-check" /> Save Changes</>}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* ── Delete Confirmation Modal ── */}
-            {deleteTarget && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setDeleteTarget(null)}>
-                    <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.18)', width: '100%', maxWidth: 420, padding: 28, fontFamily: "'DM Sans',sans-serif" }} onClick={e => e.stopPropagation()}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 20 }}>
-                            <div style={{ width: 44, height: 44, background: '#fef2f2', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><i className="fa-solid fa-trash" style={{ color: '#dc2626', fontSize: 18 }} /></div>
-                            <div><h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: '0 0 4px' }}>Delete User Story</h3><p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>This action cannot be undone.</p></div>
-                        </div>
-                        <div style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 10, padding: '12px 16px', marginBottom: 20 }}>
-                            <p style={{ fontSize: 12, fontWeight: 700, color: '#16a34a', fontFamily: 'monospace', margin: '0 0 4px' }}>{deleteTarget.story_id}</p>
-                            <p style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', margin: 0 }}>{deleteTarget.story_title || 'Untitled Story'}</p>
-                        </div>
-                        <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginBottom: 24, display: 'flex', gap: 10 }}>
-                            <i className="fa-solid fa-triangle-exclamation" style={{ color: '#dc2626', fontSize: 13, marginTop: 1, flexShrink: 0 }} />
-                            <p style={{ fontSize: 12, color: '#b91c1c', margin: 0, lineHeight: 1.5 }}>Deleting this story will permanently remove it and all its associations including linked test cases.</p>
-                        </div>
-                        <div style={{ display: 'flex', gap: 12 }}>
-                            <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, padding: '10px', border: '1.5px solid #e2e8f0', borderRadius: 9, background: '#fff', color: '#475569', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
-                            <button onClick={handleDeleteStory} disabled={deleteLoading} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: 9, background: '#dc2626', color: '#fff', fontSize: 13, fontWeight: 600, cursor: deleteLoading ? 'not-allowed' : 'pointer', opacity: deleteLoading ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                                {deleteLoading ? <><i className="fa-solid fa-spinner fa-spin" /> Deleting…</> : <><i className="fa-solid fa-trash" /> Delete Story</>}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </>
     );
 };

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useLocation } from "react-router-dom";
 import { supabase } from "../services/supabaseClient";
 
 // Force all Supabase REST fetches to bypass the browser HTTP cache.
@@ -17,28 +16,13 @@ if (typeof window !== "undefined") {
 }
 
 // ── Session-persisted pending updates ────────────────────────────────────────
+// Keeps pass/fail colors alive across page switches for the entire browser session.
 const STORAGE_KEY = "te_pending_updates";
 function loadPendingUpdates() {
     try { return JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "{}"); } catch { return {}; }
 }
 function savePendingUpdates(map) {
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(map)); } catch { }
-}
-
-// ── Fetch ALL rows from a Supabase query by batching in chunks of 1000 ───────
-async function fetchAll(queryBuilder) {
-    let allData = [];
-    let from = 0;
-    const BATCH = 1000;
-    while (true) {
-        const { data, error } = await queryBuilder.range(from, from + BATCH - 1);
-        if (error) throw error;
-        if (!data || data.length === 0) break;
-        allData = [...allData, ...data];
-        if (data.length < BATCH) break;
-        from += BATCH;
-    }
-    return allData;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -211,102 +195,6 @@ function SubmitModal({ show, onClose, onConfirm, submitting, currentTest, select
     );
 }
 
-// ── Pagination Controls ───────────────────────────────────────────────────────
-function Pagination({ currentPage, totalPages, totalItems, pageSize, onPageChange, onPageSizeChange }) {
-    const pages = [];
-    const delta = 2;
-    const left = currentPage - delta;
-    const right = currentPage + delta;
-
-    for (let i = 1; i <= totalPages; i++) {
-        if (i === 1 || i === totalPages || (i >= left && i <= right)) {
-            pages.push(i);
-        }
-    }
-
-    // Insert ellipsis markers
-    const withEllipsis = [];
-    let prev = null;
-    for (const page of pages) {
-        if (prev !== null && page - prev > 1) withEllipsis.push("...");
-        withEllipsis.push(page);
-        prev = page;
-    }
-
-    return (
-        <div className="flex items-center justify-between gap-4 px-5 py-3 border-t border-slate-100 bg-slate-50 rounded-b-xl flex-wrap">
-            <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">Rows per page:</span>
-                <select
-                    value={pageSize}
-                    onChange={e => { onPageSizeChange(Number(e.target.value)); onPageChange(1); }}
-                    className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                    {[25, 50, 100, 200].map(n => (
-                        <option key={n} value={n}>{n}</option>
-                    ))}
-                </select>
-                <span className="text-xs text-slate-400">
-                    {totalItems === 0 ? "0" : `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, totalItems)}`} of {totalItems}
-                </span>
-            </div>
-
-            <div className="flex items-center gap-1">
-                <button
-                    onClick={() => onPageChange(1)}
-                    disabled={currentPage === 1}
-                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs"
-                    title="First page"
-                >
-                    <i className="fa-solid fa-angles-left" />
-                </button>
-                <button
-                    onClick={() => onPageChange(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs"
-                    title="Previous page"
-                >
-                    <i className="fa-solid fa-angle-left" />
-                </button>
-
-                {withEllipsis.map((item, idx) =>
-                    item === "..." ? (
-                        <span key={`ellipsis-${idx}`} className="w-7 h-7 flex items-center justify-center text-slate-400 text-xs">…</span>
-                    ) : (
-                        <button
-                            key={item}
-                            onClick={() => onPageChange(item)}
-                            className={`w-7 h-7 flex items-center justify-center rounded-lg border text-xs font-semibold transition-colors ${item === currentPage
-                                    ? "bg-emerald-600 border-emerald-600 text-white"
-                                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                                }`}
-                        >
-                            {item}
-                        </button>
-                    )
-                )}
-
-                <button
-                    onClick={() => onPageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages || totalPages === 0}
-                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs"
-                    title="Next page"
-                >
-                    <i className="fa-solid fa-angle-right" />
-                </button>
-                <button
-                    onClick={() => onPageChange(totalPages)}
-                    disabled={currentPage === totalPages || totalPages === 0}
-                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs"
-                    title="Last page"
-                >
-                    <i className="fa-solid fa-angles-right" />
-                </button>
-            </div>
-        </div>
-    );
-}
-
 // ═════════════════════════════════════════════════════════════════════════════
 // VIEW 1 — TEST CASE LIST
 // ═════════════════════════════════════════════════════════════════════════════
@@ -319,10 +207,6 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
     const [error, setError] = useState(null);
     const [metaReady, setMetaReady] = useState(false);
 
-    // Pagination state
-    const [currentPage, setCurrentPage] = useState(1);
-    const [pageSize, setPageSize] = useState(50);
-
     const mapsRef = useRef({ mod: {}, feat: {}, ver: {} });
 
     const [filterVersion, setFilterVersion] = useState("");
@@ -330,19 +214,20 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
     const [filterFeature, setFilterFeature] = useState("");
     const [filterStatus, setFilterStatus] = useState("");
     const [search, setSearch] = useState("");
-
-    // Reset to page 1 whenever filters/search change
-    useEffect(() => { setCurrentPage(1); }, [filterVersion, filterModule, filterFeature, filterStatus, search]);
+    const [page, setPage] = useState(0);
+    const PAGE_SIZE = 15;
 
     useEffect(() => {
         (async () => {
             try {
-                // Fetch all meta rows (versions/modules/features may exceed 1000 too)
-                const [versions, modules, features] = await Promise.all([
-                    fetchAll(supabase.from("versions").select("id,version_number,build_number,status").order("created_at", { ascending: false })),
-                    fetchAll(supabase.from("modules").select("id,module_name").order("module_name", { ascending: true })),
-                    fetchAll(supabase.from("features").select("id,feature_name,module_id").order("feature_name", { ascending: true })),
+                const [vRes, mRes, fRes] = await Promise.all([
+                    supabase.from("versions").select("id,version_number,build_number,status").order("created_at", { ascending: false }),
+                    supabase.from("modules").select("id,module_name").order("module_name", { ascending: true }),
+                    supabase.from("features").select("id,feature_name,module_id").order("feature_name", { ascending: true }),
                 ]);
+                const versions = vRes.data || [];
+                const modules = mRes.data || [];
+                const features = fRes.data || [];
                 setAllVersions(versions);
                 setAllModules(modules);
                 setAllFeatures(features);
@@ -412,10 +297,10 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                     q = q.eq("status", filterStatus);
                 }
 
-                // ── KEY CHANGE: fetch ALL rows using the batch helper ──────
-                const data = await fetchAll(q);
-
+                const { data, error: err } = await q;
                 if (!cancelled) {
+                    // Load latest pendingUpdates from sessionStorage at mapping time
+                    // so even a full re-fetch gets the correct overrides applied.
                     const latestPending = loadPendingUpdates();
                     const { mod, feat, ver } = mapsRef.current;
                     setTestCases((data || []).map(t => {
@@ -437,6 +322,8 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
         return () => { cancelled = true; };
     }, [metaReady, filterVersion, filterModule, filterFeature, filterStatus, allFeatures]);
 
+    // Patch test cases in-place when pendingUpdates changes (instant visual feedback
+    // after returning from ExecuteView, no re-fetch needed).
     useEffect(() => {
         const allPending = { ...loadPendingUpdates(), ...pendingUpdates };
         if (Object.keys(allPending).length === 0) return;
@@ -458,27 +345,25 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
             .map(f => ({ value: f.id, label: f.feature_name })),
     ];
 
-    // ── Search filter (client-side across all fetched rows) ──────────────────
-    const filtered = testCases.filter(t => {
+    const visible = testCases.filter(t => {
         if (!search) return true;
         const q = search.toLowerCase();
         return t.name?.toLowerCase().includes(q) || t.test_case_id?.toLowerCase().includes(q);
     });
 
-    // ── Stats from ALL filtered rows ─────────────────────────────────────────
-    const passCount = filtered.filter(t => normaliseStatus(t.status) === "pass").length;
-    const failCount = filtered.filter(t => normaliseStatus(t.status) === "fail").length;
-    const blockedCount = filtered.filter(t => normaliseStatus(t.status) === "blocked").length;
-    const statusStats = { pass: passCount, fail: failCount, blocked: blockedCount, untested: filtered.length - passCount - failCount - blockedCount };
-
-    // ── Paginate the filtered list ───────────────────────────────────────────
-    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-    const safePage = Math.min(currentPage, totalPages);
-    const pageStart = (safePage - 1) * pageSize;
-    const visible = filtered.slice(pageStart, pageStart + pageSize);
+    const passCount = visible.filter(t => normaliseStatus(t.status) === "pass").length;
+    const failCount = visible.filter(t => normaliseStatus(t.status) === "fail").length;
+    const blockedCount = visible.filter(t => normaliseStatus(t.status) === "blocked").length;
+    const statusStats = { pass: passCount, fail: failCount, blocked: blockedCount, untested: visible.length - passCount - failCount - blockedCount };
 
     const anyFilter = filterVersion || filterModule || filterFeature || filterStatus || search;
-    const clearAll = () => { setFilterVersion(""); setFilterModule(""); setFilterFeature(""); setFilterStatus(""); setSearch(""); };
+    const clearAll = () => { setFilterVersion(""); setFilterModule(""); setFilterFeature(""); setFilterStatus(""); setSearch(""); setPage(0); };
+
+    useEffect(() => { setPage(0); }, [search, filterVersion, filterModule, filterFeature, filterStatus]);
+
+    const totalPages = Math.ceil(visible.length / PAGE_SIZE);
+    const safePage = Math.min(page, Math.max(0, totalPages - 1));
+    const paged = visible.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
     return (
         <div className="flex-1 flex flex-col min-w-0 bg-slate-50">
@@ -491,16 +376,13 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                         <p className="text-sm text-slate-500 mt-0.5">Select a test case to begin execution</p>
                     </div>
                     <div className="flex items-center gap-3">
-                        <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-sm font-semibold">
-                            {filtered.length} test cases
-                        </span>
+                        <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-sm font-semibold">{visible.length} test cases</span>
                     </div>
                 </div>
             </header>
 
             <main className="flex-1 overflow-y-auto p-6 space-y-5">
 
-                {/* Filters */}
                 <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
@@ -565,11 +447,10 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                     </div>
                 </div>
 
-                {/* Stats */}
-                {!loading && filtered.length > 0 && (
+                {!loading && visible.length > 0 && (
                     <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                         {[
-                            { label: "Total", value: filtered.length, color: "text-slate-700", bg: "bg-white", icon: "fa-list-check" },
+                            { label: "Total", value: visible.length, color: "text-slate-700", bg: "bg-white", icon: "fa-list-check" },
                             { label: "Not Tested", value: statusStats.untested, color: "text-slate-500", bg: "bg-white", icon: "fa-circle" },
                             { label: "Pass", value: statusStats.pass, color: "text-emerald-600", bg: "bg-emerald-50", icon: "fa-check-circle" },
                             { label: "Fail", value: statusStats.fail, color: "text-red-600", bg: "bg-red-50", icon: "fa-times-circle" },
@@ -586,7 +467,6 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                     </div>
                 )}
 
-                {/* Table */}
                 {loading ? (
                     <div className="flex flex-col items-center justify-center py-20 gap-4">
                         <div className="w-10 h-10 border-4 border-slate-200 border-t-emerald-600 rounded-full animate-spin" />
@@ -597,7 +477,7 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                         <i className="fa-solid fa-circle-exclamation text-red-400 text-2xl mb-2 block" />
                         <p className="text-sm text-red-600 font-medium">{error}</p>
                     </div>
-                ) : filtered.length === 0 ? (
+                ) : visible.length === 0 ? (
                     <div className="bg-white border border-slate-200 rounded-xl p-12 text-center">
                         <i className="fa-solid fa-vial text-slate-300 text-4xl mb-3 block" />
                         <p className="text-slate-500 font-medium mb-1">No test cases found</p>
@@ -606,19 +486,14 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                     </div>
                 ) : (
                     <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                        {/* Table header */}
                         <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
                             <p className="text-sm font-semibold text-slate-700">
-                                {filtered.length === testCases.length
-                                    ? `${filtered.length} test cases`
-                                    : `${filtered.length} of ${testCases.length} test cases`}
+                                {visible.length === testCases.length ? `${visible.length} test cases` : `${visible.length} of ${testCases.length} test cases`}
                             </p>
                             <p className="text-xs text-slate-400">Click a row to start executing</p>
                         </div>
-
-                        {/* Rows — only current page */}
                         <div className="divide-y divide-slate-50">
-                            {visible.map(t => {
+                            {paged.map(t => {
                                 const normStatus = normaliseStatus(t.status);
                                 const sm = getSM(normStatus);
                                 const rowBg =
@@ -634,7 +509,7 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                                                 "border-l-4 border-transparent";
 
                                 return (
-                                    <button key={t.id} onClick={() => onSelect(t, filtered)}
+                                    <button key={t.id} onClick={() => onSelect(t, visible)}
                                         className={`w-full text-left px-5 py-4 ${leftBorder} ${rowBg} transition-all group`}>
                                         <div className="flex items-center gap-4">
                                             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${sm.bgLight}`}>
@@ -683,16 +558,35 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
                                 );
                             })}
                         </div>
+                    </div>
+                )}
 
-                        {/* Pagination controls */}
-                        <Pagination
-                            currentPage={safePage}
-                            totalPages={totalPages}
-                            totalItems={filtered.length}
-                            pageSize={pageSize}
-                            onPageChange={setCurrentPage}
-                            onPageSizeChange={setPageSize}
-                        />
+                {/* Pagination */}
+                {!loading && totalPages > 1 && (
+                    <div className="flex items-center justify-between bg-white border border-slate-200 rounded-xl px-5 py-3">
+                        <span className="text-sm text-slate-500 font-medium">
+                            Showing {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, visible.length)} of {visible.length} test cases
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                            <button onClick={() => setPage(0)} disabled={safePage === 0} className="px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg bg-white text-slate-600 disabled:text-slate-300 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors">«</button>
+                            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={safePage === 0} className="px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg bg-white text-slate-600 disabled:text-slate-300 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors">‹</button>
+                            {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                                let pg = i;
+                                if (totalPages > 7) {
+                                    if (safePage <= 3) pg = i;
+                                    else if (safePage >= totalPages - 4) pg = totalPages - 7 + i;
+                                    else pg = safePage - 3 + i;
+                                }
+                                return (
+                                    <button key={pg} onClick={() => setPage(pg)}
+                                        className={`px-3 py-1.5 text-sm border rounded-lg font-medium transition-colors min-w-[36px] ${pg === safePage ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                                        {pg + 1}
+                                    </button>
+                                );
+                            })}
+                            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={safePage >= totalPages - 1} className="px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg bg-white text-slate-600 disabled:text-slate-300 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors">›</button>
+                            <button onClick={() => setPage(totalPages - 1)} disabled={safePage >= totalPages - 1} className="px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg bg-white text-slate-600 disabled:text-slate-300 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors">»</button>
+                        </div>
                     </div>
                 )}
             </main>
@@ -700,15 +594,153 @@ function TestCaseListView({ onSelect, pendingUpdates }) {
     );
 }
 
+// ── Multi-select dropdown for team assignment ──────────────────────────────────
+function MultiAssign({ label, icon, values, onChange, color = "emerald", profiles = [] }) {
+    const [open, setOpen] = useState(false);
+    const [search, setSearch] = useState("");
+    const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
+    const ref = useRef(null);
+    const btnRef = useRef(null);
+
+    useEffect(() => {
+        const h = (e) => {
+            if (ref.current && !ref.current.contains(e.target)) {
+                setOpen(false);
+                setSearch("");
+            }
+        };
+        document.addEventListener("mousedown", h);
+        return () => document.removeEventListener("mousedown", h);
+    }, []);
+
+    useEffect(() => {
+        if (open && btnRef.current) {
+            const rect = btnRef.current.getBoundingClientRect();
+            setDropdownPos({
+                top: rect.bottom + window.scrollY + 4,
+                left: rect.left + window.scrollX,
+                width: rect.width,
+            });
+        }
+    }, [open]);
+
+    const filtered = profiles.filter(p =>
+        (p.full_name || p.email || "").toLowerCase().includes(search.toLowerCase())
+    );
+
+    const COLORS = {
+        emerald: { pill: "bg-emerald-100 text-emerald-700", sel: "bg-emerald-50", check: "text-emerald-500" },
+        blue: { pill: "bg-blue-100 text-blue-700", sel: "bg-blue-50", check: "text-blue-500" },
+    };
+    const c = COLORS[color] || COLORS.emerald;
+
+    return (
+        <div ref={ref} className="relative">
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                <i className={`fa-solid ${icon} text-[9px]`} />{label}
+            </label>
+            {values.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-1.5">
+                    {values.map(id => {
+                        const p = profiles.find(x => x.id === id);
+                        const name = p?.full_name || p?.email || id;
+                        return (
+                            <span key={id} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${c.pill}`}>
+                                {name.split(" ")[0]}
+                                <button type="button" onClick={() => onChange(values.filter(v => v !== id))} className="hover:opacity-70 leading-none ml-0.5">×</button>
+                            </span>
+                        );
+                    })}
+                </div>
+            )}
+            <button
+                ref={btnRef}
+                type="button"
+                onClick={() => setOpen(p => !p)}
+                className={`w-full flex items-center justify-between px-3 py-2 bg-white border rounded-lg text-xs transition-all ${open ? "border-emerald-400 ring-2 ring-emerald-50" : "border-slate-200 hover:border-slate-300"}`}
+            >
+                <span className="text-slate-500">{values.length > 0 ? `${values.length} assigned` : "Select people…"}</span>
+                <i className={`fa-solid fa-chevron-down text-slate-400 text-[9px] transition-transform ${open ? "rotate-180" : ""}`} />
+            </button>
+
+            {open && (
+                <div
+                    style={{
+                        position: "fixed",
+                        top: dropdownPos.top,
+                        left: dropdownPos.left,
+                        width: dropdownPos.width,
+                        zIndex: 9999,
+                    }}
+                    className="bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
+                >
+                    <div className="p-2 border-b border-slate-100">
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            placeholder="Search…"
+                            autoFocus
+                            className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                        />
+                    </div>
+                    <div className="max-h-44 overflow-y-auto py-1">
+                        {filtered.length === 0
+                            ? <p className="text-center text-xs text-slate-400 py-3">No profiles found</p>
+                            : filtered.map(p => {
+                                const isSel = values.includes(p.id);
+                                const name = p.full_name || p.email || "?";
+                                return (
+                                    <button
+                                        key={p.id}
+                                        type="button"
+                                        onClick={() => onChange(isSel ? values.filter(v => v !== p.id) : [...values, p.id])}
+                                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs hover:bg-slate-50 transition-colors ${isSel ? c.sel : ""}`}
+                                    >
+                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 text-[10px] ${isSel ? "bg-emerald-500" : "bg-slate-300"}`}>
+                                            {name[0]?.toUpperCase() || "?"}
+                                        </div>
+                                        <div className="flex-1 text-left min-w-0">
+                                            <p className={`font-medium truncate ${isSel ? "text-slate-900" : "text-slate-600"}`}>{name}</p>
+                                            {p.role && <p className="text-slate-400 text-[10px] capitalize">{p.role}</p>}
+                                        </div>
+                                        {isSel && <i className={`fa-solid fa-check ${c.check} text-[10px] flex-shrink-0`} />}
+                                    </button>
+                                );
+                            })}
+                    </div>
+                    {values.length > 0 && (
+                        <div className="p-2 border-t border-slate-100">
+                            <button
+                                type="button"
+                                onClick={() => onChange([])}
+                                className="w-full py-1.5 text-[10px] font-semibold text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                                Clear all
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
-// VIEW 2 — EXECUTE A TEST CASE  (unchanged from original)
+// VIEW 2 — EXECUTE A TEST CASE
 // ═════════════════════════════════════════════════════════════════════════════
-function ExecuteView({ testCase, onBack }) {
+function ExecuteView({ testCase, onBack, onNext, currentIdx, total }) {
     const [module, setModule] = useState(null);
     const [feature, setFeature] = useState(null);
     const [version, setVersion] = useState(null);
     const [tester, setTester] = useState(null);
     const [executionHistory, setExecutionHistory] = useState([]);
+    const [allProfiles, setAllProfiles] = useState([]);
+    const [assignedTesters, setAssignedTesters] = useState(
+        testCase.assigned_to ? [testCase.assigned_to] : []
+    );
+    const [assignedDevs, setAssignedDevs] = useState([]);
+    const [savingAssign, setSavingAssign] = useState(false);
 
     const [allVersions, setAllVersions] = useState([]);
     const [versionsLoading, setVersionsLoading] = useState(false);
@@ -749,7 +781,7 @@ function ExecuteView({ testCase, onBack }) {
         (async () => {
             setVersionsLoading(true);
             try {
-                const data = await fetchAll(supabase.from("versions").select("id,version_number,build_number,status,version_type,release_date,created_at,total_tests,passed_tests,failed_tests,pending_tests,completion_percentage").order("created_at", { ascending: false }));
+                const { data } = await supabase.from("versions").select("id,version_number,build_number,status,version_type,release_date,created_at,total_tests,passed_tests,failed_tests,pending_tests,completion_percentage").order("created_at", { ascending: false });
                 setAllVersions(data || []);
             } catch (e) { console.warn(e); } finally { setVersionsLoading(false); }
         })();
@@ -774,6 +806,15 @@ function ExecuteView({ testCase, onBack }) {
     }, []);
 
     useEffect(() => {
+        (async () => {
+            try {
+                const { data } = await supabase.from("profiles").select("id,full_name,email,role").order("full_name", { ascending: true });
+                setAllProfiles(data || []);
+            } catch (e) { console.warn(e); }
+        })();
+    }, []);
+
+    useEffect(() => {
         const normalised = isUntested(testCase.status) ? "not-tested" : (testCase.status || "not-tested");
         setSelectedStatus(normalised);
         setExpectedResult(testCase.expected_result || "");
@@ -782,6 +823,8 @@ function ExecuteView({ testCase, onBack }) {
         setStepsToReproduce(""); setAdditionalNotes("");
         setLinkedBugId(""); setLinkedIssue(null); setUploadedFiles([]);
         setExecutionHistory([]);
+        setAssignedTesters(testCase.assigned_to ? [testCase.assigned_to] : []);
+        setAssignedDevs([]);
         setModule(null); setFeature(null);
         if (!manualVersion) setVersion(null);
     }, [testCase.id]);
@@ -906,6 +949,17 @@ function ExecuteView({ testCase, onBack }) {
         }
     }, [testCase]);
 
+    const handleSaveAssignments = async () => {
+        setSavingAssign(true);
+        try {
+            const updates = {};
+            if (assignedTesters.length > 0) updates.assigned_to = assignedTesters[0];
+            await supabase.from("test_cases").update(updates).eq("id", testCase.id);
+            showNotif("Assignments saved!");
+        } catch (e) { alert("Error: " + e.message); }
+        finally { setSavingAssign(false); }
+    };
+
     const sm = getSM(selectedStatus);
 
     return (
@@ -968,9 +1022,17 @@ function ExecuteView({ testCase, onBack }) {
                                 </div>
                             )}
                         </div>
+                        {total > 0 && (
+                            <span className="text-xs text-slate-400 font-medium">{currentIdx + 1} / {total}</span>
+                        )}
                         <button onClick={handleSave} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50">
                             <i className="fa-solid fa-save text-xs" /> Save
                         </button>
+                        {onNext && (
+                            <button onClick={onNext} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 text-white rounded-lg text-xs font-medium hover:bg-slate-800">
+                                Next <i className="fa-solid fa-arrow-right text-xs" />
+                            </button>
+                        )}
                     </div>
                 </div>
             </header>
@@ -979,9 +1041,9 @@ function ExecuteView({ testCase, onBack }) {
             <main className="flex-1 overflow-y-auto">
                 <div className="p-5 space-y-4 max-w-3xl mx-auto">
 
-                    {/* Context Card */}
+                    {/* Context + Team Card */}
                     <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-100">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-slate-100 border-b border-slate-100">
                             {[
                                 { label: "Version", icon: "fa-code-branch", value: version ? `v${version.version_number}` : "—", sub: version?.build_number || "", color: "text-blue-400", bg: "bg-blue-50" },
                                 { label: "Module", icon: "fa-puzzle-piece", value: module?.module_name || "—", sub: "", color: "text-teal-400", bg: "bg-teal-50" },
@@ -998,15 +1060,26 @@ function ExecuteView({ testCase, onBack }) {
                                 </div>
                             ))}
                         </div>
-                        {executionHistory.length > 0 && (
-                            <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between">
-                                <span className={`text-xs flex items-center gap-1.5 ${getSM(executionHistory[0].execution_status).color}`}>
-                                    <i className="fa-solid fa-history text-slate-400 text-xs" />
-                                    Last run: {new Date(executionHistory[0].executed_at).toLocaleDateString()} —
-                                    <span className="font-semibold">{executionHistory[0].execution_status}</span>
-                                </span>
+
+                        <div className="px-5 py-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" style={{ overflow: "visible" }}>
+                                <MultiAssign label="Assign Testers" icon="fa-flask" values={assignedTesters} onChange={setAssignedTesters} color="emerald" profiles={allProfiles} />
+                                <MultiAssign label="Assign Developers" icon="fa-code" values={assignedDevs} onChange={setAssignedDevs} color="blue" profiles={allProfiles} />
                             </div>
-                        )}
+                            <div className="flex items-center justify-between mt-3">
+                                {executionHistory.length > 0 ? (
+                                    <span className={`text-xs flex items-center gap-1.5 ${getSM(executionHistory[0].execution_status).color}`}>
+                                        <i className="fa-solid fa-history text-slate-400 text-xs" />
+                                        Last run: {new Date(executionHistory[0].executed_at).toLocaleDateString()} —
+                                        <span className="font-semibold">{executionHistory[0].execution_status}</span>
+                                    </span>
+                                ) : <span />}
+                                <button onClick={handleSaveAssignments} disabled={savingAssign}
+                                    className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                                    {savingAssign ? <><i className="fa-solid fa-spinner fa-spin text-xs" />Saving…</> : <><i className="fa-solid fa-check text-xs" />Save Assignments</>}
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Test Case Details */}
@@ -1082,6 +1155,11 @@ function ExecuteView({ testCase, onBack }) {
                                         {uploadedFiles.length > 0 && <div className="mt-2 space-y-1.5">{uploadedFiles.map(f => (<div key={f.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg"><div className="flex items-center gap-2"><div className="w-7 h-7 bg-blue-100 rounded flex items-center justify-center"><i className="fa-solid fa-image text-blue-500 text-xs" /></div><div><p className="text-xs font-medium">{f.name}</p><p className="text-[10px] text-slate-400">{f.size}</p></div></div><div className="flex items-center gap-2">{f.url && <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-600"><i className="fa-solid fa-external-link-alt text-xs" /></a>}<button onClick={() => setUploadedFiles(p => p.filter(x => x.id !== f.id))} className="text-red-400 hover:text-red-600"><i className="fa-solid fa-trash text-xs" /></button></div></div>))}</div>}
                                     </div>
                                     <div>
+                                        <label className="text-xs font-semibold text-slate-700 mb-1.5 block">Linked Bug ID</label>
+                                        <div className="flex gap-2">
+                                            <input type="text" value={linkedBugId} onChange={e => setLinkedBugId(e.target.value)} placeholder="e.g. BUG-0001" onKeyDown={e => e.key === "Enter" && handleLinkBug()} className="flex-1 px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                                            <button onClick={handleLinkBug} className="px-3 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50"><i className="fa-solid fa-link mr-1" />Link</button>
+                                        </div>
                                         {linkedIssue && (<div className="mt-2 flex items-center justify-between p-2.5 bg-amber-50 border border-amber-200 rounded-lg"><div className="flex items-center gap-2"><i className="fa-solid fa-bug text-amber-600 text-xs" /><div><p className="text-xs font-medium">{linkedIssue.bug_id}</p><p className="text-[10px] text-slate-500">Status: {linkedIssue.status} · Priority: {linkedIssue.priority}</p></div></div><button onClick={() => { setLinkedIssue(null); setLinkedBugId(""); }} className="text-red-400 hover:text-red-600"><i className="fa-solid fa-times text-xs" /></button></div>)}
                                     </div>
                                 </div>
@@ -1124,9 +1202,17 @@ function ExecuteView({ testCase, onBack }) {
                             <i className="fa-solid fa-arrow-left text-xs" /> Back to List
                         </button>
                         <div className="flex items-center gap-2">
+                            <button onClick={handleSave} className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 flex items-center gap-1.5">
+                                <i className="fa-solid fa-floppy-disk text-xs" /> Save Draft
+                            </button>
                             <button onClick={handleSubmitClick} className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 flex items-center gap-1.5">
                                 <i className="fa-solid fa-paper-plane text-xs" /> Submit Result
                             </button>
+                            {onNext && (
+                                <button onClick={onNext} className="px-4 py-2 bg-slate-700 text-white rounded-lg text-sm font-medium hover:bg-slate-800 flex items-center gap-1.5">
+                                    Next <i className="fa-solid fa-arrow-right text-xs" />
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1139,28 +1225,17 @@ function ExecuteView({ testCase, onBack }) {
 // ROOT
 // ═════════════════════════════════════════════════════════════════════════════
 export default function TestExecution() {
-    const location = useLocation();
     const [selectedTest, setSelectedTest] = useState(null);
-    const [loadingDirect, setLoadingDirect] = useState(false);
+    const [testList, setTestList] = useState([]);
+    const [selectedIdx, setSelectedIdx] = useState(-1);
 
+    // Initialise from sessionStorage so colors survive page switches.
     const [pendingUpdates, setPendingUpdates] = useState(() => loadPendingUpdates());
 
-    useEffect(() => {
-        const testCaseId = location.state?.testCaseId;
-        if (!testCaseId) return;
-        setLoadingDirect(true);
-        supabase
-            .from("test_cases")
-            .select("*")
-            .eq("id", testCaseId)
-            .single()
-            .then(({ data }) => {
-                if (data) setSelectedTest(data);
-                setLoadingDirect(false);
-            });
-    }, [location.state?.testCaseId]);
-
-    const handleSelect = (test) => {
+    const handleSelect = (test, list = []) => {
+        const idx = list.findIndex(t => t.id === test.id);
+        setTestList(list);
+        setSelectedIdx(idx);
         setSelectedTest(test);
     };
 
@@ -1168,6 +1243,8 @@ export default function TestExecution() {
         if (updatedId && updatedStatus) {
             setPendingUpdates(prev => {
                 const next = { ...prev, [updatedId]: updatedStatus };
+                // Persist to sessionStorage so the map survives if this component
+                // unmounts when the user navigates to another page and comes back.
                 savePendingUpdates(next);
                 return next;
             });
@@ -1175,29 +1252,32 @@ export default function TestExecution() {
         setSelectedTest(null);
     };
 
-    if (loadingDirect) {
-        return (
-            <div className="flex-1 flex items-center justify-center">
-                <div className="text-center">
-                    <i className="fa-solid fa-spinner fa-spin text-4xl text-emerald-600 mb-4" />
-                    <p className="text-slate-500">Loading test case...</p>
-                </div>
-            </div>
-        );
-    }
+    const handleNext = () => {
+        const next = selectedIdx + 1;
+        if (next < testList.length) {
+            setSelectedIdx(next);
+            setSelectedTest(testList[next]);
+        }
+    };
 
-    if (selectedTest) {
-        return (
-            <ExecuteView
-                testCase={selectedTest}
-                onBack={handleBack}
-            />
-        );
-    }
     return (
-        <TestCaseListView
-            pendingUpdates={pendingUpdates}
-            onSelect={(test) => handleSelect(test)}
-        />
+        <>
+            {/* Always keep list mounted — state/data survive back navigation */}
+            <div style={{ display: selectedTest ? 'none' : 'contents' }}>
+                <TestCaseListView
+                    pendingUpdates={pendingUpdates}
+                    onSelect={(test, list) => handleSelect(test, list)}
+                />
+            </div>
+            {selectedTest && (
+                <ExecuteView
+                    testCase={selectedTest}
+                    onBack={handleBack}
+                    onNext={selectedIdx < testList.length - 1 ? handleNext : null}
+                    currentIdx={selectedIdx}
+                    total={testList.length}
+                />
+            )}
+        </>
     );
 }
