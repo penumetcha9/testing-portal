@@ -210,6 +210,41 @@ const MultiSelect = ({ values = [], onChange, options, placeholder = 'Select…'
     );
 };
 
+const CollapsibleTextarea = ({ value, onChange, placeholder, rows = 3, expandedRows, className = '', style, ...rest }) => {
+    const [expanded, setExpanded] = useState(false);
+    const effectiveRows = expanded ? (expandedRows ?? Math.max(rows * 3, 14)) : rows;
+    return (
+        <div style={{ position: 'relative' }}>
+            <textarea
+                rows={effectiveRows}
+                value={value}
+                onChange={onChange}
+                placeholder={placeholder}
+                className={className}
+                style={{ paddingRight: 38, ...(style || {}) }}
+                {...rest}
+            />
+            <button
+                type="button"
+                onClick={() => setExpanded(p => !p)}
+                title={expanded ? 'Collapse' : 'Expand'}
+                style={{
+                    position: 'absolute', top: 6, right: 6,
+                    width: 26, height: 26, display: 'flex',
+                    alignItems: 'center', justifyContent: 'center',
+                    borderRadius: 6, border: '1px solid #E5E7EB',
+                    background: 'rgba(255,255,255,0.92)', color: '#6B7280',
+                    cursor: 'pointer', transition: 'all 0.15s', zIndex: 2,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#F3F4F6'; e.currentTarget.style.color = '#111827'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.92)'; e.currentTarget.style.color = '#6B7280'; }}
+            >
+                <i className={`fa-solid ${expanded ? 'fa-compress' : 'fa-expand'}`} style={{ fontSize: 11 }}></i>
+            </button>
+        </div>
+    );
+};
+
 const Section = ({ id, title, icon, iconColor, collapsedSections, toggleSection, children }) => (
     <div className="bg-card border border-border rounded-lg shadow-sm">
         <div className="section-header px-6 py-4 border-b border-border flex items-center justify-between cursor-pointer transition-all hover:bg-muted" onClick={() => toggleSection(id)}>
@@ -1321,7 +1356,7 @@ const UserStoryMapping = () => {
                                                 </div>
                                                 <div><label className={labelCls}>Story Type</label><CustomSelect value={formData.storyType} onChange={v => handleInputChange('storyType', v)} options={storyTypeOpts} /></div>
                                                 <div className="sm:col-span-2"><label className={labelCls}>Story Title <span className="text-destructive">*</span></label><input type="text" value={formData.storyTitle} onChange={e => handleInputChange('storyTitle', e.target.value)} placeholder="Enter story title..." className={inputCls} /></div>
-                                                <div className="sm:col-span-2"><label className={labelCls}>Story Summary</label><textarea rows="3" value={formData.storySummary} onChange={e => handleInputChange('storySummary', e.target.value)} className={inputCls} placeholder="Brief summary..." /></div>
+                                                <div className="sm:col-span-2"><label className={labelCls}>Story Summary</label><CollapsibleTextarea rows={3} value={formData.storySummary} onChange={e => handleInputChange('storySummary', e.target.value)} className={inputCls} placeholder="Brief summary..." /></div>
                                                 <div><label className={labelCls}>Module ID</label><CustomSelect value={formData.moduleId} onChange={v => handleInputChange('moduleId', v)} options={moduleIdOpts} /></div>
                                                 <div><label className={labelCls}>Parent Story ID</label><input type="text" value={formData.parentStoryId} onChange={e => handleInputChange('parentStoryId', e.target.value)} placeholder="US-XXX" className={inputCls} /></div>
                                                 <div><label className={labelCls}>Sequence/Order</label><input type="number" value={formData.sequence} onChange={e => handleInputChange('sequence', e.target.value)} placeholder="e.g. 1" className={inputCls} /></div>
@@ -1330,7 +1365,7 @@ const UserStoryMapping = () => {
 
                                         <Section id="business-context" title="Business Context" icon="fa-briefcase" iconColor="bg-blue-500" collapsedSections={collapsedSections} toggleSection={toggleSection}>
                                             <div className="space-y-6">
-                                                {[['businessContext', 'Business Context', 3, 'Describe the business context...'], ['problemStatement', 'Problem Statement', 3, 'What problem are we solving?'], ['expectedOutcome', 'Expected Outcome', 3, 'What is the expected outcome?']].map(([field, lbl, rows, ph]) => (<div key={field}><label className={labelCls}>{lbl}</label><textarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} className={inputCls} placeholder={ph} /></div>))}
+                                                {[['businessContext', 'Business Context', 3, 'Describe the business context...'], ['problemStatement', 'Problem Statement', 3, 'What problem are we solving?'], ['expectedOutcome', 'Expected Outcome', 3, 'What is the expected outcome?']].map(([field, lbl, rows, ph]) => (<div key={field}><label className={labelCls}>{lbl}</label><CollapsibleTextarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} className={inputCls} placeholder={ph} /></div>))}
                                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                                     <div><label className={labelCls}>Business Domain</label><CustomSelect value={formData.businessDomain} onChange={v => handleInputChange('businessDomain', v)} options={businessDomainOpts} /></div>
                                                     <div><label className={labelCls}>Process Area</label><input type="text" value={formData.processArea} onChange={e => handleInputChange('processArea', e.target.value)} placeholder="e.g. Monitoring" className={inputCls} /></div>
@@ -1366,7 +1401,7 @@ const UserStoryMapping = () => {
                                                         <div key={field}>
                                                             <label className="text-xs font-semibold text-green-700 uppercase tracking-wider mb-2 block">{lbl}</label>
                                                             {type === 'textarea'
-                                                                ? <textarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} placeholder={ph} className="w-full px-4 py-2.5 bg-white border border-green-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+                                                                ? <CollapsibleTextarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} placeholder={ph} className="w-full px-4 py-2.5 bg-white border border-green-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
                                                                 : <input type="text" value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} placeholder={ph} className="w-full px-4 py-2.5 bg-white border border-green-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />}
                                                         </div>
                                                     ))}
@@ -1377,7 +1412,7 @@ const UserStoryMapping = () => {
                                         <Section id="detailed-behavior" title="Detailed Behavior" icon="fa-diagram-project" iconColor="bg-orange-500" collapsedSections={collapsedSections} toggleSection={toggleSection}>
                                             <div className="space-y-6">
                                                 {[['preconditions', 'Preconditions', 3, 'Conditions that must be met...'], ['mainFlow', 'Main Flow', 5, 'Step-by-step main flow...'], ['alternateFlow', 'Alternate Flow', 4, 'Alternate paths...'], ['exceptionFlow', 'Exception Flow', 4, 'Error handling...'], ['postconditions', 'Postconditions', 3, 'State after completion...']].map(([field, lbl, rows, ph]) => (
-                                                    <div key={field}><label className={labelCls}>{lbl}</label><textarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} className={inputCls} placeholder={ph} /></div>
+                                                    <div key={field}><label className={labelCls}>{lbl}</label><CollapsibleTextarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} className={inputCls} placeholder={ph} /></div>
                                                 ))}
                                             </div>
                                         </Section>
@@ -1385,14 +1420,14 @@ const UserStoryMapping = () => {
                                         <Section id="business-rules" title="Business Rules & Validation" icon="fa-scale-balanced" iconColor="bg-red-500" collapsedSections={collapsedSections} toggleSection={toggleSection}>
                                             <div className="space-y-6">
                                                 {[['businessRules', 'Business Rules', 4, 'List business rules...'], ['validationRules', 'Validation Rules', 4, 'List validation rules...'], ['fieldBehavior', 'Field Behavior', 3, 'Describe field behaviors...'], ['calculationLogic', 'Calculation Logic', 3, 'Describe calculation logic...']].map(([field, lbl, rows, ph]) => (
-                                                    <div key={field}><label className={labelCls}>{lbl}</label><textarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} className={inputCls} placeholder={ph} /></div>
+                                                    <div key={field}><label className={labelCls}>{lbl}</label><CollapsibleTextarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} className={inputCls} placeholder={ph} /></div>
                                                 ))}
                                                 <div>
                                                     <label className="text-xs font-semibold text-red-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                                                         <i className="fa-solid fa-circle-exclamation text-red-500" style={{ fontSize: 11 }}></i>Error Message
                                                     </label>
-                                                    <textarea
-                                                        rows="3"
+                                                    <CollapsibleTextarea
+                                                        rows={3}
                                                         value={formData.errorMessage}
                                                         onChange={e => handleInputChange('errorMessage', e.target.value)}
                                                         placeholder='e.g. "Email address is invalid. Please enter a valid email."'
@@ -1403,8 +1438,8 @@ const UserStoryMapping = () => {
                                                     <label className="text-xs font-semibold text-green-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                                                         <i className="fa-solid fa-circle-check text-green-500" style={{ fontSize: 11 }}></i>Success Message
                                                     </label>
-                                                    <textarea
-                                                        rows="3"
+                                                    <CollapsibleTextarea
+                                                        rows={3}
                                                         value={formData.successMessage}
                                                         onChange={e => handleInputChange('successMessage', e.target.value)}
                                                         placeholder='e.g. "Your changes have been saved successfully."'
@@ -1418,8 +1453,9 @@ const UserStoryMapping = () => {
                                             <div className="space-y-6">
                                                 <div>
                                                     <label className={labelCls}>Acceptance Criteria</label>
-                                                    <textarea
-                                                        rows="10"
+                                                    <CollapsibleTextarea
+                                                        rows={10}
+                                                        expandedRows={24}
                                                         value={formData.acceptanceCriteriaText}
                                                         onChange={e => handleInputChange('acceptanceCriteriaText', e.target.value)}
                                                         placeholder={"Paste a table from Excel, Sheets, or Word here — column tabs and row breaks are preserved.\n\nExample:\nID\tCriterion\tStatus\nAC-1\tUser can log in with valid credentials\tDraft\nAC-2\tInvalid login shows error message\tDraft"}
@@ -1433,8 +1469,9 @@ const UserStoryMapping = () => {
                                                 </div>
                                                 <div>
                                                     <label className={labelCls}>UML Style Flow</label>
-                                                    <textarea
-                                                        rows="10"
+                                                    <CollapsibleTextarea
+                                                        rows={10}
+                                                        expandedRows={24}
                                                         value={formData.umlStyleFlowText}
                                                         onChange={e => handleInputChange('umlStyleFlowText', e.target.value)}
                                                         placeholder={"Paste a UML-style flow / sequence here — tabs and line breaks are preserved.\n\nExample:\nActor\tAction\tSystem Response\nUser\tEnters credentials\tValidates input\nSystem\tChecks DB\tReturns auth token\nUser\tRedirected to dashboard\t—"}
@@ -1448,8 +1485,9 @@ const UserStoryMapping = () => {
                                                 </div>
                                                 <div>
                                                     <label className={labelCls}>Use Cases &amp; Scenarios</label>
-                                                    <textarea
-                                                        rows="10"
+                                                    <CollapsibleTextarea
+                                                        rows={10}
+                                                        expandedRows={24}
                                                         value={formData.useCasesScenariosText}
                                                         onChange={e => handleInputChange('useCasesScenariosText', e.target.value)}
                                                         placeholder={"Paste use cases / scenarios here — tabular layout is preserved.\n\nExample:\nID\tScenario\tExpected Outcome\nUC-1\tValid login\tDashboard loads\nUC-2\tInvalid password\tError shown\nUC-3\tLocked account\tWarning shown"}
@@ -1475,7 +1513,7 @@ const UserStoryMapping = () => {
                                         <Section id="technical-references" title="Technical References" icon="fa-code" iconColor="bg-indigo-500" collapsedSections={collapsedSections} toggleSection={toggleSection}>
                                             <div className="space-y-6">
                                                 {[['apiImpacted', 'API Impacted', 3, 'List APIs impacted...'], ['dbTablesImpacted', 'DB Tables Impacted', 2, 'List DB tables...'], ['integrationImpacted', 'Integration Impacted', 2, 'List integrations...'], ['reportsImpacted', 'Reports Impacted', 2, 'List reports...'], ['configurationImpacted', 'Configuration Impacted', 2, 'List config settings...']].map(([field, lbl, rows, ph]) => (
-                                                    <div key={field}><label className={labelCls}>{lbl}</label><textarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} className={inputCls} placeholder={ph} /></div>
+                                                    <div key={field}><label className={labelCls}>{lbl}</label><CollapsibleTextarea rows={rows} value={formData[field]} onChange={e => handleInputChange(field, e.target.value)} className={inputCls} placeholder={ph} /></div>
                                                 ))}
                                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                                     <div><label className={labelCls}>Security/RBAC Impact</label><CustomSelect value={formData.securityRBACImpact} onChange={v => handleInputChange('securityRBACImpact', v)} options={yesNoOpts} /></div>
@@ -1555,7 +1593,7 @@ const UserStoryMapping = () => {
                                                 <div><p className="text-xs text-muted-foreground mb-2">Release Status</p><CustomSelect value={formData.releaseStatus} onChange={v => handleInputChange('releaseStatus', v)} options={releaseStatusOpts} /></div>
                                                 <div className="pt-4 border-t border-border">
                                                     <div className="flex items-center gap-2 mb-2"><input type="checkbox" checked={formData.blocked} onChange={e => handleInputChange('blocked', e.target.checked)} className="w-4 h-4 text-primary rounded" /><p className="text-xs font-semibold text-muted-foreground">Blocked</p></div>
-                                                    {formData.blocked && <textarea rows="2" value={formData.blockedReason} onChange={e => handleInputChange('blockedReason', e.target.value)} className="w-full px-3 py-2 bg-input border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Describe the blocker..." />}
+                                                    {formData.blocked && <CollapsibleTextarea rows={2} value={formData.blockedReason} onChange={e => handleInputChange('blockedReason', e.target.value)} className="w-full px-3 py-2 bg-input border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Describe the blocker..." />}
                                                 </div>
                                             </div>
                                         </div>
