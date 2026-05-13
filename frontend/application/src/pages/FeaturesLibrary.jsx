@@ -1225,7 +1225,9 @@ export default function FeaturesLibrary() {
     const [featPage, setFeatPage] = useState(0);
     const FEAT_PAGE_SIZE = 10;
 
-    const [searchQuery, setSearchQuery] = useState("");
+    const [moduleQuery, setModuleQuery] = useState("");
+    const [featureQuery, setFeatureQuery] = useState("");
+    const [testCaseQuery, setTestCaseQuery] = useState("");
     const [filterStatus, setFilterStatus] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -1401,45 +1403,47 @@ export default function FeaturesLibrary() {
             list = list.filter(f => (f.status || "Active").toLowerCase() === fs);
         }
 
-        const q = searchQuery.trim().toLowerCase();
-        if (q) {
-            const matches = (v) => String(v ?? "").toLowerCase().includes(q);
-            list = list.filter(f => {
-                if (matches(f.name)) return true;
-                if (matches(f.feature_name)) return true;
-                if (matches(f.code)) return true;
-                if (matches(f.feature_code)) return true;
-                if (matches(f.description)) return true;
-                if (matches(f.user_story)) return true;
-                if (matches(f.moduleName)) return true;
-                if (matches(f.moduleCode)) return true;
-                if (matches(f.assign_to_name)) return true;
-                if ((f.testCases || []).some(tc =>
-                    matches(tc.tcId) || matches(tc.name) || matches(tc.assigneeName)
-                )) return true;
-                return false;
-            });
+        const mq = moduleQuery.trim().toLowerCase();
+        const fq = featureQuery.trim().toLowerCase();
+        const tq = testCaseQuery.trim().toLowerCase();
+        const has = (v, q) => String(v ?? "").toLowerCase().includes(q);
+
+        if (mq) {
+            list = list.filter(f => has(f.moduleName, mq) || has(f.moduleCode, mq));
+        }
+        if (fq) {
+            list = list.filter(f =>
+                has(f.name, fq) || has(f.feature_name, fq)
+                || has(f.code, fq) || has(f.feature_code, fq)
+                || has(f.description, fq) || has(f.user_story, fq)
+                || has(f.assign_to_name, fq)
+            );
+        }
+        if (tq) {
+            list = list.filter(f => (f.testCases || []).some(tc =>
+                has(tc.tcId, tq) || has(tc.name, tq) || has(tc.assigneeName, tq)
+            ));
         }
 
         return list;
-    }, [flatFeatures, searchQuery, filterStatus]);
-
-    // Auto-expand matched features so their test cases are visible when searching
-    useEffect(() => {
-        if (!searchQuery.trim() || filteredFeatures.length === 0) return;
-        setOpenFeatures(prev => {
-            const next = { ...prev };
-            filteredFeatures.forEach(f => { next[f.id] = true; });
-            return next;
-        });
-    }, [searchQuery, filteredFeatures]);
+    }, [flatFeatures, moduleQuery, featureQuery, testCaseQuery, filterStatus]);
 
     const totalFeatPages = Math.max(1, Math.ceil(filteredFeatures.length / FEAT_PAGE_SIZE));
     const safeFeatPage = Math.min(featPage, totalFeatPages - 1);
     const pagedFeatures = filteredFeatures.slice(safeFeatPage * FEAT_PAGE_SIZE, (safeFeatPage + 1) * FEAT_PAGE_SIZE);
 
-    const handleSearchChange = useCallback((e) => {
-        setSearchQuery(e.target.value);
+    const handleModuleQueryChange = useCallback((e) => {
+        setModuleQuery(e.target.value);
+        setFeatPage(0);
+    }, []);
+
+    const handleFeatureQueryChange = useCallback((e) => {
+        setFeatureQuery(e.target.value);
+        setFeatPage(0);
+    }, []);
+
+    const handleTestCaseQueryChange = useCallback((e) => {
+        setTestCaseQuery(e.target.value);
         setFeatPage(0);
     }, []);
 
@@ -1450,11 +1454,15 @@ export default function FeaturesLibrary() {
 
     // ─── FIXED: clear also collapses all cards ─────────────────────────────────
     const handleClearFilters = useCallback(() => {
-        setSearchQuery("");
+        setModuleQuery("");
+        setFeatureQuery("");
+        setTestCaseQuery("");
         setFilterStatus("");
         setFeatPage(0);
         setOpenFeatures({});
     }, []);
+
+    const hasActiveSearch = !!(moduleQuery.trim() || featureQuery.trim() || testCaseQuery.trim() || filterStatus);
 
     const stats = useMemo(() => [
         { label: "Modules", value: totalModules, icon: "fa-puzzle-piece", color: "blue" },
@@ -1717,26 +1725,38 @@ export default function FeaturesLibrary() {
 
                     {/* ── Filters ── */}
                     <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, marginBottom: 20, padding: "14px 18px" }}>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 180px 120px", gap: 12 }}>
-                            <div style={{ position: "relative" }}>
-                                <input
-                                    className="fl-input"
-                                    type="text"
-                                    placeholder="Search features, modules, test case IDs…"
-                                    value={searchQuery}
-                                    onChange={handleSearchChange}
-                                    style={{ paddingLeft: 36 }}
-                                />
-                                <i className="fa-solid fa-search" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: T.textFaint, fontSize: 12, pointerEvents: "none" }}></i>
-                                {searchQuery && (
-                                    <button
-                                        type="button"
-                                        onClick={(e) => { e.stopPropagation(); setSearchQuery(""); setFeatPage(0); setOpenFeatures({}); }}
-                                        style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: T.textFaint, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "2px 4px" }}
-                                        title="Clear search"
-                                    >✕</button>
-                                )}
-                            </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+                            {[
+                                { key: "module", label: "Module", placeholder: "Search modules…", icon: "fa-puzzle-piece", value: moduleQuery, onChange: handleModuleQueryChange, clear: () => { setModuleQuery(""); setFeatPage(0); } },
+                                { key: "feature", label: "Feature", placeholder: "Search features…", icon: "fa-list-check", value: featureQuery, onChange: handleFeatureQueryChange, clear: () => { setFeatureQuery(""); setFeatPage(0); } },
+                                { key: "testcase", label: "Test Case", placeholder: "Search test cases…", icon: "fa-vial", value: testCaseQuery, onChange: handleTestCaseQueryChange, clear: () => { setTestCaseQuery(""); setFeatPage(0); } },
+                            ].map(f => (
+                                <div key={f.key}>
+                                    <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: T.textFaint, textTransform: "uppercase", letterSpacing: "0.07em", fontFamily: T.sans, marginBottom: 5 }}>{f.label}</label>
+                                    <div style={{ position: "relative" }}>
+                                        <input
+                                            className="fl-input"
+                                            type="text"
+                                            placeholder={f.placeholder}
+                                            value={f.value}
+                                            onChange={f.onChange}
+                                            style={{ paddingLeft: 34 }}
+                                        />
+                                        <i className={`fa-solid ${f.icon}`} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: T.textFaint, fontSize: 11, pointerEvents: "none" }}></i>
+                                        {f.value && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); f.clear(); }}
+                                                style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: T.textFaint, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "2px 4px" }}
+                                                title="Clear"
+                                            >✕</button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "180px 120px 1fr", gap: 12, marginTop: 10 }}>
                             <Dropdown
                                 options={FILTER_STATUS_OPT}
                                 selected={filterStatus}
@@ -1749,23 +1769,20 @@ export default function FeaturesLibrary() {
                                 onClick={handleClearFilters}
                                 style={{ justifyContent: "center" }}
                             >
-                                <i className="fa-solid fa-xmark" style={{ fontSize: 11 }}></i> Clear
+                                <i className="fa-solid fa-xmark" style={{ fontSize: 11 }}></i> Clear All
                             </button>
+                            {hasActiveSearch && (
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
+                                    <i className="fa-solid fa-filter" style={{ fontSize: 10, color: T.textFaint }}></i>
+                                    <span style={{ fontSize: 12, color: T.textMuted, fontFamily: T.sans }}>
+                                        {filteredFeatures.length === 0
+                                            ? "No features match your filters"
+                                            : <><strong style={{ color: T.text }}>{filteredFeatures.length}</strong> feature{filteredFeatures.length !== 1 ? "s" : ""} found</>
+                                        }
+                                    </span>
+                                </div>
+                            )}
                         </div>
-
-                        {(searchQuery || filterStatus) && (
-                            <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.borderLight}`, display: "flex", alignItems: "center", gap: 8 }}>
-                                <i className="fa-solid fa-filter" style={{ fontSize: 10, color: T.textFaint }}></i>
-                                <span style={{ fontSize: 12, color: T.textMuted, fontFamily: T.sans }}>
-                                    {filteredFeatures.length === 0
-                                        ? "No features match your search"
-                                        : <><strong style={{ color: T.text }}>{filteredFeatures.length}</strong> feature{filteredFeatures.length !== 1 ? "s" : ""} found</>
-                                    }
-                                    {searchQuery && <> for <strong style={{ color: T.green }}>"{searchQuery}"</strong></>}
-                                    {filterStatus && <> · Status: <strong style={{ color: T.green }}>{filterStatus}</strong></>}
-                                </span>
-                            </div>
-                        )}
                     </div>
 
                     {filteredFeatures.length === 0 ? (
@@ -1774,14 +1791,14 @@ export default function FeaturesLibrary() {
                                 <i className="fa-solid fa-magnifying-glass" style={{ color: T.textFaint, fontSize: 22 }}></i>
                             </div>
                             <p style={{ color: T.textMid, fontSize: 14, fontWeight: 600, margin: "0 0 4px" }}>
-                                {searchQuery || filterStatus ? "No results found" : "No features yet"}
+                                {hasActiveSearch ? "No results found" : "No features yet"}
                             </p>
                             <p style={{ color: T.textFaint, fontSize: 12, margin: "0 0 16px" }}>
-                                {searchQuery || filterStatus
+                                {hasActiveSearch
                                     ? `Try adjusting your search or filters`
                                     : "Create a feature to get started"}
                             </p>
-                            {(searchQuery || filterStatus) && (
+                            {hasActiveSearch && (
                                 <button type="button" className="fl-btn-ghost" onClick={handleClearFilters} style={{ margin: "0 auto" }}>
                                     <i className="fa-solid fa-xmark" style={{ fontSize: 11 }}></i> Clear filters
                                 </button>
