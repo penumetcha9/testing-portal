@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
+import { useNavigate } from "react-router-dom";
 import supabase from "../services/supabaseClient";
 
 // ─── Global styles ─────────────────────────────────────────────────────────────
@@ -1017,10 +1018,34 @@ const StatCard = ({ stat }) => {
 };
 
 // ─── Test Case Row ──────────────────────────────────────────────────────────────
-const TestCaseRow = memo(({ tc, onEdit, onDelete }) => (
+const TestCaseRow = memo(({ tc, onEdit, onDelete, onStoryClick }) => (
     <tr className="fl-tc-row" style={{ borderBottom: `1px solid ${T.borderLight}` }}>
         <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "2px 8px", borderRadius: 5 }}>{tc.tcId}</span>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: T.purple, fontFamily: T.mono, background: T.purpleTint, padding: "2px 8px", borderRadius: 5 }}>{tc.tcId}</span>
+                {(tc.userStoryIds || []).map(sid => (
+                    <button
+                        key={sid}
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onStoryClick && onStoryClick(sid); }}
+                        title={`Open ${sid}`}
+                        style={{
+                            background: "rgba(239,68,68,0.10)",
+                            color: "#dc2626",
+                            border: "1px solid rgba(239,68,68,0.25)",
+                            borderRadius: 5,
+                            padding: "2px 7px",
+                            fontSize: 10,
+                            fontWeight: 600,
+                            fontFamily: T.mono,
+                            cursor: "pointer",
+                            lineHeight: 1.2,
+                        }}
+                    >
+                        {sid}
+                    </button>
+                ))}
+            </div>
         </td>
         <td style={{ padding: "10px 16px" }}>
             <p style={{ fontSize: 12, color: T.text, fontWeight: 500, margin: 0, fontFamily: T.sans }}>{tc.name}</p>
@@ -1050,7 +1075,7 @@ const TestCaseRow = memo(({ tc, onEdit, onDelete }) => (
 ));
 
 // ─── Feature Card ──────────────────────────────────────────────────────────────
-const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEditTC, onDeleteTC, onEdit, onDelete, tcPage, onTcPageChange, tcPageSize }) => {
+const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEditTC, onDeleteTC, onEdit, onDelete, onStoryClick, tcPage, onTcPageChange, tcPageSize }) => {
     const totalTCs = feat.testCases.length;
     const totalPages = Math.ceil(totalTCs / tcPageSize);
     const currentPage = tcPage || 0;
@@ -1067,8 +1092,21 @@ const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEditTC, onDeleteT
                             <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginBottom: 3 }}>
                                 <span style={{ fontSize: 14, fontWeight: 700, color: T.text, fontFamily: T.sans, letterSpacing: "-0.01em" }}>{feat.name}</span>
                                 <Chip label={feat.code} style={{ background: T.purpleTint, color: T.purple }} mono />
-                                {feat.user_story && <Chip label={feat.user_story} style={{ background: T.redTint, color: T.red }} mono />}
                                 <Chip label={feat.status || "Active"} style={STATUS_STYLE[feat.status] || STATUS_STYLE["Active"]} />
+                                {((feat.linkedStoryIds && feat.linkedStoryIds.length > 0)
+                                    ? feat.linkedStoryIds
+                                    : (feat.user_story ? [feat.user_story] : [])
+                                ).map(sid => (
+                                    <button
+                                        key={sid}
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); onStoryClick && onStoryClick(sid); }}
+                                        title={`Open ${sid}`}
+                                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                                    >
+                                        <Chip label={sid} style={{ background: T.redTint, color: T.red, cursor: "pointer" }} mono />
+                                    </button>
+                                ))}
                             </div>
                             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                                 {feat.description && (
@@ -1101,12 +1139,6 @@ const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEditTC, onDeleteT
                 </div>
             </div>
 
-            <div style={{ background: T.surfaceAlt, borderTop: `1px solid ${T.borderLight}`, padding: "8px 20px", display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 10, fontWeight: 700, color: T.textFaint, textTransform: "uppercase", letterSpacing: "0.07em", fontFamily: T.sans, flexShrink: 0 }}>Module</span>
-                <div style={{ width: 5, height: 5, borderRadius: "50%", background: T.blue, flexShrink: 0 }} />
-                <span style={{ fontSize: 12, fontWeight: 600, color: T.textMid, fontFamily: T.sans }}>{feat.moduleName}</span>
-                <Chip label={feat.moduleCode} style={{ background: T.blueTint, color: T.blue }} mono />
-            </div>
 
             {isOpen && feat.testCases.length > 0 && (
                 <div style={{ borderTop: `1px solid ${T.borderLight}` }}>
@@ -1126,6 +1158,7 @@ const FeatureCard = memo(({ feat, isOpen, onToggle, onAddTC, onEditTC, onDeleteT
                                         tc={tc}
                                         onEdit={(e) => { e.stopPropagation(); onEditTC(e, feat.moduleId, feat.id, tc); }}
                                         onDelete={(e) => { e.stopPropagation(); onDeleteTC(e, feat.moduleId, feat.id, tc); }}
+                                        onStoryClick={onStoryClick}
                                     />
                                 ))}
                             </tbody>
@@ -1215,7 +1248,13 @@ const Field = ({ label, required, children }) => (
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 export default function FeaturesLibrary() {
+    const navigate = useNavigate();
+    const handleStoryClick = useCallback((sid) => {
+        if (sid) navigate(`/stories/${sid}`);
+    }, [navigate]);
+
     const [modules, setModules] = useState([]);
+    const [orphanLinks, setOrphanLinks] = useState([]);
     const [users, setUsers] = useState([]);
     const [userStories, setUserStories] = useState([]);
     const [openFeatures, setOpenFeatures] = useState({});
@@ -1265,14 +1304,39 @@ export default function FeaturesLibrary() {
     const fetchModulesWithFeatures = useCallback(async () => {
         try {
             setLoading(true); setError(null);
-            const [modulesData, featuresData, testCasesData] = await Promise.all([
+            const [modulesData, featuresData, testCasesData, storyLinksData, allStoriesData] = await Promise.all([
                 fetchAllRows("modules", "*", "module_code"),
                 fetchAllRows("features", "*", "feature_code"),
                 fetchAllRows("test_cases", "id, test_case_id, name, priority, status, test_type, test_scenario, preconditions, test_steps, expected_result, updated_at, feature_id, module_id, assigned_to, user_story_ids"),
+                fetchAllRows("user_story_features", "story_id, feature_id, feature_name"),
+                fetchAllRows("user_stories", "id, story_id"),
             ]);
+
+            // Build UUID → "US-XXX" code map so test-case userStoryIds (UUIDs) can
+            // be rendered and linked using the friendly story code.
+            const storyCodeByUUID = {};
+            for (const s of (allStoriesData || [])) {
+                if (s.id && s.story_id) storyCodeByUUID[s.id] = s.story_id;
+            }
 
             const feats = featuresData || [];
             const tcs = testCasesData || [];
+
+            // Index linked user-story IDs by feature_id (preferred) and by lower-cased
+            // feature_name (fallback for join rows where feature_id is null).
+            const storyIdsByFeatureId = {};
+            const storyIdsByFeatureName = {};
+            for (const link of (storyLinksData || [])) {
+                if (!link.story_id) continue;
+                if (link.feature_id) {
+                    if (!storyIdsByFeatureId[link.feature_id]) storyIdsByFeatureId[link.feature_id] = new Set();
+                    storyIdsByFeatureId[link.feature_id].add(link.story_id);
+                } else if (link.feature_name) {
+                    const k = link.feature_name.toLowerCase().trim();
+                    if (!storyIdsByFeatureName[k]) storyIdsByFeatureName[k] = new Set();
+                    storyIdsByFeatureName[k].add(link.story_id);
+                }
+            }
 
             const tcsByFeature = {};
             for (const tc of tcs) {
@@ -1291,7 +1355,7 @@ export default function FeaturesLibrary() {
                     expected: tc.expected_result,
                     assigneeId: tc.assigned_to || null,
                     assigneeName: null,
-                    userStoryIds: tc.user_story_ids || [],
+                    userStoryIds: (tc.user_story_ids || []).map(x => storyCodeByUUID[x] || x).filter(Boolean),
                     updated: tc.updated_at ? new Date(tc.updated_at).toLocaleDateString() : "—",
                 });
             }
@@ -1304,16 +1368,28 @@ export default function FeaturesLibrary() {
 
             const enriched = (modulesData || []).map(mod => {
                 const mf = featsByModule[mod.id] || [];
-                const ef = mf.map(feat => ({
-                    ...feat,
-                    name: feat.feature_name || feat.name,
-                    code: feat.feature_code || feat.code,
-                    moduleId: mod.id,
-                    moduleName: mod.module_name || mod.name,
-                    moduleCode: mod.module_code,
-                    testCasesCount: (tcsByFeature[feat.id] || []).length,
-                    testCases: tcsByFeature[feat.id] || [],
-                }));
+                const ef = mf.map(feat => {
+                    // Combine links from features.user_story (legacy) + user_story_features
+                    // join rows (preferred). De-dupe and order.
+                    const stories = new Set();
+                    if (feat.user_story) stories.add(feat.user_story);
+                    (storyIdsByFeatureId[feat.id] || new Set()).forEach(s => stories.add(s));
+                    const nameKey = (feat.feature_name || feat.name || '').toLowerCase().trim();
+                    if (nameKey && storyIdsByFeatureName[nameKey]) {
+                        storyIdsByFeatureName[nameKey].forEach(s => stories.add(s));
+                    }
+                    return ({
+                        ...feat,
+                        name: feat.feature_name || feat.name,
+                        code: feat.feature_code || feat.code,
+                        moduleId: mod.id,
+                        moduleName: mod.module_name || mod.name,
+                        moduleCode: mod.module_code,
+                        testCasesCount: (tcsByFeature[feat.id] || []).length,
+                        testCases: tcsByFeature[feat.id] || [],
+                        linkedStoryIds: Array.from(stories).sort(),
+                    });
+                });
                 return {
                     ...mod,
                     name: mod.module_name || mod.name,
@@ -1324,6 +1400,18 @@ export default function FeaturesLibrary() {
                 };
             });
             setModules(enriched);
+
+            // Detect join rows that didn't resolve to any feature, so the user can
+            // see exactly which user stories are pointing at missing/mismatched features.
+            const featureIdSet = new Set(feats.map(f => f.id));
+            const featureNameSet = new Set(feats.map(f => (f.feature_name || '').toLowerCase().trim()).filter(Boolean));
+            const orphans = (storyLinksData || []).filter(link => {
+                if (!link.story_id) return false;
+                if (link.feature_id) return !featureIdSet.has(link.feature_id);
+                if (link.feature_name) return !featureNameSet.has(link.feature_name.toLowerCase().trim());
+                return false;
+            });
+            setOrphanLinks(orphans);
         } catch (err) {
             setError(err.message || "Failed to load");
         } finally {
@@ -1416,6 +1504,7 @@ export default function FeaturesLibrary() {
                 has(f.name, fq) || has(f.feature_name, fq)
                 || has(f.code, fq) || has(f.feature_code, fq)
                 || has(f.description, fq) || has(f.user_story, fq)
+                || (f.linkedStoryIds || []).some(s => has(s, fq))
                 || has(f.assign_to_name, fq)
             );
         }
@@ -1481,9 +1570,9 @@ export default function FeaturesLibrary() {
         setTcPages(p => ({ ...p, [featureId]: page }));
     }, []);
 
-    const openAddFeatureModal = useCallback(() => {
+    const openAddFeatureModal = useCallback((prefill = {}) => {
         const nextCode = generateNextFeatCode(flatFeatures);
-        setFeatureForm({ ...emptyFeatureForm, code: nextCode });
+        setFeatureForm({ ...emptyFeatureForm, code: nextCode, ...prefill });
         setAddFeatureModal(true);
     }, [flatFeatures]);
 
@@ -1702,7 +1791,7 @@ export default function FeaturesLibrary() {
                         <button type="button" className="fl-btn-ghost" onClick={() => setImportTCModal(true)} style={{ padding: "8px 14px", fontSize: 13 }}>
                             <i className="fa-solid fa-upload" style={{ fontSize: 11 }}></i> Import Test Cases
                         </button>
-                        <button type="button" className="fl-btn-primary" onClick={openAddFeatureModal} style={{ padding: "8px 16px", fontSize: 13 }}>
+                        <button type="button" className="fl-btn-primary" onClick={() => openAddFeatureModal()} style={{ padding: "8px 16px", fontSize: 13 }}>
                             <i className="fa-solid fa-plus" style={{ fontSize: 11 }}></i> Add Feature
                         </button>
                     </div>
@@ -1785,6 +1874,69 @@ export default function FeaturesLibrary() {
                         </div>
                     </div>
 
+                    {orphanLinks.length > 0 && (
+                        <div style={{ background: T.amberTint, border: `1px solid rgba(217,119,6,0.25)`, borderRadius: 10, padding: "12px 14px", marginBottom: 20 }}>
+                            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                                <i className="fa-solid fa-triangle-exclamation" style={{ color: T.amber, fontSize: 14, marginTop: 1 }}></i>
+                                <div style={{ flex: 1 }}>
+                                    <p style={{ fontSize: 13, fontWeight: 700, color: "#92400E", margin: "0 0 4px" }}>
+                                        {orphanLinks.length} user story link{orphanLinks.length !== 1 ? "s" : ""} couldn't be matched to a feature
+                                    </p>
+                                    <p style={{ fontSize: 11.5, color: "#B45309", margin: "0 0 8px", lineHeight: 1.5 }}>
+                                        These rows exist in <code style={{ fontFamily: T.mono, background: "rgba(217,119,6,0.10)", padding: "0 4px", borderRadius: 4 }}>user_story_features</code> but the linked feature name/id doesn't exist in the Features Library. Create a feature with the matching name, or re-import the story with a valid Feature Code.
+                                    </p>
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                        {orphanLinks.map((o, i) => (
+                                            <span
+                                                key={i}
+                                                style={{
+                                                    display: "inline-flex", alignItems: "center", gap: 4,
+                                                    padding: "3px 4px 3px 8px", background: T.surface,
+                                                    border: `1px solid rgba(217,119,6,0.25)`, borderRadius: 6,
+                                                    fontSize: 11, fontFamily: T.mono, color: "#92400E",
+                                                }}
+                                            >
+                                                <strong>{o.story_id}</strong>
+                                                <span style={{ color: T.textFaint }}>→</span>
+                                                <span>{o.feature_name || (o.feature_id ? `feature_id: ${o.feature_id.slice(0, 8)}…` : "—")}</span>
+                                                {o.feature_name && (
+                                                    <button
+                                                        type="button"
+                                                        title={`Create "${o.feature_name}" as a feature`}
+                                                        onClick={() => openAddFeatureModal({ name: o.feature_name })}
+                                                        style={{ width: 18, height: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: 4, border: "none", background: "transparent", color: T.amber, cursor: "pointer", marginLeft: 2 }}
+                                                        onMouseEnter={e => e.currentTarget.style.background = "#FEF3C7"}
+                                                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                                    >
+                                                        <i className="fa-solid fa-plus" style={{ fontSize: 9 }}></i>
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    title="Remove this orphan link"
+                                                    onClick={async () => {
+                                                        if (!window.confirm(`Remove the link "${o.story_id} → ${o.feature_name || o.feature_id || "—"}"? This deletes the row from user_story_features.`)) return;
+                                                        let q = supabase.from("user_story_features").delete().eq("story_id", o.story_id);
+                                                        if (o.feature_id) q = q.eq("feature_id", o.feature_id);
+                                                        else if (o.feature_name) q = q.eq("feature_name", o.feature_name).is("feature_id", null);
+                                                        const { error } = await q;
+                                                        if (error) { alert(`Couldn't remove link: ${error.message}`); return; }
+                                                        fetchModulesWithFeatures();
+                                                    }}
+                                                    style={{ width: 18, height: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: 4, border: "none", background: "transparent", color: T.red, cursor: "pointer" }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = "#FEE2E2"}
+                                                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                                >
+                                                    <i className="fa-solid fa-xmark" style={{ fontSize: 10 }}></i>
+                                                </button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {filteredFeatures.length === 0 ? (
                         <div style={{ textAlign: "center", padding: "48px 0" }}>
                             <div style={{ width: 56, height: 56, background: T.surfaceAlt, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
@@ -1805,23 +1957,87 @@ export default function FeaturesLibrary() {
                             )}
                         </div>
                     ) : (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                            {pagedFeatures.map(feat => (
-                                <FeatureCard
-                                    key={feat.id}
-                                    feat={feat}
-                                    isOpen={!!openFeatures[feat.id]}
-                                    onToggle={() => toggleFeature(feat.id)}
-                                    onAddTC={openAddModal}
-                                    onEditTC={openEditModal}
-                                    onDeleteTC={openDeleteModal}
-                                    onEdit={(e) => openEditFeatureModal(e, feat)}
-                                    onDelete={(e) => openDeleteFeatureModal(e, feat)}
-                                    tcPage={tcPages[feat.id] || 0}
-                                    onTcPageChange={handleTcPageChange}
-                                    tcPageSize={TC_PAGE_SIZE}
-                                />
-                            ))}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+                            {(() => {
+                                // Group the current page's features by their module so we
+                                // can render a single module header per group.
+                                const groups = [];
+                                const byKey = new Map();
+                                for (const feat of pagedFeatures) {
+                                    const key = feat.moduleId || feat.moduleName || "__none";
+                                    if (!byKey.has(key)) {
+                                        const g = { key, moduleId: feat.moduleId || null, moduleName: feat.moduleName || "Unassigned", moduleCode: feat.moduleCode || null, features: [] };
+                                        byKey.set(key, g); groups.push(g);
+                                    }
+                                    byKey.get(key).features.push(feat);
+                                }
+                                return groups.map(g => {
+                                    const totalTests = g.features.reduce((a, f) => a + (f.testCasesCount || 0), 0);
+                                    return (
+                                        <div key={g.key} style={{
+                                            background: T.surface,
+                                            border: `1px solid ${T.border}`,
+                                            borderRadius: 12,
+                                            overflow: "hidden",
+                                            boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+                                        }}>
+                                            {/* MODULE HEADER */}
+                                            <div style={{
+                                                display: "flex", alignItems: "center", gap: 12,
+                                                padding: "14px 18px",
+                                                background: "linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(37,99,235,0.03) 100%)",
+                                                borderBottom: `1px solid ${T.borderLight}`,
+                                            }}>
+                                                <div style={{ width: 36, height: 36, borderRadius: 9, background: "rgba(37,99,235,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                                    <i className="fa-solid fa-cube" style={{ color: T.blue, fontSize: 14 }}></i>
+                                                </div>
+                                                <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
+                                                    <span style={{ fontSize: 10, fontWeight: 700, color: T.blue, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: T.sans }}>Module</span>
+                                                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                                                        <span style={{ fontSize: 16, fontWeight: 700, color: T.text, fontFamily: T.sans, letterSpacing: "-0.01em" }}>{g.moduleName}</span>
+                                                        {g.moduleCode && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => { e.stopPropagation(); if (g.moduleId) navigate('/modules', { state: { moduleId: g.moduleId } }); }}
+                                                                disabled={!g.moduleId}
+                                                                title={g.moduleId ? `Open ${g.moduleName} in Modules Library` : "Module not linked"}
+                                                                style={{ background: "none", border: "none", padding: 0, cursor: g.moduleId ? "pointer" : "default" }}
+                                                            >
+                                                                <Chip label={g.moduleCode} style={{ background: T.blueTint, color: T.blue, cursor: g.moduleId ? "pointer" : "default" }} mono />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <span style={{ fontSize: 11.5, color: T.textMuted, fontFamily: T.sans, fontWeight: 500, flexShrink: 0 }}>
+                                                    <strong style={{ color: T.text }}>{g.features.length}</strong> feature{g.features.length !== 1 ? "s" : ""}
+                                                    {" · "}
+                                                    <strong style={{ color: T.text }}>{totalTests}</strong> test{totalTests !== 1 ? "s" : ""}
+                                                </span>
+                                            </div>
+                                            {/* FEATURE LIST (nested inside the module card) */}
+                                            <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 16, background: T.surfaceAlt }}>
+                                                {g.features.map(feat => (
+                                                    <FeatureCard
+                                                        key={feat.id}
+                                                        feat={feat}
+                                                        isOpen={!!openFeatures[feat.id]}
+                                                        onToggle={() => toggleFeature(feat.id)}
+                                                        onAddTC={openAddModal}
+                                                        onEditTC={openEditModal}
+                                                        onDeleteTC={openDeleteModal}
+                                                        onEdit={(e) => openEditFeatureModal(e, feat)}
+                                                        onDelete={(e) => openDeleteFeatureModal(e, feat)}
+                                                        onStoryClick={handleStoryClick}
+                                                        tcPage={tcPages[feat.id] || 0}
+                                                        onTcPageChange={handleTcPageChange}
+                                                        tcPageSize={TC_PAGE_SIZE}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                });
+                            })()}
                         </div>
                     )}
 

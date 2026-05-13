@@ -456,31 +456,59 @@ const LinkedFeaturesTab = ({ storyId, storyUUID }) => {
             }
 
             // 2. Fetch via user_story_features join table (set from UserStoryMapping)
+            const fetchedById = new Set();
+            const fetchedByName = new Set();
+            let links = [];
             if (storyUUID) {
-                const { data: links } = await supabase
+                const { data } = await supabase
                     .from('user_story_features')
                     .select('feature_id, feature_name')
                     .eq('story_uuid', storyUUID);
-                const ids = (links || []).map(l => l.feature_id).filter(Boolean);
+                links = data || [];
+                const ids = links.map(l => l.feature_id).filter(Boolean);
                 if (ids.length > 0) {
-                    const { data } = await supabase
+                    const { data: full } = await supabase
                         .from('features')
                         .select(cols)
                         .in('id', ids)
                         .order('created_at', { ascending: false });
-                    addUnique(data);
+                    (full || []).forEach(f => fetchedById.add(f.id));
+                    addUnique(full);
                 }
                 // Fallback: feature_name only (feature_id was null at link time)
-                const namesOnly = (links || []).filter(l => !l.feature_id && l.feature_name).map(l => l.feature_name);
+                const namesOnly = links.filter(l => !l.feature_id && l.feature_name).map(l => l.feature_name);
                 if (namesOnly.length > 0) {
-                    const { data } = await supabase
+                    const { data: full } = await supabase
                         .from('features')
                         .select(cols)
                         .in('feature_name', namesOnly)
                         .order('created_at', { ascending: false });
-                    addUnique(data);
+                    (full || []).forEach(f => {
+                        if (f.feature_name) fetchedByName.add(f.feature_name.toLowerCase().trim());
+                    });
+                    addUnique(full);
                 }
             }
+
+            // Synthetic rows for join-table entries we couldn't fully resolve in the
+            // features table — so the user still sees what's linked, even when the
+            // Features Library doesn't have a matching row (e.g. import mismatch).
+            links.forEach(l => {
+                if (l.feature_id && fetchedById.has(l.feature_id)) return;
+                const nameKey = (l.feature_name || '').toLowerCase().trim();
+                if (!l.feature_id && nameKey && fetchedByName.has(nameKey)) return;
+                const placeholderId = `unresolved:${l.feature_id || l.feature_name || Math.random()}`;
+                if (seen.has(placeholderId)) return;
+                seen.add(placeholderId);
+                combined.push({
+                    id: placeholderId,
+                    feature_code: null,
+                    feature_name: l.feature_name || '—',
+                    description: 'Linked via import — not yet present in Features Library',
+                    assign_to: null,
+                    _unresolved: true,
+                });
+            });
 
             setFeatures(combined);
         } catch (err) { setError(err.message); } finally { setLoading(false); }
@@ -895,6 +923,8 @@ const UserStoryMapping = () => {
     const [profilesLoading, setProfilesLoading] = useState(true);
     const [features, setFeatures] = useState([]);
     const [featuresLoading, setFeaturesLoading] = useState(true);
+    const [modulesList, setModulesList] = useState([]);
+    const [modulesLoading, setModulesLoading] = useState(true);
 
     useEffect(() => {
         const fetchProfiles = async () => {
@@ -933,6 +963,32 @@ const UserStoryMapping = () => {
             finally { setFeaturesLoading(false); }
         };
         fetchFeatures();
+    }, []);
+
+    useEffect(() => {
+        const fetchModules = async () => {
+            setModulesLoading(true);
+            try {
+                const PAGE = 1000;
+                let all = [];
+                let from = 0;
+                while (true) {
+                    const { data, error } = await supabase
+                        .from('modules')
+                        .select('id, module_code, module_name')
+                        .order('module_code', { ascending: true })
+                        .range(from, from + PAGE - 1);
+                    if (error) { console.error('Modules fetch error:', error); break; }
+                    if (!data || data.length === 0) break;
+                    all = all.concat(data);
+                    if (data.length < PAGE) break;
+                    from += PAGE;
+                }
+                setModulesList(all);
+            } catch (err) { console.error('Modules unexpected error:', err); }
+            finally { setModulesLoading(false); }
+        };
+        fetchModules();
     }, []);
 
     useEffect(() => {
@@ -1236,7 +1292,14 @@ const UserStoryMapping = () => {
     };
 
     const storyTypeOpts = ['Feature Enhancement', 'New Feature', 'Bug Fix', 'Technical Debt'];
-    const moduleIdOpts = ['MOD-001 - Dashboard', 'MOD-002 - User Management', 'MOD-003 - Reports', 'MOD-004 - Settings'];
+    const moduleIdOpts = modulesList
+        .filter(m => m && (m.module_name || m.module_code))
+        .map(m => {
+            const code = m.module_code ? `MOD-${String(m.module_code).padStart(3, '0')}` : '';
+            const name = m.module_name || '';
+            const label = code && name ? `${code} — ${name}` : (code || name);
+            return { value: m.id, label };
+        });
     const businessDomainOpts = ['Operations', 'Finance', 'Sales', 'HR'];
     const transactionTypeOpts = ['Read', 'Create', 'Update', 'Delete'];
     const criticalityOpts = ['High', 'Medium', 'Low', 'Critical'];
