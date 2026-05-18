@@ -210,6 +210,44 @@ const MultiSelect = ({ values = [], onChange, options, placeholder = 'Select…'
     );
 };
 
+// ── Paste sanitizer ──────────────────────────────────────────────────────────
+// Keeps formatting from pasted rich text — bold, italic, underline, bullet/
+// numbered lists and line breaks — while stripping unsafe/foreign markup
+// (scripts, styles, classes, colors, fonts, etc.).
+const escapeText = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const PASTE_BLOCK_TAGS = new Set(['UL', 'OL', 'LI', 'P', 'DIV']);
+
+const cleanPastedNode = (node) => {
+    if (node.nodeType === 3) return escapeText(node.textContent);     // text node
+    if (node.nodeType !== 1) return '';                               // comments etc.
+    const tag = node.tagName;
+    if (tag === 'SCRIPT' || tag === 'STYLE') return '';
+    if (tag === 'BR') return '<br>';
+
+    let inner = Array.from(node.childNodes).map(cleanPastedNode).join('');
+    if (!inner && !PASTE_BLOCK_TAGS.has(tag)) return '';
+
+    const styleAttr = node.getAttribute && node.getAttribute('style') || '';
+    const isBold = tag === 'B' || tag === 'STRONG' || /font-weight\s*:\s*(bold|[6-9]00)/i.test(styleAttr);
+    const isItalic = tag === 'I' || tag === 'EM' || /font-style\s*:\s*italic/i.test(styleAttr);
+    const isUnderline = tag === 'U' || /text-decoration[^;]*underline/i.test(styleAttr);
+    if (isBold) inner = `<b>${inner}</b>`;
+    if (isItalic) inner = `<i>${inner}</i>`;
+    if (isUnderline) inner = `<u>${inner}</u>`;
+
+    if (PASTE_BLOCK_TAGS.has(tag)) {
+        const t = tag.toLowerCase();
+        return `<${t}>${inner}</${t}>`;
+    }
+    return inner; // unwrap any other tag, keep its (formatted) contents
+};
+
+const sanitizePastedHtml = (html) => {
+    const holder = document.createElement('div');
+    holder.innerHTML = html;
+    return Array.from(holder.childNodes).map(cleanPastedNode).join('');
+};
+
 const CollapsibleTextarea = ({ value, onChange, placeholder, rows = 3, className = '', style, ...rest }) => {
     const [expanded, setExpanded] = useState(false);
     const editorRef = useRef(null);
@@ -273,26 +311,43 @@ const CollapsibleTextarea = ({ value, onChange, placeholder, rows = 3, className
         }
     };
 
-    // Force plain-text paste so Excel/Sheets table layouts (TSV) survive.
+    // Paste-friendly callers (Acceptance Criteria, UML, Use Cases) pass
+    // `whitespace-pre` to keep tabular content un-wrapped. Honor that.
+    const isPreField = (className || '').includes('whitespace-pre');
+
+    // Paste: preserve the copied formatting (bold, italic, underline, bullet/
+    // numbered lists, line breaks). Tabular `whitespace-pre` fields keep the
+    // plain-text TSV paste so Excel/Sheets layouts survive.
     const handlePaste = (e) => {
         e.preventDefault();
-        const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+        const cd = e.clipboardData || window.clipboardData;
+        const html = cd.getData('text/html');
         const sel = window.getSelection();
         if (!sel || sel.rangeCount === 0) return;
         const range = sel.getRangeAt(0);
         range.deleteContents();
-        const node = document.createTextNode(text);
-        range.insertNode(node);
-        range.setStartAfter(node);
+
+        let frag;
+        if (html && !isPreField) {
+            frag = range.createContextualFragment(sanitizePastedHtml(html));
+        } else {
+            const text = cd.getData('text/plain');
+            if (isPreField) {
+                frag = document.createDocumentFragment();
+                frag.appendChild(document.createTextNode(text));
+            } else {
+                // no rich source — keep the line breaks at least
+                frag = range.createContextualFragment(escapeText(text).replace(/\r?\n/g, '<br>'));
+            }
+        }
+        const lastNode = frag.lastChild;
+        range.insertNode(frag);
+        if (lastNode) { range.setStartAfter(lastNode); }
         range.collapse(true);
         sel.removeAllRanges();
         sel.addRange(range);
         emit();
     };
-
-    // Paste-friendly callers (Acceptance Criteria, UML, Use Cases) pass
-    // `whitespace-pre` to keep tabular content un-wrapped. Honor that.
-    const isPreField = (className || '').includes('whitespace-pre');
     const heightRule = `${rows * 1.5}em`;
 
     return (
@@ -834,7 +889,7 @@ const generateNextStoryId = (existingIds = []) => {
 
 const EMPTY_FORM = {
     storyId: '', storyType: '', storyTitle: '', storySummary: '',
-    moduleId: '', parentStoryId: '', sequence: '', businessContext: '',
+    parentStoryId: '', sequence: '', businessContext: '',
     problemStatement: '', expectedOutcome: '', businessDomain: '', processArea: '',
     transactionType: '', criticality: '', product: 'NexTech RMS', application: '',
     module: '', feature: '', userRole: '', screenPage: '', asA: '', iWant: '',
@@ -852,6 +907,13 @@ const EMPTY_FORM = {
     approvalStatus: 'Pending', developmentStatus: 'Not Started', qaStatus: 'Not Started', releaseStatus: 'Not Released',
     createdBy: '', approvedBy: '', approvedAt: '', createdAt: '', updatedAt: ''
 };
+
+// ── Additional description fields shown in the right-side panel ──────────────
+// key = formData/state key, col = matching user_stories DB column
+const EXTRA_DESC_FIELDS = [
+    { key: 'focusNavigation', col: 'focus_navigation', label: 'Focus Navigation', icon: 'fa-compass', placeholder: 'Focus navigation details...' },
+    { key: 'additionalDescription', col: 'additional_description', label: 'Additional Description', icon: 'fa-align-left', placeholder: 'Additional description...' },
+];
 
 const UserStoryMapping = () => {
     const { storyId: urlStoryId } = useParams();
@@ -879,6 +941,9 @@ const UserStoryMapping = () => {
     // ── Unsaved changes confirm modal ────────────────────────────────────────
     const [unsavedModal, setUnsavedModal] = useState({ show: false, onConfirm: null });
 
+    // ── Additional description fields ────────────────────────────────────────
+    const [extraDescriptions, setExtraDescriptions] = useState({});
+
     const confirmLeave = useCallback((onConfirm) => {
         if (isSaved) { onConfirm(); return; }
         setUnsavedModal({ show: true, onConfirm });
@@ -894,6 +959,7 @@ const UserStoryMapping = () => {
     useEffect(() => {
         if (!isNew && urlStoryId) {
             setFormData(prev => ({ ...EMPTY_FORM, storyId: urlStoryId }));
+            setExtraDescriptions({});
             setStoryUUID(null);
             setActiveTab('details');
             setCollapsedSections({});
@@ -1006,7 +1072,6 @@ const UserStoryMapping = () => {
                     storyType: data.story_type ?? '',
                     storyTitle: data.story_title ?? '',
                     storySummary: data.story_summary ?? '',
-                    moduleId: data.module_id ?? '',
                     parentStoryId: data.parent_story_id ?? '',
                     sequence: data.sequence ?? '',
                     businessContext: data.business_context ?? '',
@@ -1074,6 +1139,9 @@ const UserStoryMapping = () => {
                     createdAt: data.created_at ?? '',
                     updatedAt: data.updated_at ?? '',
                 }));
+                setExtraDescriptions(
+                    EXTRA_DESC_FIELDS.reduce((acc, f) => ({ ...acc, [f.key]: data[f.col] ?? '' }), {})
+                );
             }
         };
         fetchStoryData();
@@ -1169,7 +1237,6 @@ const UserStoryMapping = () => {
             story_type: formData.storyType || null,
             story_title: formData.storyTitle || 'Untitled Story',
             story_summary: formData.storySummary || null,
-            module_id: formData.moduleId || null,
             parent_story_id: formData.parentStoryId || null,
             sequence: formData.sequence ? parseInt(formData.sequence) : null,
             business_context: formData.businessContext || null,
@@ -1207,7 +1274,11 @@ const UserStoryMapping = () => {
             audit_trail_required: formData.auditTrailRequired || null,
             performance_impact: formData.performanceImpact || null,
             test_scenario_count: formData.testScenarioCount ? parseInt(formData.testScenarioCount) : null,
-            current_status: formData.currentStatus || extraStatus,
+            // Draft/Submitted are lifecycle states the save buttons control;
+            // a real workflow status (In Progress, Completed, ...) is preserved.
+            current_status: (formData.currentStatus && !['Draft', 'Submitted'].includes(formData.currentStatus))
+                ? formData.currentStatus
+                : extraStatus,
             blocked: formData.blocked ?? false,
             blocked_reason: formData.blockedReason || null,
             acceptance_criteria: formData.acceptanceCriteriaText || null,
@@ -1236,6 +1307,8 @@ const UserStoryMapping = () => {
             created_by: formData.createdBy || null,
             created_at: formData.createdAt || now,
             updated_at: now,
+            // Additional description panel fields
+            ...EXTRA_DESC_FIELDS.reduce((acc, f) => ({ ...acc, [f.col]: extraDescriptions[f.key] || null }), {}),
         };
     };
 
@@ -1292,14 +1365,6 @@ const UserStoryMapping = () => {
     };
 
     const storyTypeOpts = ['Feature Enhancement', 'New Feature', 'Bug Fix', 'Technical Debt'];
-    const moduleIdOpts = modulesList
-        .filter(m => m && (m.module_name || m.module_code))
-        .map(m => {
-            const code = m.module_code ? `MOD-${String(m.module_code).padStart(3, '0')}` : '';
-            const name = m.module_name || '';
-            const label = code && name ? `${code} — ${name}` : (code || name);
-            return { value: m.id, label };
-        });
     const businessDomainOpts = ['Operations', 'Finance', 'Sales', 'HR'];
     const transactionTypeOpts = ['Read', 'Create', 'Update', 'Delete'];
     const criticalityOpts = ['High', 'Medium', 'Low', 'Critical'];
@@ -1387,6 +1452,13 @@ const UserStoryMapping = () => {
                 }
                 .usm-editor[contenteditable="true"] b,
                 .usm-editor[contenteditable="true"] strong { font-weight: 700; }
+                .usm-editor[contenteditable="true"] i,
+                .usm-editor[contenteditable="true"] em { font-style: italic; }
+                .usm-editor[contenteditable="true"] u { text-decoration: underline; }
+                .usm-editor[contenteditable="true"] ul { list-style: disc; padding-left: 1.5em; margin: 0.25em 0; }
+                .usm-editor[contenteditable="true"] ol { list-style: decimal; padding-left: 1.5em; margin: 0.25em 0; }
+                .usm-editor[contenteditable="true"] li { margin: 0.125em 0; }
+                .usm-editor[contenteditable="true"] p { margin: 0.25em 0; }
                 .section-header { cursor: pointer; transition: all 0.2s; }
                 .section-header:hover { background-color: #F8FAFC; }
                 .status-badge { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 500; }
@@ -1467,8 +1539,6 @@ const UserStoryMapping = () => {
                                         <p className="text-sm text-muted-foreground">{formData.storyTitle || 'No title yet'}</p>
                                     </div>
                                 </div>
-
-
                             </div>
                         </div>
                     </header>
@@ -1521,7 +1591,6 @@ const UserStoryMapping = () => {
                                                 <div><label className={labelCls}>Story Type</label><CustomSelect value={formData.storyType} onChange={v => handleInputChange('storyType', v)} options={storyTypeOpts} /></div>
                                                 <div className="sm:col-span-2"><label className={labelCls}>Story Title <span className="text-destructive">*</span></label><input type="text" value={formData.storyTitle} onChange={e => handleInputChange('storyTitle', e.target.value)} placeholder="Enter story title..." className={inputCls} /></div>
                                                 <div className="sm:col-span-2"><label className={labelCls}>Story Summary</label><CollapsibleTextarea rows={3} value={formData.storySummary} onChange={e => handleInputChange('storySummary', e.target.value)} className={inputCls} placeholder="Brief summary..." /></div>
-                                                <div><label className={labelCls}>Module ID</label><CustomSelect value={formData.moduleId} onChange={v => handleInputChange('moduleId', v)} options={moduleIdOpts} /></div>
                                                 <div><label className={labelCls}>Parent Story ID</label><input type="text" value={formData.parentStoryId} onChange={e => handleInputChange('parentStoryId', e.target.value)} placeholder="US-XXX" className={inputCls} /></div>
                                                 <div><label className={labelCls}>Sequence/Order</label><input type="number" value={formData.sequence} onChange={e => handleInputChange('sequence', e.target.value)} placeholder="e.g. 1" className={inputCls} /></div>
                                             </div>
@@ -1769,6 +1838,26 @@ const UserStoryMapping = () => {
                                                     <div><label className="text-xs text-muted-foreground block mb-1">Approved By</label><CustomSelect value={formData.approvedBy} onChange={v => handleInputChange('approvedBy', v)} options={teamMemberOpts} placeholder="Select approver…" /></div>
                                                     <div><label className="text-xs text-muted-foreground block mb-1">Approved Date</label><input type="date" value={formData.approvedAt ? formData.approvedAt.split('T')[0] : ''} onChange={e => handleInputChange('approvedAt', e.target.value)} className="w-full px-3 py-2 bg-input border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary" /></div>
                                                 </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-card border border-border rounded-lg shadow-sm p-6">
+                                            <h3 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2"><i className="fa-solid fa-align-left text-primary"></i> Additional Description</h3>
+                                            <div className="space-y-3">
+                                                {EXTRA_DESC_FIELDS.map(f => (
+                                                    <div key={f.key}>
+                                                        <label className="text-xs text-muted-foreground block mb-1 flex items-center gap-1.5">
+                                                            <i className={`fa-solid ${f.icon}`}></i> {f.label}
+                                                        </label>
+                                                        <CollapsibleTextarea
+                                                            rows={4}
+                                                            value={extraDescriptions[f.key] || ''}
+                                                            onChange={e => setExtraDescriptions(prev => ({ ...prev, [f.key]: e.target.value }))}
+                                                            placeholder={f.placeholder}
+                                                            className="w-full px-3 py-2 bg-input border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+                                                        />
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
                                     </div>
