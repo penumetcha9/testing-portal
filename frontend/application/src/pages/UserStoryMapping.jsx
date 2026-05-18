@@ -211,41 +211,55 @@ const MultiSelect = ({ values = [], onChange, options, placeholder = 'Select…'
 };
 
 // ── Paste sanitizer ──────────────────────────────────────────────────────────
-// Keeps formatting from pasted rich text — bold, italic, underline, bullet/
-// numbered lists and line breaks — while stripping unsafe/foreign markup
-// (scripts, styles, classes, colors, fonts, etc.).
+// The editor's content model is plain text: `\n` newlines, `• ` bullets and
+// inline <b>/<i>/<u> tags for formatting. Pasted rich text (Word, Docs, etc.)
+// is converted into that model — keeping bold/italic/underline, list bullets
+// and line breaks, but discarding block tags and their pretty-print whitespace
+// (which would otherwise show up as stray blank lines).
 const escapeText = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const PASTE_BLOCK_TAGS = new Set(['UL', 'OL', 'LI', 'P', 'DIV']);
+const PASTE_BLOCK_TAGS = new Set([
+    'P', 'DIV', 'UL', 'OL', 'TR', 'SECTION', 'ARTICLE', 'HEADER', 'FOOTER',
+    'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE', 'TABLE', 'FIGURE',
+]);
 
 const cleanPastedNode = (node) => {
-    if (node.nodeType === 3) return escapeText(node.textContent);     // text node
-    if (node.nodeType !== 1) return '';                               // comments etc.
+    // Text node — collapse the source HTML's pretty-print whitespace.
+    if (node.nodeType === 3) return escapeText(node.textContent.replace(/\s+/g, ' '));
+    if (node.nodeType !== 1) return '';
     const tag = node.tagName;
     if (tag === 'SCRIPT' || tag === 'STYLE') return '';
-    if (tag === 'BR') return '<br>';
+    if (tag === 'BR') return '\n';
 
     let inner = Array.from(node.childNodes).map(cleanPastedNode).join('');
-    if (!inner && !PASTE_BLOCK_TAGS.has(tag)) return '';
 
-    const styleAttr = node.getAttribute && node.getAttribute('style') || '';
-    const isBold = tag === 'B' || tag === 'STRONG' || /font-weight\s*:\s*(bold|[6-9]00)/i.test(styleAttr);
-    const isItalic = tag === 'I' || tag === 'EM' || /font-style\s*:\s*italic/i.test(styleAttr);
-    const isUnderline = tag === 'U' || /text-decoration[^;]*underline/i.test(styleAttr);
-    if (isBold) inner = `<b>${inner}</b>`;
-    if (isItalic) inner = `<i>${inner}</i>`;
-    if (isUnderline) inner = `<u>${inner}</u>`;
-
-    if (PASTE_BLOCK_TAGS.has(tag)) {
-        const t = tag.toLowerCase();
-        return `<${t}>${inner}</${t}>`;
+    const style = (node.getAttribute && node.getAttribute('style')) || '';
+    // Google Docs wraps content in <b style="font-weight:normal"> — trust the
+    // inline style over the tag name when it's present.
+    const fw = /font-weight\s*:\s*(\d{3}|bold|normal)/i.exec(style);
+    const isBold = fw
+        ? (fw[1].toLowerCase() === 'bold' || parseInt(fw[1], 10) >= 600)
+        : (tag === 'B' || tag === 'STRONG');
+    const isItalic = tag === 'I' || tag === 'EM' || /font-style\s*:\s*italic/i.test(style);
+    const isUnderline = tag === 'U' || /text-decoration[^;]*underline/i.test(style);
+    if (inner.trim()) {
+        if (isBold) inner = `<b>${inner}</b>`;
+        if (isItalic) inner = `<i>${inner}</i>`;
+        if (isUnderline) inner = `<u>${inner}</u>`;
     }
-    return inner; // unwrap any other tag, keep its (formatted) contents
+
+    if (tag === 'LI') return `\n• ${inner.trim()}`;
+    if (PASTE_BLOCK_TAGS.has(tag)) return `\n${inner}\n`;
+    return inner; // inline tag — unwrap, keep its (formatted) contents
 };
 
 const sanitizePastedHtml = (html) => {
     const holder = document.createElement('div');
     holder.innerHTML = html;
-    return Array.from(holder.childNodes).map(cleanPastedNode).join('');
+    return Array.from(holder.childNodes).map(cleanPastedNode).join('')
+        .replace(/[ \t]+\n/g, '\n')   // trim trailing spaces on a line
+        .replace(/\n[ \t]+/g, '\n')   // trim leading spaces on a line
+        .replace(/\n{3,}/g, '\n\n')   // collapse runs of blank lines
+        .replace(/^\s+|\s+$/g, '');   // trim the whole block
 };
 
 const CollapsibleTextarea = ({ value, onChange, placeholder, rows = 3, className = '', style, ...rest }) => {
@@ -331,14 +345,10 @@ const CollapsibleTextarea = ({ value, onChange, placeholder, rows = 3, className
         if (html && !isPreField) {
             frag = range.createContextualFragment(sanitizePastedHtml(html));
         } else {
-            const text = cd.getData('text/plain');
-            if (isPreField) {
-                frag = document.createDocumentFragment();
-                frag.appendChild(document.createTextNode(text));
-            } else {
-                // no rich source — keep the line breaks at least
-                frag = range.createContextualFragment(escapeText(text).replace(/\r?\n/g, '<br>'));
-            }
+            // no rich source (or a tabular pre-field) — paste plain text;
+            // `\n` renders natively under white-space: pre-wrap / pre.
+            frag = document.createDocumentFragment();
+            frag.appendChild(document.createTextNode(cd.getData('text/plain')));
         }
         const lastNode = frag.lastChild;
         range.insertNode(frag);
@@ -1455,10 +1465,6 @@ const UserStoryMapping = () => {
                 .usm-editor[contenteditable="true"] i,
                 .usm-editor[contenteditable="true"] em { font-style: italic; }
                 .usm-editor[contenteditable="true"] u { text-decoration: underline; }
-                .usm-editor[contenteditable="true"] ul { list-style: disc; padding-left: 1.5em; margin: 0.25em 0; }
-                .usm-editor[contenteditable="true"] ol { list-style: decimal; padding-left: 1.5em; margin: 0.25em 0; }
-                .usm-editor[contenteditable="true"] li { margin: 0.125em 0; }
-                .usm-editor[contenteditable="true"] p { margin: 0.25em 0; }
                 .section-header { cursor: pointer; transition: all 0.2s; }
                 .section-header:hover { background-color: #F8FAFC; }
                 .status-badge { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 500; }
