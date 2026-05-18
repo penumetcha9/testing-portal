@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
 import supabase from "../services/supabaseClient";
+import { CollapsibleTextarea } from "../components/RichTextArea";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const PRIORITY_OPTIONS = [
@@ -591,7 +592,7 @@ function CreateModuleModal({ onClose, onSuccess, users, existingModuleCodes }) {
                 <div className="p-6 space-y-5">
                     <Field label="Module Name" required><input type="text" value={form.module_name} onChange={e => set("module_name", e.target.value)} placeholder="e.g., User Management" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-500" /></Field>
                     <Field label="Module Code" hint="Auto-generated"><div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-100 rounded-lg"><i className="fa-solid fa-lock text-green-400 text-xs" /><span className="text-sm text-green-700 font-mono font-medium">{autoCode}</span></div></Field>
-                    <Field label="Description" required><textarea rows={3} value={form.description} onChange={e => set("description", e.target.value)} placeholder="Brief description..." className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-500 resize-none" /></Field>
+                    <Field label="Description" required><CollapsibleTextarea rows={3} value={form.description} onChange={e => set("description", e.target.value)} placeholder="Brief description..." className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-500" /></Field>
                     <div className="grid grid-cols-2 gap-4">
                         <Field label="Module Owner"><SimpleDropdown options={userOptions} value={form.module_owner} onChange={v => set("module_owner", v)} placeholder="Select Owner" /></Field>
                         <Field label="Priority" required><SimpleDropdown options={PRIORITY_OPTIONS} value={form.priority} onChange={v => set("priority", v)} placeholder="Select Priority" /></Field>

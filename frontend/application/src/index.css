@@ -1,3 +1,76 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ── Rich-text editor (CollapsibleTextarea) ─────────────────────────────── */
+.usm-editor[contenteditable="true"] { cursor: text; outline: none; }
+.usm-editor[contenteditable="true"]:empty::before {
+    content: attr(data-placeholder);
+    color: #9CA3AF;
+    pointer-events: none;
+}
+.usm-editor[contenteditable="true"] b,
+.usm-editor[contenteditable="true"] strong { font-weight: 700; }
+.usm-editor[contenteditable="true"] i,
+.usm-editor[contenteditable="true"] em { font-style: italic; }
+.usm-editor[contenteditable="true"] u { text-decoration: underline; }
+.usm-editor[contenteditable="true"] s,
+.usm-editor[contenteditable="true"] strike,
+.usm-editor[contenteditable="true"] del { text-decoration: line-through; }
+
+/* lists */
+.usm-editor[contenteditable="true"] ul { list-style: disc; padding-left: 1.5em; margin: 0.25em 0; }
+.usm-editor[contenteditable="true"] ol { list-style: decimal; padding-left: 1.5em; margin: 0.25em 0; }
+.usm-editor[contenteditable="true"] li { margin: 0.125em 0; }
+
+/* headings & quotes */
+.usm-editor[contenteditable="true"] h1,
+.usm-editor[contenteditable="true"] h2,
+.usm-editor[contenteditable="true"] h3,
+.usm-editor[contenteditable="true"] h4,
+.usm-editor[contenteditable="true"] h5,
+.usm-editor[contenteditable="true"] h6 { font-weight: 700; margin: 0.4em 0 0.2em; line-height: 1.3; }
+.usm-editor[contenteditable="true"] h1 { font-size: 1.4em; }
+.usm-editor[contenteditable="true"] h2 { font-size: 1.25em; }
+.usm-editor[contenteditable="true"] h3 { font-size: 1.1em; }
+.usm-editor[contenteditable="true"] blockquote {
+    border-left: 3px solid #D1D5DB;
+    padding-left: 0.75em;
+    margin: 0.4em 0;
+    color: #6B7280;
+}
+.usm-editor[contenteditable="true"] code,
+.usm-editor[contenteditable="true"] pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.92em;
+    background: #F3F4F6;
+    border-radius: 4px;
+}
+.usm-editor[contenteditable="true"] code { padding: 0.1em 0.3em; }
+.usm-editor[contenteditable="true"] pre { padding: 0.5em 0.75em; overflow-x: auto; }
+
+/* tables */
+.usm-editor[contenteditable="true"] table {
+    border-collapse: collapse;
+    margin: 0.4em 0;
+    max-width: 100%;
+}
+.usm-editor[contenteditable="true"] td,
+.usm-editor[contenteditable="true"] th {
+    border: 1px solid #D1D5DB;
+    padding: 4px 8px;
+    text-align: left;
+    vertical-align: top;
+}
+.usm-editor[contenteditable="true"] th { background: #F3F4F6; font-weight: 600; }
+
+/* images / diagrams */
+.usm-editor[contenteditable="true"] img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    margin: 0.25em 0;
+}
+
+/* links */
+.usm-editor[contenteditable="true"] a { color: #4F46E5; text-decoration: underline; }
